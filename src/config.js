@@ -35,9 +35,11 @@ export const DEFAULT_CONFIG = {
 
   // ---- 券商特质（小灯证券）----
   brokerMidpoint: 0.1,      // 每 tick 成交笔数的中性点（约 1 笔 / 50 秒）
-  brokerSensitivity: 0.0001,
-  brokerCap: 0.0002,
-  brokerAlpha: 0.02,        // 中性点漂移速度
+  brokerMidFloor: 0.05,     // 中性点的地板：不设地板的话冷淡期 ratio≈1，
+                            // 等于「没有成交也不跌」，业绩效应就会单边往上累积
+  brokerSensitivity: 0.00002,   // 每轮业绩修正 = sens × ln(实际/中枢)
+  brokerCap: 0.000025,          // 单轮修正上限 ±0.0025%
+  brokerAlpha: 0.05,        // 中性点追踪速度（越大越快吃掉短期波动）
 
   // ---- 市场状态 ----
   marketOpen: true,         // 休市 = 冻结行情（价格不动、新闻不刷、利息暂停）

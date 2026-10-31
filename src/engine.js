@@ -217,7 +217,8 @@ export function stepMarket(db) {
   let brokerDrift = 0;
   if (xd) {
     const alpha = cfg.brokerAlpha ?? 0.02;
-    const mid = Math.max(0.002, (xd.brokerMid ?? 0.02) * (1 - alpha) + alpha * trades);
+    const floor = Number(cfg.brokerMidFloor ?? 0.05);
+    const mid = Math.max(floor, (xd.brokerMid ?? 0.1) * (1 - alpha) + alpha * trades);
     xd.brokerMid = mid;
     const ratio = (trades + 0.1) / (mid + 0.1);
     brokerDrift = Math.max(
