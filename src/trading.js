@@ -1,5 +1,20 @@
 import { now } from './store.js';
 
+const TRADE_LOG_MAX = 4000;
+
+/** 记一条交易流水（超出上限就丢最老的） */
+function logTrade(db, entry) {
+  if (!Array.isArray(db.trades)) db.trades = [];
+  db.trades.push({
+    id: 't_' + Math.random().toString(36).slice(2, 10),
+    at: now(),
+    ...entry
+  });
+  if (db.trades.length > TRADE_LOG_MAX) {
+    db.trades.splice(0, db.trades.length - TRADE_LOG_MAX);
+  }
+}
+
 function num(x, d = 0) {
   const v = Number(x);
   return Number.isFinite(v) ? v : d;
@@ -58,6 +73,21 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
 
   player.cash -= cost;
   db.tradesThisTick = (db.tradesThisTick || 0) + 1;
+  logTrade(db, {
+    playerId: player.id,
+    nickname: player.nickname,
+    code,
+    name: st.name,
+    action: 'open',
+    side,
+    qty,
+    price,
+    leverage,
+    fee,
+    stamp,
+    margin,
+    reason: 'manual'
+  });
 
   if (!exist) {
     player.positions[code] = {
@@ -105,6 +135,23 @@ export function closePosition(db, player, code, reason = 'manual') {
   player.cash += back;
   delete player.positions[code];
   db.tradesThisTick = (db.tradesThisTick || 0) + 1;
+  logTrade(db, {
+    playerId: player.id,
+    nickname: player.nickname,
+    code,
+    name: st.name,
+    action: 'close',
+    side: pos.side,
+    qty: pos.qty,
+    price,
+    leverage: pos.leverage,
+    entry: pos.entry,
+    pnl,
+    fee,
+    stamp,
+    returned: back,
+    reason
+  });
 
   return {
     ok: true,

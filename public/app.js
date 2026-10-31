@@ -615,6 +615,7 @@ async function placeOrder() {
     renderPositions();
     renderTopbar();
     updatePriceLines();
+    if ($('#view-portfolio').classList.contains('active')) loadTrades();
     toast(`${state.side === 'long' ? '开多' : '开空'} ${qty} 股 ${st.name}`, 'ok');
   } catch (e) {
     msg.textContent = e.message;
@@ -630,6 +631,7 @@ async function closePos(code) {
     renderPositions();
     renderTopbar();
     updatePriceLines();
+    if ($('#view-portfolio').classList.contains('active')) loadTrades();
     const pnl = r.result.pnl;
     toast(`平仓 ${r.result.code}，${pnl >= 0 ? '盈利' : '亏损'} ${money(Math.abs(pnl))}`, pnl >= 0 ? 'ok' : 'err');
   } catch (e) {
@@ -745,6 +747,63 @@ function renderPortfolio() {
   wrap.querySelectorAll('[data-close]').forEach((b) => {
     b.addEventListener('click', () => closePos(b.dataset.close));
   });
+}
+
+// ---------------- 交易记录 ----------------
+const REASON_LABEL = {
+  manual: ['手动', 'pill gray'],
+  tp: ['止盈', 'pill long'],
+  sl: ['止损', 'pill short'],
+  liquidated: ['爆仓', 'pill short'],
+  delisted: ['退市', 'pill short']
+};
+
+function fmtTime(ts) {
+  const d = new Date(ts);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+async function loadTrades() {
+  const wrap = $('#tradeTable');
+  if (!wrap) return;
+  try {
+    const d = await api('/api/trades?limit=100');
+    if (!d.rows.length) {
+      wrap.innerHTML = '<table><tbody><tr class="empty-row"><td>还没有成交记录</td></tr></tbody></table>';
+      return;
+    }
+    wrap.innerHTML = `
+      <table>
+        <thead><tr>
+          <th>时间</th><th>标的</th><th>动作</th><th>方向</th><th>数量</th>
+          <th>成交价</th><th>杠杆</th><th>盈亏</th><th>备注</th>
+        </tr></thead>
+        <tbody>
+          ${d.rows.map((t) => {
+            const [label, klass] = REASON_LABEL[t.reason] || ['手动', 'pill gray'];
+            const isOpen = t.action === 'open';
+            const pnlCell = t.action === 'close'
+              ? `<span class="${cls(t.pnl)}">${money(t.pnl)}</span>`
+              : '<span class="stock-code">—</span>';
+            return `<tr>
+              <td class="stock-code">${fmtTime(t.at)}</td>
+              <td>${t.name || t.code} <span class="stock-code">${t.code}</span></td>
+              <td>${isOpen ? '开仓' : '平仓'}</td>
+              <td><span class="pill ${t.side}">${t.side === 'long' ? '多' : '空'}</span></td>
+              <td>${t.qty}</td>
+              <td>${Number(t.price).toFixed(2)}</td>
+              <td>${(t.leverage || 1).toFixed(1)}x</td>
+              <td>${pnlCell}</td>
+              <td><span class="${klass}">${label}</span></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      <p class="trade-foot">共 ${d.total} 笔，显示最近 ${d.rows.length} 笔</p>`;
+  } catch (e) {
+    wrap.innerHTML = `<table><tbody><tr class="empty-row"><td>${e.message}</td></tr></tbody></table>`;
+  }
 }
 
 // ---------------- 丰川银行（高利贷） ----------------
@@ -1082,7 +1141,7 @@ async function publishNews() {
 function switchView(name) {
   $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === name));
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + name));
-  if (name === 'portfolio') renderPortfolio();
+  if (name === 'portfolio') { renderPortfolio(); loadTrades(); }
   if (name === 'loan') renderLoan();
   if (name === 'rank') loadRank();
   if (name === 'admin') {
@@ -1210,6 +1269,7 @@ function bind() {
   });
 
   $('#refreshRank').addEventListener('click', loadRank);
+  $('#refreshTrades')?.addEventListener('click', loadTrades);
   $('#adminLoginBtn').addEventListener('click', adminLogin);
   $('#newsBtn').addEventListener('click', publishNews);
   $('#configSaveBtn').addEventListener('click', saveConfig);

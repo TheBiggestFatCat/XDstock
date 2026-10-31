@@ -538,6 +538,13 @@ export async function handleApi(ctx) {
     return json(res, 200, { ok: true, result: r, player: publicPlayer(me, db) });
   }
 
+  if (pathname === '/api/trades' && method === 'GET') {
+    const limit = Math.min(200, Math.max(1, Number(query.limit) || 50));
+    const mine = (db.trades || []).filter((t) => t.playerId === me.id);
+    const rows = mine.slice(-limit).reverse();
+    return json(res, 200, { total: mine.length, rows });
+  }
+
   if (pathname === '/api/tpsl' && method === 'POST') {
     const code = String(body.code || '').toUpperCase();
     const pos = me.positions[code];

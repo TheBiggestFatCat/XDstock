@@ -641,3 +641,8 @@ input.tpsl-input {
   padding: 3px 5px; border-radius: 6px;
   background: #fef2f2; color: #dc2626; border: 1px solid #fecaca;
 }
+
+.trade-foot {
+  font-size: 11.5px; color: var(--ink-3);
+  text-align: right; margin: 10px 2px 0;
+}
