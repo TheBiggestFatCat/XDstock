@@ -210,6 +210,7 @@ function tickPayload(forPlayerId) {
         entry: pos.entry,
         price: st.price,
         pnl: positionPnl(pos, st.price),
+        pnlPct: pos.margin > 0 ? (positionPnl(pos, st.price) / pos.margin) * 100 : 0,
         margin: pos.margin,
         leverage: pos.leverage,
         tp: pos.tp,
@@ -233,6 +234,9 @@ function tickPayload(forPlayerId) {
       maxOrdersPerTick: d.config.maxOrdersPerTick,
       loanRatePer100Ticks: d.config.loanRatePer100Ticks
     },
+    notices: (d.notices || [])
+      .filter((n) => now() - n.at < 24 * 3600 * 1000)
+      .map((n) => ({ id: n.id, text: n.text, at: n.at })),
     events: d.events
       .filter((e) => e.announced !== false)
       // 同样只下发已公布的文案和方向

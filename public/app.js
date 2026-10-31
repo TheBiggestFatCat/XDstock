@@ -260,19 +260,37 @@ function newsBadge(ev) {
 function renderNews() {
   const feed = $('#newsFeed');
   if (!feed) return;
+  const notices = (state.market?.notices || []).slice().sort((a, b) => (b.at || 0) - (a.at || 0));
   const list = (state.market?.events || []).slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const cnt = $('#newsCount');
-  if (cnt) cnt.textContent = list.length ? `${list.length} 条` : '';
-  if (!list.length) {
+  const total = notices.length + list.length;
+  if (cnt) cnt.textContent = total ? `${total} 条` : '';
+
+  if (!total) {
     feed.innerHTML = '<div class="news-empty">暂无消息，市场风平浪静</div>';
     return;
   }
-  feed.innerHTML = list.slice(0, 4).map((ev) => {
-    return `<div class="news-item">
+
+  // 公告永远排在最前面，且不参与行情
+  const noticeHtml = notices.slice(0, 3).map((n) => `
+    <div class="news-item news-notice">
+      <span class="news-badge badge-notice">公告</span>
+      <span class="news-text">${escapeHtml(n.text)}</span>
+    </div>`).join('');
+
+  const newsHtml = list.slice(0, Math.max(1, 4 - Math.min(3, notices.length))).map((ev) => `
+    <div class="news-item">
       ${newsBadge(ev)}
       <span class="news-text">${ev.text}</span>
-    </div>`;
-  }).join('');
+    </div>`).join('');
+
+  feed.innerHTML = noticeHtml + newsHtml;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
 }
 
 // ---------------- 图表 ----------------
@@ -511,6 +529,7 @@ function onTick(d) {
   }
   updateCostPreview();
   updatePriceLines();
+  renderPositions();
   if ($('#view-portfolio').classList.contains('active')) renderPortfolio();
   if ($('#view-loan').classList.contains('active')) renderLoan();
   if (d.closes && d.closes.length) handleCloses(d.closes);
@@ -661,15 +680,51 @@ async function closePos(code) {
   }
 }
 
-function renderPositions() {
+function positionSignature(pos) {
+  return pos
+    .map((p) => `${p.code}:${p.qty}:${p.side}:${(p.leverage || 1).toFixed(1)}`)
+    .sort()
+    .join('|');
+}
+
+function updatePositionCells(pos) {
+  const wrap = $('#positionsTable');
+  if (!wrap) return;
+  const byCode = new Map(pos.map((p) => [p.code, p]));
+  wrap.querySelectorAll('tr[data-pos]').forEach((tr) => {
+    const p = byCode.get(tr.dataset.pos);
+    if (!p) return;
+    const set = (cell, html) => {
+      const el = tr.querySelector(`[data-cell="${cell}"]`);
+      if (el) el.innerHTML = html;
+    };
+    set('price', p.price.toFixed(2));
+    const pctVal = p.pnlPct !== undefined ? p.pnlPct : (p.margin > 0 ? (p.pnl / p.margin) * 100 : 0);
+    set('pnl', `<span class="${cls(p.pnl)}">${money(p.pnl)} <small>(${pct(pctVal)})</small></span>`);
+    set('qty', String(p.qty));
+    set('margin', money(p.margin));
+  });
+}
+
+function renderPositions(force = false) {
   const wrap = $('#positionsTable');
   const me = state.market?.me;
   if (!wrap) return;
   const pos = me ? Object.values(me.positions || {}) : [];
+
   if (!pos.length) {
     wrap.innerHTML = '<table><tbody><tr class="empty-row"><td>还没有持仓，挑一只票试试手气</td></tr></tbody></table>';
+    state.posSig = '';
     return;
   }
+
+  const sig = positionSignature(pos);
+  if (!force && sig === state.posSig && wrap.querySelector('tr[data-pos]')) {
+    updatePositionCells(pos);
+    return;
+  }
+  state.posSig = sig;
+
   wrap.innerHTML = `
     <table>
       <thead><tr>
@@ -682,15 +737,15 @@ function renderPositions() {
           const lev = p.leverage || 1;
           const liq = p.side === 'long' ? p.entry * (1 - 1 / lev) : p.entry * (1 + 1 / lev);
           const icon = state.market.stocks[p.code]?.icon || '';
-          return `<tr>
+          return `<tr data-pos="${p.code}">
             <td><img class="stock-icon-sm" src="${icon}" alt="" />${name} <span class="stock-code">${p.code}</span></td>
             <td><span class="pill ${p.side}">${p.side === 'long' ? '多' : '空'}</span></td>
-            <td>${p.qty}</td>
-            <td>${(p.leverage || 1).toFixed(1)}x</td>
+            <td data-cell="qty">${p.qty}</td>
+            <td>${lev.toFixed(1)}x</td>
             <td>${p.entry.toFixed(2)}</td>
-            <td>${p.price.toFixed(2)}</td>
-            <td class="${cls(p.pnl)}">${money(p.pnl)} <small>(${pct(p.pnlPct)})</small></td>
-            <td>${money(p.margin)}</td>
+            <td data-cell="price">${p.price.toFixed(2)}</td>
+            <td data-cell="pnl"><span class="${cls(p.pnl)}">${money(p.pnl)} <small>(${pct(p.margin > 0 ? (p.pnl / p.margin) * 100 : 0)})</small></span></td>
+            <td data-cell="margin">${money(p.margin)}</td>
             <td class="down">${liq > 0 ? liq.toFixed(2) : '—'}</td>
             <td>
               <input class="tpsl-input" data-code="${p.code}" data-field="tp" type="number" step="0.01" value="${p.tp ?? ''}" placeholder="止盈" />
@@ -799,7 +854,7 @@ async function loadTrades() {
       <table>
         <thead><tr>
           <th>时间</th><th>标的</th><th>动作</th><th>方向</th><th>数量</th>
-          <th>成交价</th><th>杠杆</th><th>盈亏</th><th>备注</th>
+          <th>成交价</th><th>杠杆</th><th>金额</th><th>手续费</th><th>盈亏</th><th>备注</th>
         </tr></thead>
         <tbody>
           ${d.rows.map((t) => {
@@ -808,6 +863,14 @@ async function loadTrades() {
             const pnlCell = t.action === 'close'
               ? `<span class="${cls(t.pnl)}">${money(t.pnl)}</span>`
               : '<span class="stock-code">—</span>';
+            // 手续费 = 交易手续费 + 印花税（做空开仓、平多卖出时才有印花税）
+            const feeTotal = (Number(t.fee) || 0) + (Number(t.stamp) || 0);
+            const feeCell = feeTotal > 0
+              ? `<span class="fee-cell" title="手续费 ${money(t.fee)} + 印花税 ${money(t.stamp)}">${money(feeTotal)}</span>`
+              : '<span class="stock-code">—</span>';
+            const amountCell = t.action === 'close'
+              ? money(t.returned ?? 0)
+              : money(t.margin ?? 0);
             return `<tr>
               <td class="stock-code">${fmtTime(t.at)}</td>
               <td>${t.name || t.code} <span class="stock-code">${t.code}</span></td>
@@ -816,13 +879,18 @@ async function loadTrades() {
               <td>${t.qty}</td>
               <td>${Number(t.price).toFixed(2)}</td>
               <td>${(t.leverage || 1).toFixed(1)}x</td>
+              <td>${amountCell}</td>
+              <td>${feeCell}</td>
               <td>${pnlCell}</td>
               <td><span class="${klass}">${label}</span></td>
             </tr>`;
           }).join('')}
         </tbody>
       </table>
-      <p class="trade-foot">共 ${d.total} 笔，显示最近 ${d.rows.length} 笔</p>`;
+      <p class="trade-foot">
+        共 ${d.total} 笔，显示最近 ${d.rows.length} 笔　·　
+        手续费 ${((state.market?.config?.feeRate || 0) * 100).toFixed(3)}%，印花税（卖出方向）${((state.market?.config?.stampDuty || 0) * 100).toFixed(3)}%
+      </p>`;
   } catch (e) {
     wrap.innerHTML = `<table><tbody><tr class="empty-row"><td>${e.message}</td></tr></tbody></table>`;
   }
@@ -1030,6 +1098,28 @@ async function loadAdmin() {
   $('#adminLock').classList.add('hidden');
   $('#adminPanel').classList.remove('hidden');
 
+  // 公告
+  const notices = (d.notices || []).slice().sort((a, b) => (b.at || 0) - (a.at || 0));
+  const nl = $('#noticeList');
+  if (nl) {
+    nl.innerHTML = notices.length
+      ? notices.map((n) => `<div class="notice-row">
+          <span class="notice-text">${escapeHtml(n.text)}</span>
+          <button class="mini-btn danger" data-del-notice="${n.id}">删除</button>
+        </div>`).join('')
+      : '<div class="notice-empty">还没有公告</div>';
+    nl.querySelectorAll('[data-del-notice]').forEach((b) => {
+      b.addEventListener('click', async () => {
+        try {
+          await adminApi('/api/admin/announce/delete', { id: b.dataset.delNotice });
+          toast('公告已删除', 'ok');
+          loadAdmin();
+          refreshMarket();
+        } catch (e) { toast(e.message, 'err'); }
+      });
+    });
+  }
+
   // 标的
   $('#adminStocks').innerHTML = d.stocks.map((s) => `
     <div class="admin-stock">
@@ -1135,6 +1225,20 @@ async function saveConfig() {
     toast('参数已保存', 'ok');
     const m = await api('/api/market');
     state.market.config = m.config;
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
+async function publishNotice() {
+  const text = $('#noticeText').value.trim();
+  if (!text) { toast('写点什么', 'err'); return; }
+  try {
+    await adminApi('/api/admin/announce', { text });
+    toast('公告已发布', 'ok');
+    $('#noticeText').value = '';
+    loadAdmin();
+    refreshMarket();
   } catch (e) {
     toast(e.message, 'err');
   }
@@ -1294,6 +1398,7 @@ function bind() {
   $('#refreshTrades')?.addEventListener('click', loadTrades);
   $('#adminLoginBtn').addEventListener('click', adminLogin);
   $('#newsBtn').addEventListener('click', publishNews);
+  $('#noticeBtn')?.addEventListener('click', publishNotice);
   $('#configSaveBtn').addEventListener('click', saveConfig);
 
   // 定时刷新「我的」与「排行」，保证不靠 SSE 也准确

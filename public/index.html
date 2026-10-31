@@ -276,6 +276,16 @@
             <div id="adminStocks" class="admin-stocks"></div>
           </div>
           <div class="panel">
+            <div class="panel-title">发布公告</div>
+            <label class="field">
+              <span>公告内容（不影响行情，和新闻显示在一起）</span>
+              <textarea id="noticeText" rows="2" placeholder="例如：今晚 24 点停服维护，请提前平仓"></textarea>
+            </label>
+            <button id="noticeBtn" class="btn btn-primary">发布公告</button>
+            <div id="noticeList" class="notice-list"></div>
+          </div>
+
+          <div class="panel">
             <div class="panel-title">手动新闻</div>
             <label class="field"><span>内容</span><textarea id="newsText" rows="3" placeholder="例如：丰川集团宣布收购…"></textarea></label>
             <label class="field"><span>涉及标的（不选 = 全市场）</span></label>

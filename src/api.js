@@ -162,6 +162,9 @@ function marketPayload(db, me) {
         dir: e.dir || (e.trend > 0 ? 1 : -1),
         createdAt: e.createdAt
       })),
+    notices: (db.notices || [])
+      .filter((n) => now() - n.at < 24 * 3600 * 1000)
+      .map((n) => ({ id: n.id, text: n.text, at: n.at })),
     me: me ? publicPlayer(me, db) : null,
     config: {
       minLeverage: db.config.minLeverage,
@@ -322,6 +325,7 @@ export async function handleApi(ctx) {
     return json(res, 200, {
       config: db.config,
       marketOpen: db.config.marketOpen !== false,
+      notices: db.notices || [],
       closedAt: db.closedAt || 0,
       stocks: Object.values(db.stocks).map((s) => ({
         code: s.code,
@@ -401,6 +405,25 @@ export async function handleApi(ctx) {
     db.events.push(ev);
     saveDb();
     return json(res, 200, { ok: true, event: ev });
+  }
+
+  if (pathname === '/api/admin/announce' && method === 'POST') {
+    const text = String(body.text || '').trim().slice(0, 300);
+    if (!text) return json(res, 400, { error: '公告内容为空' });
+    if (!Array.isArray(db.notices)) db.notices = [];
+    const notice = { id: 'n_' + Math.random().toString(36).slice(2, 10), text, at: now() };
+    db.notices.push(notice);
+    if (db.notices.length > 20) db.notices.splice(0, db.notices.length - 20);
+    saveDb();
+    return json(res, 200, { ok: true, notice });
+  }
+
+  if (pathname === '/api/admin/announce/delete' && method === 'POST') {
+    const id = String(body.id || '');
+    const before = (db.notices || []).length;
+    db.notices = (db.notices || []).filter((n) => n.id !== id);
+    saveDb();
+    return json(res, 200, { ok: true, removed: before - db.notices.length });
   }
 
   if (pathname === '/api/admin/market' && method === 'POST') {

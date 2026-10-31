@@ -70,6 +70,7 @@ export function createDb() {
     adminSessions: {},
     events: [],
     trades: [],          // 交易流水（最多保留 TRADE_LOG_MAX 条）
+    notices: [],         // 管理员公告（不影响行情）
     newsPool: [],
     localNewsPool: [],
     tradesThisTick: 0,
@@ -145,6 +146,7 @@ function migrate(d) {
   merged.adminSessions = d.adminSessions || {};
   merged.events = d.events || [];
   merged.trades = d.trades || [];
+  merged.notices = d.notices || [];
   merged.book = d.book || [];
   merged.newsPool = d.newsPool || [];
   merged.localNewsPool = d.localNewsPool || [];
