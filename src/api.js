@@ -4,7 +4,6 @@ import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
 import { candlesFromSeries, changesFor } from './engine.js';
 import { TIMEFRAMES } from './config.js';
 import { playerEquity, openPosition, closePosition, positionPnl } from './trading.js';
-import { borrow, repay } from './loans.js';
 
 const TOKEN_TTL = 30 * 24 * 3600 * 1000;
 
@@ -69,8 +68,8 @@ function publicPlayer(p, db) {
     cash: p.cash,
     positions,
     equity: playerEquity(db, p),
-    loan: p.loan || null,
-    bankrupt: !!p.bankrupt,
+    workQueued: !!p.workQueued,
+    workEarned: p.workEarned || 0,
     createdAt: p.createdAt
   };
 }
@@ -171,12 +170,8 @@ function marketPayload(db, me) {
       maxLeverage: db.config.maxLeverage,
       feeRate: db.config.feeRate,
       stampDuty: db.config.stampDuty,
-      loanEnabled: db.config.loanEnabled,
-      loanTiers: db.config.loanTiers,
-      loanRatePer100Ticks: db.config.loanRatePer100Ticks,
-      loanTermHours: db.config.loanTermHours,
-      loanMinRepay: db.config.loanMinRepay,
       maxOrdersPerTick: db.config.maxOrdersPerTick,
+      workReward: db.config.workReward ?? 1000,
       startingCash: db.config.startingCash
     }
   };
@@ -239,8 +234,8 @@ export async function handleApi(ctx) {
         avatar: null,
         cash: db.config.startingCash ?? 100000,
         positions: {},
-        loan: null,
-        bankrupt: false,
+        workQueued: false,
+        workEarned: 0,
         createdAt: now()
       };
       db.players[id] = player;
@@ -294,16 +289,11 @@ export async function handleApi(ctx) {
         avatar: p.avatar || null,
         cash: p.cash,
         equity,
-        bankrupt: !!p.bankrupt,
         positions
       };
     });
     rows.sort((a, b) => b.equity - a.equity);
     return json(res, 200, { rows });
-  }
-
-  if (pathname === '/api/book' && method === 'GET') {
-    return json(res, 200, { book: db.book.slice().reverse() });
   }
 
   // ---------- 管理 ----------
@@ -340,10 +330,9 @@ export async function handleApi(ctx) {
         id: p.id,
         nickname: p.nickname,
         equity: playerEquity(db, p),
-        cash: p.cash,
-        bankrupt: !!p.bankrupt
+        cash: p.cash
       })),
-      book: db.book.slice().reverse()
+      marketOpen: db.config.marketOpen !== false
     });
   }
 
@@ -436,13 +425,6 @@ export async function handleApi(ctx) {
     if (!wantOpen) {
       db.closedAt = now();
     } else {
-      // 开市：把休市这段时间补给所有贷款，别让人白等
-      const delta = db.closedAt ? now() - db.closedAt : 0;
-      if (delta > 0) {
-        for (const p of Object.values(db.players)) {
-          if (p.loan && p.loan.dueAt) p.loan.dueAt += delta;
-        }
-      }
       db.closedAt = 0;
     }
     saveDb();
@@ -461,7 +443,7 @@ export async function handleApi(ctx) {
       'tickMs', 'baseVolatility', 'meanReversion', 'eventImpactScale',
       'feeRate', 'stampDuty', 'minLeverage', 'maxLeverage',
       'eventChance', 'localEventChance', 'eventDurationMin', 'eventDurationMax',
-      'loanEnabled', 'loanRatePer100Ticks', 'loanTermHours', 'loanMinRepay',
+      'workReward',
       'maxOrdersPerTick',
       'brokerMidpoint', 'brokerSensitivity', 'brokerCap', 'brokerAlpha',
       'adminPin', 'allowRegister', 'marketOpen', 'pinLength'
@@ -558,6 +540,15 @@ export async function handleApi(ctx) {
     return json(res, 200, { ok: true, result: r, player: publicPlayer(me, db) });
   }
 
+  if (pathname === '/api/work/press' && method === 'POST') {
+    if (me.workQueued) {
+      return json(res, 429, { error: '这一轮已经打过卡了，等下一轮结算' });
+    }
+    me.workQueued = true;
+    saveDb();
+    return json(res, 200, { ok: true, queued: true, reward: db.config.workReward ?? 1000 });
+  }
+
   if (pathname === '/api/trades' && method === 'GET') {
     const limit = Math.min(200, Math.max(1, Number(query.limit) || 50));
     const mine = (db.trades || []).filter((t) => t.playerId === me.id);
@@ -573,20 +564,6 @@ export async function handleApi(ctx) {
     pos.sl = body.sl ? Number(body.sl) : null;
     saveDb();
     return json(res, 200, { ok: true, position: pos });
-  }
-
-  if (pathname === '/api/loan/borrow' && method === 'POST') {
-    const r = borrow(db, me, body.amount);
-    if (!r.ok) return json(res, 400, r);
-    saveDb();
-    return json(res, 200, { ok: true, player: publicPlayer(me, db) });
-  }
-
-  if (pathname === '/api/loan/repay' && method === 'POST') {
-    const r = repay(db, me, body.amount);
-    if (!r.ok) return json(res, 400, r);
-    saveDb();
-    return json(res, 200, { ok: true, result: r, player: publicPlayer(me, db) });
   }
 
   return json(res, 404, { error: '接口不存在' });

@@ -6,7 +6,6 @@ import { getDb, saveDb, now, backupDb } from './src/store.js';
 import { stepMarket, seedHistory, changesFor } from './src/engine.js';
 import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, positionPnl } from './src/trading.js';
-import { accrueLoans } from './src/loans.js';
 import { handleApi } from './src/api.js';
 import { NEWS_POOL } from './src/news.js';
 
@@ -217,7 +216,13 @@ function tickPayload(forPlayerId) {
         sl: pos.sl
       };
     }
-    me = { cash: p.cash, equity: playerEquity(d, p), positions, loan: p.loan, bankrupt: !!p.bankrupt };
+    me = {
+      cash: p.cash,
+      equity: playerEquity(d, p),
+      positions,
+      workQueued: !!p.workQueued,
+      workEarned: p.workEarned || 0
+    };
   }
   return {
     type: 'tick',
@@ -232,7 +237,7 @@ function tickPayload(forPlayerId) {
       feeRate: d.config.feeRate,
       stampDuty: d.config.stampDuty,
       maxOrdersPerTick: d.config.maxOrdersPerTick,
-      loanRatePer100Ticks: d.config.loanRatePer100Ticks
+      workReward: d.config.workReward ?? 1000
     },
     notices: (d.notices || [])
       .filter((n) => now() - n.at < 24 * 3600 * 1000)
@@ -284,7 +289,16 @@ function loop() {
   stepMarket(d);
 
   const closes = checkPositions(d);
-  const deaths = accrueLoans(d);
+
+  // 打工结算：上一轮按过按钮的，这一轮发工资
+  const reward = Number(d.config.workReward ?? 1000);
+  for (const p of Object.values(d.players)) {
+    if (!p.workQueued) continue;
+    p.cash += reward;
+    p.workEarned = (p.workEarned || 0) + reward;
+    p.workQueued = false;
+    p.workPaidTick = d.tick;
+  }
 
   // 通知到个人
   const byPlayer = new Map();
@@ -301,16 +315,6 @@ function loop() {
       reason: c.reason
     });
   }
-  for (const dd of deaths) {
-    if (!byPlayer.has(dd.playerId)) byPlayer.set(dd.playerId, []);
-    byPlayer.get(dd.playerId).push({
-      bankrupt: true,
-      nickname: dd.nickname,
-      debt: dd.debt,
-      equity: dd.equity
-    });
-  }
-
   const base = tickPayload(null);
   for (const c of clients) {
     const payload = { ...base, me: tickPayload(c.playerId).me };

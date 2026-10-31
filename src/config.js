@@ -12,7 +12,7 @@ export const DEFAULT_CONFIG = {
   eventImpactScale: 1.0,    // 新闻冲击倍率
 
   // ---- 交易 ----
-  startingCash: 100000,
+  startingCash: 0,          // 新开户从 0 开始，得先打工
   feeRate: 0.0005,          // 手续费（开平仓都收，按成交额）
   stampDuty: 0.0005,        // 印花税（卖出方向收）
   minLeverage: 1,
@@ -26,12 +26,8 @@ export const DEFAULT_CONFIG = {
   eventDurationMin: 80,
   eventDurationMax: 200,
 
-  // ---- 丰川银行（高利贷）----
-  loanEnabled: true,
-  loanTiers: [50000, 200000, 1000000],  // 三个固定档位
-  loanRatePer100Ticks: 0.03,            // 每 100 轮（约 8.3 分钟）复利 3%
-  loanTermHours: 2,                     // 借多久必须还
-  loanMinRepay: 1000,                   // 手动还款最小金额
+  // ---- 打工 ----
+  workReward: 1000,         // 每按一次按钮，下一轮结算的工资
 
   // ---- 券商特质（小灯证券）----
   brokerMidpoint: 0.1,      // 每 tick 成交笔数的中性点（约 1 笔 / 50 秒）
@@ -67,5 +63,3 @@ export const TF_LABELS = {
   '4h': '4 小时'
 };
 
-// 每多少 tick 结一次利息
-export const LOAN_PERIOD_TICKS = 100;

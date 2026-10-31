@@ -92,7 +92,7 @@
   <nav class="tabs" id="tabs">
     <button class="tab active" data-view="market">行情</button>
     <button class="tab" data-view="portfolio">我的</button>
-    <button class="tab" data-view="loan">丰川银行</button>
+    <button class="tab" data-view="work">打工</button>
     <button class="tab" data-view="rank">排行榜</button>
     <button class="tab" data-view="admin">管理</button>
   </nav>
@@ -219,21 +219,27 @@
       </div>
     </div>
 
-    <!-- ---------- 丰川银行 ---------- -->
-    <div class="view" id="view-loan">
-      <div class="loan-hero">
-        <div class="loan-icon">🏦</div>
-        <div>
-          <h2>丰川银行</h2>
-          <p>每 <b>100 轮</b>（约 8 分钟）计息 <b id="loanRate">3%</b>，复利滚存。到期还不上，直接上天台。</p>
+    <!-- ---------- 打工 ---------- -->
+    <div class="view" id="view-work">
+      <div class="work-wrap">
+        <div class="work-title">打 工</div>
+        <p class="work-desc">
+          每按一次，下一轮结算 <b>$1,000</b><br />
+          一轮只算一次，手快没用 —— 得守着按
+        </p>
+
+        <button id="workBtn" class="work-btn">
+          <span class="work-emoji">💼</span>
+          <span class="work-main">上班</span>
+          <span class="work-sub">+$1,000 / 轮</span>
+        </button>
+
+        <p id="workHint" class="work-hint">点一下开始搬砖</p>
+
+        <div class="work-stats">
+          <div><span>已赚</span><b id="workTotal">$0</b></div>
+          <div><span>本轮</span><b id="workRound">待打卡</b></div>
         </div>
-      </div>
-      <div class="panel">
-        <div id="loanBody"></div>
-      </div>
-      <div class="panel">
-        <div class="panel-title">天台楼下记录册</div>
-        <div id="bookList" class="book-list"></div>
       </div>
     </div>
 

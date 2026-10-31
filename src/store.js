@@ -74,7 +74,6 @@ export function createDb() {
     newsPool: [],
     localNewsPool: [],
     tradesThisTick: 0,
-    book: [], // 天台楼下记录册
     newsPool: []
   };
 }
@@ -147,7 +146,17 @@ function migrate(d) {
   merged.events = d.events || [];
   merged.trades = d.trades || [];
   merged.notices = d.notices || [];
-  merged.book = d.book || [];
+  // 老的贷款功能已下线，存档里的残留字段一并清掉
+  for (const p of Object.values(merged.players)) {
+    delete p.loan;
+    delete p.bankrupt;
+    delete p.bankruptAt;
+    delete p.bankruptDebt;
+  }
+  delete merged.book;
+  for (const k of Object.keys(merged.config)) {
+    if (k.toLowerCase().includes('loan')) delete merged.config[k];
+  }
   merged.newsPool = d.newsPool || [];
   merged.localNewsPool = d.localNewsPool || [];
   if (!d.startedAt) {

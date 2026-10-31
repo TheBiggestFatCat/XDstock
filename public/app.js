@@ -532,7 +532,7 @@ function onTick(d) {
   renderPositions();
   if ($('#view-portfolio').classList.contains('active')) renderPortfolio();
   if ($('#view-rank').classList.contains('active')) loadRank();
-  if ($('#view-loan').classList.contains('active')) renderLoan();
+  if ($('#view-work').classList.contains('active')) renderWork();
   if (d.closes && d.closes.length) handleCloses(d.closes);
 }
 
@@ -564,10 +564,6 @@ function updatePriceCells() {
 
 function handleCloses(list) {
   for (const c of list) {
-    if (c.bankrupt) {
-      toast(`💀 ${c.nickname} 高利贷还不上，被写上记录册了`, 'err');
-      continue;
-    }
     const name = state.market.stocks[c.code]?.name || c.code;
     const reasonMap = {
       tp: '止盈触发',
@@ -897,139 +893,54 @@ async function loadTrades() {
   }
 }
 
-// ---------------- 丰川银行（高利贷） ----------------
-function renderLoan() {
+// ---------------- 打工 ----------------
+function renderWork() {
   const me = state.market?.me;
   const cfg = state.market?.config || {};
-  const rate = cfg.loanRatePer100Ticks ?? 0.03;
-  const tickMs = state.market?.tickMs || 5000;
-  const termHours = cfg.loanTermHours ?? 2;
-  if ($('#loanRate')) $('#loanRate').textContent = (rate * 100).toFixed(1) + '%';
+  const reward = cfg.workReward ?? 1000;
 
-  const body = $('#loanBody');
-  if (!body) return;
-  const loan = me?.loan;
+  const btn = $('#workBtn');
+  const hint = $('#workHint');
+  if (!btn) return;
 
-  // ---------- 有欠款：显示明细 + 手动还款 ----------
-  if (loan && loan.debt > 0) {
-    const left = Math.max(0, loan.dueAt - Date.now());
-    const hh = Math.floor(left / 3600000);
-    const mm = Math.floor((left % 3600000) / 60000);
-    const ss = Math.floor((left % 60000) / 1000);
-    const urgent = left < 15 * 60000;
-    const tick = state.market.tick || 0;
-    const lastTick = loan.lastTick ?? tick;
-    const passed = ((tick - lastTick) % 100 + 100) % 100;
-    const toNext = 100 - passed;
-    const minRepay = cfg.loanMinRepay ?? 1000;
+  const queued = !!me?.workQueued;
+  btn.classList.toggle('is-queued', queued);
+  btn.disabled = queued;
 
-    body.innerHTML = `
-      <div class="loan-body-row"><span>借款本金</span><b>${money(loan.principal)}</b></div>
-      <div class="loan-body-row"><span>当前欠款（已复利 ${loan.interestPeriods || 0} 期）</span><b class="up">${money(loan.debt)}</b></div>
-      <div class="loan-body-row"><span>下次计息</span><b>还有 ${toNext} 轮（约 ${Math.ceil((toNext * tickMs) / 60000)} 分钟）</b></div>
-      <div class="loan-body-row"><span>到期时间</span><b class="${urgent ? 'up' : ''}">${hh} 时 ${mm} 分 ${ss} 秒</b></div>
-      <div class="loan-body-row"><span>你的总资产</span><b class="${me.equity >= loan.debt ? 'down' : 'up'}">${money(me.equity)}</b></div>
-      ${urgent ? '<p class="warn-text">⚠️ 快到期了，还不上就要被写进记录册</p>' : ''}
-
-      <div class="loan-repay">
-        <button id="repayAllBtn" class="btn btn-primary">一次还清 ${money(loan.debt)}</button>
-        <div class="loan-input-row">
-          <input id="repayAmount" type="number" min="${minRepay}" step="1000" placeholder="还款金额（至少 ${minRepay}）" />
-          <button id="repayPartBtn" class="btn">还这么多</button>
-        </div>
-        <p class="loan-hint">现金 ${money(me.cash)}　·　手动还款随时可以，还清后额度立刻恢复</p>
-      </div>`;
-
-    const doRepay = async (amount) => {
-      const btns = document.querySelectorAll('#repayAllBtn, #repayPartBtn');
-      btns.forEach((b) => (b.disabled = true));
-      try {
-        const payload = amount === undefined ? {} : { amount };
-        const r = await api('/api/loan/repay', { method: 'POST', body: JSON.stringify(payload) });
-        state.market.me = r.player;
-        renderTopbar();
-        renderLoan();
-        toast(r.result.cleared ? '还清了，天台没了' : `已还 ${money(r.result.paid)}`, 'ok');
-      } catch (e) {
-        toast(e.message, 'err');
-      } finally {
-        btns.forEach((b) => (b.disabled = false));
-      }
-    };
-    $('#repayAllBtn').addEventListener('click', () => doRepay());
-    $('#repayPartBtn').addEventListener('click', () => {
-      const v = Number($('#repayAmount').value);
-      if (!v) { toast('填个金额', 'err'); return; }
-      doRepay(v);
-    });
-    return;
+  if (hint) {
+    hint.textContent = queued ? '已打卡 · 等这一轮结算' : '点一下开始搬砖';
+    hint.classList.toggle('is-queued', queued);
   }
 
-  // ---------- 已破产 ----------
-  if (me?.bankrupt) {
-    body.innerHTML = '<p class="warn-text">你已经在天台楼下记录册里了，只能看着别人玩。</p>';
-    return;
+  const total = $('#workTotal');
+  if (total) total.textContent = money(me?.workEarned || 0);
+
+  const round = $('#workRound');
+  if (round) {
+    round.textContent = queued ? '已打卡' : '待打卡';
+    round.className = queued ? 'down' : '';
   }
 
-  // ---------- 没欠款：三个固定档位 ----------
-  const tiers = cfg.loanTiers || [50000, 200000, 1000000];
-  const periods = (termHours * 3600 * 1000) / ((state.market?.tickMs || 5000) * 100);
-  const rows = tiers.map((amt) => {
-    const due = amt * Math.pow(1 + rate, periods);
-    return `<button class="loan-tier" data-amount="${amt}">
-      <span class="tier-amount">${money(amt)}</span>
-      <span class="tier-due">到期约欠 ${money(due)}</span>
-    </button>`;
-  }).join('');
-
-  body.innerHTML = `
-    <div class="loan-body-row"><span>计息方式</span><b>每 100 轮复利 ${(rate * 100).toFixed(1)}%</b></div>
-    <div class="loan-body-row"><span>借款期限</span><b>${termHours} 小时（约 ${Math.round((termHours * 3600000) / (state.market?.tickMs || 5000))} 轮）</b></div>
-    <div class="loan-body-row"><span>可借档位</span><b>${tiers.length} 档</b></div>
-    <p class="loan-pick">选一个档位：</p>
-    <div class="loan-tiers">${rows}</div>
-    <p class="warn-text" style="margin-top:14px">⚠️ 到期时总资产还不上欠款，账号判定破产，昵称写进「天台楼下记录册」。</p>`;
-
-  body.querySelectorAll('.loan-tier').forEach((b) => {
-    b.addEventListener('click', async () => {
-      const amount = Number(b.dataset.amount);
-      if (!confirm(`确认向丰川银行借 ${money(amount)}？\n每 100 轮复利 ${(rate * 100).toFixed(1)}%，${termHours} 小时后到期。`)) return;
-      b.disabled = true;
-      try {
-        const r = await api('/api/loan/borrow', { method: 'POST', body: JSON.stringify({ amount }) });
-        state.market.me = r.player;
-        renderTopbar();
-        renderLoan();
-        toast('钱到账了，记得还', 'ok');
-      } catch (e) {
-        toast(e.message, 'err');
-      } finally {
-        b.disabled = false;
-      }
-    });
-  });
+  const sub = btn.querySelector('.work-sub');
+  if (sub) sub.textContent = `+${money(reward)} / 轮`;
 }
 
-async function loadBook() {
+async function pressWork() {
+  const btn = $('#workBtn');
+  if (!btn || btn.disabled) return;
+  btn.classList.remove('pop');
+  void btn.offsetWidth;
+  btn.classList.add('pop');
   try {
-    const d = await api('/api/book');
-    const wrap = $('#bookList');
-    if (!d.book.length) {
-      wrap.innerHTML = '<div class="empty-row" style="color:var(--ink-3);font-size:13px;padding:18px 0;text-align:center">还没有人跳下去</div>';
-      return;
-    }
-    wrap.innerHTML = d.book.map((b, i) => `
-      <div class="book-item">
-        <div>
-          <div class="book-name">${i + 1}. ${b.nickname}</div>
-          <div class="book-meta">${new Date(b.at).toLocaleString('zh-CN')}</div>
-        </div>
-        <div style="text-align:right">
-          <div class="up">欠 ${money(b.amount)}</div>
-          <div class="book-meta">当时总资产 ${money(b.equity)}</div>
-        </div>
-      </div>`).join('');
-  } catch { /* 未登录时忽略 */ }
+    const r = await api('/api/work/press', { method: 'POST' });
+    if (state.market?.me) state.market.me.workQueued = true;
+    if (state.market?.config && r.reward) state.market.config.workReward = r.reward;
+    renderWork();
+  } catch (e) {
+    toast(e.message, 'err');
+    if (state.market?.me) state.market.me.workQueued = true;
+    renderWork();
+  }
 }
 
 // ---------------- 排行榜 ----------------
@@ -1058,7 +969,7 @@ async function loadRank(force = false) {
               : '<span class="stock-code">空仓</span>';
             return `<tr class="${mine}">
               <td><span class="rank-medal">${medal || i + 1}</span></td>
-              <td>${r.nickname}${r.bankrupt ? ' <span class="pill gray">已破产</span>' : ''}</td>
+              <td>${r.nickname}</td>
               <td class="${cls(r.equity - 100000)}">${money(r.equity)}</td>
               <td>${money(r.cash)}</td>
               <td style="text-align:left">${hold}</td>
@@ -1210,7 +1121,7 @@ async function loadAdmin() {
     ['feeRate', '手续费率'], ['stampDuty', '印花税率'], ['maxLeverage', '最大杠杆'],
     ['maxOrdersPerTick', '每轮最多下单次数'],
     ['eventChance', '新闻概率/tick'],
-    ['loanRatePer100Ticks', '每100轮利率'], ['loanTermHours', '借款期限(h)'],
+    ['workReward', '每次打工工资'],
     ['adminPin', '管理员口令', 'text'], ['allowRegister', '开放注册(1/0)']
   ];
   $('#configForm').innerHTML = cfgFields.map(([k, label, type]) => {
@@ -1278,7 +1189,7 @@ function switchView(name) {
   $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === name));
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + name));
   if (name === 'portfolio') { renderPortfolio(); loadTrades(); }
-  if (name === 'loan') renderLoan();
+  if (name === 'work') renderWork();
   if (name === 'rank') loadRank(true);
   if (name === 'admin') {
     if (state.adminToken) loadAdmin();
@@ -1408,11 +1319,12 @@ function bind() {
   $('#adminLoginBtn').addEventListener('click', adminLogin);
   $('#newsBtn').addEventListener('click', publishNews);
   $('#noticeBtn')?.addEventListener('click', publishNotice);
+  $('#workBtn')?.addEventListener('click', pressWork);
   $('#configSaveBtn').addEventListener('click', saveConfig);
 
   // 定时刷新「我的」与「排行」，保证不靠 SSE 也准确
   setInterval(() => {
-    if ($('#view-loan').classList.contains('active')) renderLoan();
+    if ($('#view-work').classList.contains('active')) renderWork();
   }, 1000);
 }
 
