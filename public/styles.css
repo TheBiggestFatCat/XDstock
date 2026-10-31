@@ -83,7 +83,9 @@ body {
   display: grid; place-items: center; font-size: 28px;
   background: linear-gradient(140deg, #5eead4, #38bdf8);
   box-shadow: 0 10px 24px rgba(56, 189, 248, .32);
+  overflow: hidden; flex: none;
 }
+.brand-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .brand h1 { margin: 0; font-size: 22px; letter-spacing: .5px; }
 .brand-sub { margin: 3px 0 0; font-size: 12px; color: var(--ink-3); letter-spacing: .4px; }
 
@@ -149,7 +151,9 @@ textarea { resize: vertical; }
   width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
   font-size: 19px; background: linear-gradient(140deg, #5eead4, #38bdf8);
   box-shadow: 0 6px 16px rgba(56, 189, 248, .3);
+  overflow: hidden; flex: none;
 }
+.logo-mini img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .index-box { display: flex; align-items: baseline; gap: 8px; }
 .index-label { font-size: 11.5px; color: var(--ink-3); }
 .index-value { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -231,9 +235,10 @@ textarea { resize: vertical; }
 .stock-list { display: flex; flex-direction: column; gap: 6px; max-height: 620px; overflow-y: auto; }
 .stock-item {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-  padding: 10px 12px;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 12px;
   border-radius: 13px;
   cursor: pointer;
   transition: background .18s, transform .12s, box-shadow .2s;
@@ -464,4 +469,75 @@ input.tpsl-input {
   .stat-grid { grid-template-columns: 1fr 1fr; }
   .config-form { grid-template-columns: 1fr; }
   .index-label { display: none; }
+}
+
+
+/* ---------- 股票图标 ---------- */
+.stock-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  object-fit: cover; background: #eef6f4;
+  box-shadow: 0 2px 8px rgba(15, 42, 38, .08);
+}
+.stock-icon-lg {
+  width: 34px; height: 34px; border-radius: 10px;
+  object-fit: cover; background: #eef6f4;
+  box-shadow: 0 2px 8px rgba(15, 42, 38, .1);
+}
+.stock-icon-sm {
+  width: 20px; height: 20px; border-radius: 6px;
+  object-fit: cover; vertical-align: -5px; margin-right: 6px;
+  background: #eef6f4;
+}
+.stock-main { min-width: 0; }
+
+/* ---------- K 线图例（成本/止盈/止损） ---------- */
+.chart-legend {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
+  font-size: 12px; color: var(--ink-2); padding: 8px 2px 0; min-height: 20px;
+}
+.chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.chart-legend i {
+  width: 16px; height: 0; border-top: 2px dashed currentColor;
+  display: inline-block; border-color: inherit;
+}
+.chart-legend i { border-top-style: dashed; }
+.chart-legend span:nth-child(1) i { border-color: #64748b; }
+.chart-legend span:nth-child(2) i { border-color: #22c55e; }
+.chart-legend span:nth-child(3) i { border-color: #ef4444; }
+.chart-legend .legend-hint { color: var(--ink-3); margin-left: auto; }
+
+/* ---------- 爆仓价 ---------- */
+.cost-box .cost-warn {
+  border-top: 1px dashed #f0f4f3;
+  padding-top: 7px; margin-top: 2px;
+}
+.cost-box .cost-warn b { color: var(--down); }
+
+/* ---------- 丰川银行 ---------- */
+.loan-pick { font-size: 12.5px; color: var(--ink-2); margin: 14px 0 10px; }
+.loan-tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.loan-tier {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 18px 10px; border-radius: 15px; cursor: pointer;
+  border: 1.5px solid var(--line); background: #fff;
+  font-family: inherit;
+  transition: transform .14s, border-color .18s, box-shadow .2s, background .2s;
+}
+.loan-tier:hover {
+  border-color: #fb7185; background: #fff8f9;
+  box-shadow: 0 10px 24px rgba(244, 63, 94, .13);
+  transform: translateY(-2px);
+}
+.loan-tier:disabled { opacity: .55; cursor: wait; }
+.loan-tier .tier-amount { font-size: 19px; font-weight: 700; color: #e11d48; }
+.loan-tier .tier-due { font-size: 11.5px; color: var(--ink-3); }
+
+.loan-repay { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.loan-hint { font-size: 11.5px; color: var(--ink-3); margin: 0; }
+.loan-body-row b.up { color: var(--up); }
+.loan-body-row b.down { color: var(--down); }
+
+@media (max-width: 760px) {
+  .loan-tiers { grid-template-columns: 1fr; }
+  .chart-legend { gap: 10px; font-size: 11px; }
 }

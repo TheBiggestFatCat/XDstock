@@ -44,6 +44,16 @@ function publicPlayer(p, db) {
   };
 }
 
+function orderLimitBlocked(db, player) {
+  const max = Number(db.config.maxOrdersPerTick ?? 1);
+  if (!(max > 0)) return null;
+  const sameTick = player.orderTick === db.tick;
+  const used = sameTick ? (player.orderCount || 0) : 0;
+  if (used < max) return null;
+  const secs = Math.max(1, Math.round((db.config.tickMs || 5000) / 1000));
+  return `每轮只能操作 ${max} 次，等下一轮（约 ${secs} 秒）`;
+}
+
 function auth(ctx) {
   const db = getDb();
   const h = ctx.headers['authorization'] || '';
@@ -82,6 +92,7 @@ function marketPayload(db, me) {
     stocks[code] = {
       code,
       name: st.name,
+      icon: st.icon || '',
       industry: st.industry,
       desc: st.desc,
       price: st.price,
@@ -115,9 +126,11 @@ function marketPayload(db, me) {
       feeRate: db.config.feeRate,
       stampDuty: db.config.stampDuty,
       loanEnabled: db.config.loanEnabled,
-      loanDailyRate: db.config.loanDailyRate,
+      loanTiers: db.config.loanTiers,
+      loanRatePer100Ticks: db.config.loanRatePer100Ticks,
       loanTermHours: db.config.loanTermHours,
-      loanMaxAmount: db.config.loanMaxAmount,
+      loanMinRepay: db.config.loanMinRepay,
+      maxOrdersPerTick: db.config.maxOrdersPerTick,
       startingCash: db.config.startingCash
     }
   };
@@ -317,7 +330,8 @@ export async function handleApi(ctx) {
       'tickMs', 'baseVolatility', 'meanReversion', 'eventImpactScale',
       'feeRate', 'stampDuty', 'minLeverage', 'maxLeverage',
       'eventChance', 'eventDurationMin', 'eventDurationMax',
-      'loanEnabled', 'loanDailyRate', 'loanTermHours', 'loanMaxAmount',
+      'loanEnabled', 'loanRatePer100Ticks', 'loanTermHours', 'loanMinRepay',
+      'maxOrdersPerTick',
       'brokerMidpoint', 'brokerSensitivity', 'brokerCap', 'brokerAlpha',
       'adminPin', 'allowRegister'
     ];
@@ -359,8 +373,18 @@ export async function handleApi(ctx) {
     return json(res, 200, { avatar: me.avatar });
   }
 
+  // ---- 每轮下单次数限制（防止刷成交额把小灯证券抬上去）----
+  const orderBlocked = orderLimitBlocked(db, me);
+  const consumeSlot = () => {
+    const same = me.orderTick === db.tick;
+    const prev = same ? (me.orderCount || 0) : 0;
+    me.orderTick = db.tick;
+    me.orderCount = Math.min(prev + 1, 1e6);
+  };
+
   if (pathname === '/api/order' && method === 'POST') {
     if (me.bankrupt) return json(res, 403, { error: '你已破产，只能看不能玩' });
+    if (orderBlocked) return json(res, 429, { error: orderBlocked });
     const result = openPosition(db, me, {
       code: String(body.code || '').toUpperCase(),
       side: body.side,
@@ -370,14 +394,17 @@ export async function handleApi(ctx) {
       sl: body.sl
     });
     if (!result.ok) return json(res, 400, result);
+    consumeSlot();
     saveDb();
     return json(res, 200, { ok: true, player: publicPlayer(me, db) });
   }
 
   if (pathname === '/api/close' && method === 'POST') {
+    if (orderBlocked) return json(res, 429, { error: orderBlocked });
     const code = String(body.code || '').toUpperCase();
     const r = closePosition(db, me, code, 'manual');
     if (!r.ok) return json(res, 400, r);
+    consumeSlot();
     saveDb();
     return json(res, 200, { ok: true, result: r, player: publicPlayer(me, db) });
   }
@@ -400,10 +427,10 @@ export async function handleApi(ctx) {
   }
 
   if (pathname === '/api/loan/repay' && method === 'POST') {
-    const r = repay(db, me);
+    const r = repay(db, me, body.amount);
     if (!r.ok) return json(res, 400, r);
     saveDb();
-    return json(res, 200, { ok: true, player: publicPlayer(me, db) });
+    return json(res, 200, { ok: true, result: r, player: publicPlayer(me, db) });
   }
 
   return json(res, 404, { error: '接口不存在' });

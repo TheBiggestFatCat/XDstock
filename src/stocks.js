@@ -5,6 +5,7 @@ export const STOCK_SEED = {
   TGW: {
     code: 'TGW',
     name: '丰川集团',
+    icon: '/assets/stocks/TGW.png',
     industry: '消费娱乐',
     desc: '综合商社、品牌零售、物流',
     initialPrice: 120,
@@ -19,6 +20,7 @@ export const STOCK_SEED = {
   MAMA: {
     code: 'MAMA',
     name: '无畏科技',
+    icon: '/assets/stocks/MAMA.png',
     industry: '科技AI',
     desc: '电竞、游戏硬件、AI 算法',
     initialPrice: 150,
@@ -35,6 +37,7 @@ export const STOCK_SEED = {
   DFY: {
     code: 'DFY',
     name: '肥鱼科技',
+    icon: '/assets/stocks/DFY.png',
     industry: '科技AI',
     desc: '食品科技、直播电商、供应链',
     initialPrice: 90,
@@ -49,6 +52,7 @@ export const STOCK_SEED = {
   LU: {
     code: 'LU',
     name: '瑞幸咖啡',
+    icon: '/assets/stocks/LU.png',
     industry: '消费娱乐',
     desc: '咖啡连锁、新零售、饮品',
     initialPrice: 85,
@@ -66,6 +70,7 @@ export const STOCK_SEED = {
   NW: {
     code: 'NW',
     name: '奶蛙传媒',
+    icon: '/assets/stocks/NW.png',
     industry: '消费娱乐',
     desc: '短视频、IP 运营、潮玩',
     initialPrice: 110,
@@ -85,6 +90,7 @@ export const STOCK_SEED = {
   XJ: {
     code: 'XJ',
     name: '弦卷财团',
+    icon: '/assets/stocks/XJ.png',
     industry: '消费娱乐',
     desc: '财团、偶像企划、游乐园',
     initialPrice: 180,
@@ -100,6 +106,7 @@ export const STOCK_SEED = {
   XD: {
     code: 'XD',
     name: '小灯证券',
+    icon: '/assets/stocks/XD.png',
     industry: '金融',
     desc: '券商、做市商、量化',
     initialPrice: 100,

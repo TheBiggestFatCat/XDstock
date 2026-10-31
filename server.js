@@ -286,7 +286,7 @@ function loop() {
 const timer = setInterval(loop, Math.max(1000, db.config.tickMs || 5000));
 
 server.listen(PORT, () => {
-  console.log(`\n  汐灯证券 · 网页版`);
+  console.log(`\n  小灯证券 · 网页版`);
   console.log(`  http://localhost:${PORT}`);
   console.log(`  tick = ${db.config.tickMs}ms, 玩家 ${Object.keys(db.players).length} 人\n`);
 });

@@ -20,6 +20,7 @@ function freshStock(code) {
   return {
     code,
     name: seed.name,
+    icon: seed.icon || '',
     industry: seed.industry,
     desc: seed.desc,
     initialPrice: seed.initialPrice,
@@ -84,9 +85,13 @@ function migrate(d) {
   const merged = { ...base, ...d };
   merged.config = { ...base.config, ...(d.config || {}) };
   merged.stocks = { ...base.stocks, ...(d.stocks || {}) };
-  // 补齐新增标的
+  // 补齐新增标的 / 补字段
   for (const code of STOCK_CODES) {
-    if (!merged.stocks[code]) merged.stocks[code] = freshStock(code);
+    if (!merged.stocks[code]) {
+      merged.stocks[code] = freshStock(code);
+    } else if (!merged.stocks[code].icon) {
+      merged.stocks[code].icon = STOCK_SEED[code].icon || '';
+    }
   }
   merged.players = d.players || {};
   merged.sessions = d.sessions || {};

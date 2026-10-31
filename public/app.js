@@ -150,7 +150,8 @@ function renderStockList() {
     div.dataset.code = st.code;
     const statusTag = st.status === 'suspended' ? ' · 停牌' : st.status === 'delisted' ? ' · 退市' : '';
     div.innerHTML = `
-      <div>
+      <img class="stock-icon" src="${st.icon || ''}" alt="${st.name}" loading="lazy" />
+      <div class="stock-main">
         <div class="stock-name">${st.name}<span class="stock-code">${st.code}${statusTag}</span></div>
         <div class="stock-trait">${st.traitName || ''}</div>
       </div>
@@ -170,6 +171,7 @@ function selectStock(code) {
   if (!st) return;
   $('#chartName').textContent = st.name;
   $('#chartCode').textContent = st.code;
+  $('#chartIcon').src = st.icon || '';
   $('#chartTrait').textContent = st.traitName || '';
   $('#chartTrait').title = st.traitDesc || '';
   $('#chartPrice').textContent = st.price.toFixed(2);
@@ -239,6 +241,8 @@ async function loadCandles() {
     state.candles = d.candles || [];
     state.candleSeries.setData(state.candles);
     renderMAs();
+    state.plSig = null;
+    updatePriceLines();
     state.chart.timeScale().fitContent();
     $('#chartEmpty').classList.toggle('hidden', state.candles.length > 0);
   } catch (e) {
@@ -300,6 +304,53 @@ function applyTickToChart(price) {
   }
 }
 
+// ---------------- K 线上的止盈止损 ----------------
+function renderChartLegend(pos) {
+  const el = $('#chartLegend');
+  if (!el) return;
+  if (!pos) {
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = `
+    <span><i style="background:#64748b"></i>成本 ${pos.entry.toFixed(2)}</span>
+    ${pos.tp ? `<span><i style="background:#22c55e"></i>止盈 ${Number(pos.tp).toFixed(2)}</span>` : ''}
+    ${pos.sl ? `<span><i style="background:#ef4444"></i>止损 ${Number(pos.sl).toFixed(2)}</span>` : ''}
+    <span class="legend-hint">${pos.side === 'long' ? '做多' : '做空'} ${pos.qty} 股 · ${(pos.leverage || 1).toFixed(1)}x</span>`;
+}
+
+function updatePriceLines() {
+  if (!state.candleSeries) return;
+  if (!Array.isArray(state.priceLines)) state.priceLines = [];
+  const pos = state.market?.me?.positions?.[state.code];
+  const sig = pos ? `${pos.entry}|${pos.tp}|${pos.sl}|${pos.side}|${pos.qty}` : 'none';
+  if (sig === state.plSig) return;
+  state.plSig = sig;
+
+  for (const pl of state.priceLines) {
+    try { state.candleSeries.removePriceLine(pl); } catch { /* ignore */ }
+  }
+  state.priceLines = [];
+
+  renderChartLegend(pos || null);
+  if (!pos) return;
+
+  const add = (price, color, title) => {
+    if (!price || !Number.isFinite(Number(price))) return;
+    state.priceLines.push(state.candleSeries.createPriceLine({
+      price: Number(price),
+      color,
+      lineWidth: 1,
+      lineStyle: LightweightCharts.LineStyle.Dashed,
+      axisLabelVisible: true,
+      title
+    }));
+  };
+  add(pos.entry, '#64748b', '成本');
+  add(pos.tp, '#22c55e', '止盈');
+  add(pos.sl, '#ef4444', '止损');
+}
+
 // ---------------- SSE ----------------
 function connectStream() {
   if (state.stream) state.stream.close();
@@ -348,6 +399,7 @@ function onTick(d) {
     applyTickToChart(st.price);
   }
   updateCostPreview();
+  updatePriceLines();
   if ($('#view-portfolio').classList.contains('active')) renderPortfolio();
   if ($('#view-loan').classList.contains('active')) renderLoan();
   if (d.closes && d.closes.length) handleCloses(d.closes);
@@ -413,6 +465,15 @@ function updateCostPreview() {
   $('#costMargin').textContent = money(margin + fee + stamp);
   $('#costFee').textContent = money(fee + stamp);
   $('#levLabel').textContent = lev + 'x';
+  // 爆仓价：保证金亏光的位置 = 现价 ×(1 ∓ 1/杠杆)
+  const liqPx = state.side === 'long' ? st.price * (1 - 1 / lev) : st.price * (1 + 1 / lev);
+  if (liqPx <= 0.01) {
+    $('#costLiq').textContent = '不会爆仓';
+    $('#costLiq').className = 'flat';
+  } else {
+    $('#costLiq').textContent = liqPx.toFixed(2) + `（跌/涨 ${(100 / lev).toFixed(1)}% 就爆）`;
+    $('#costLiq').className = 'down';
+  }
   const btn = $('#orderBtn');
   btn.textContent = state.side === 'long' ? '买入开多' : '卖出开空';
 }
@@ -437,6 +498,7 @@ async function placeOrder() {
     state.market.me = r.player;
     renderPositions();
     renderTopbar();
+    updatePriceLines();
     toast(`${state.side === 'long' ? '开多' : '开空'} ${qty} 股 ${st.name}`, 'ok');
   } catch (e) {
     msg.textContent = e.message;
@@ -451,6 +513,7 @@ async function closePos(code) {
     state.market.me = r.player;
     renderPositions();
     renderTopbar();
+    updatePriceLines();
     const pnl = r.result.pnl;
     toast(`平仓 ${r.result.code}，${pnl >= 0 ? '盈利' : '亏损'} ${money(Math.abs(pnl))}`, pnl >= 0 ? 'ok' : 'err');
   } catch (e) {
@@ -471,13 +534,16 @@ function renderPositions() {
     <table>
       <thead><tr>
         <th>标的</th><th>方向</th><th>数量</th><th>杠杆</th><th>成本</th>
-        <th>现价</th><th>浮动盈亏</th><th>保证金</th><th>止盈/止损</th><th>操作</th>
+        <th>现价</th><th>浮动盈亏</th><th>保证金</th><th>爆仓价</th><th>止盈/止损</th><th>操作</th>
       </tr></thead>
       <tbody>
         ${pos.map((p) => {
           const name = state.market.stocks[p.code]?.name || p.code;
+          const lev = p.leverage || 1;
+          const liq = p.side === 'long' ? p.entry * (1 - 1 / lev) : p.entry * (1 + 1 / lev);
+          const icon = state.market.stocks[p.code]?.icon || '';
           return `<tr>
-            <td>${name} <span class="stock-code">${p.code}</span></td>
+            <td><img class="stock-icon-sm" src="${icon}" alt="" />${name} <span class="stock-code">${p.code}</span></td>
             <td><span class="pill ${p.side}">${p.side === 'long' ? '多' : '空'}</span></td>
             <td>${p.qty}</td>
             <td>${(p.leverage || 1).toFixed(1)}x</td>
@@ -485,6 +551,7 @@ function renderPositions() {
             <td>${p.price.toFixed(2)}</td>
             <td class="${cls(p.pnl)}">${money(p.pnl)} <small>(${pct(p.pnlPct)})</small></td>
             <td>${money(p.margin)}</td>
+            <td class="down">${liq > 0 ? liq.toFixed(2) : '—'}</td>
             <td>
               <input class="tpsl-input" data-code="${p.code}" data-field="tp" type="number" step="0.01" value="${p.tp ?? ''}" placeholder="止盈" />
               <input class="tpsl-input" data-code="${p.code}" data-field="sl" type="number" step="0.01" value="${p.sl ?? ''}" placeholder="止损" />
@@ -512,6 +579,7 @@ function renderPositions() {
             sl: slEl.value ? Number(slEl.value) : null
           })
         });
+        updatePriceLines();
         toast('止盈止损已更新', 'ok');
       } catch (e) {
         toast(e.message, 'err');
@@ -563,65 +631,117 @@ function renderPortfolio() {
   });
 }
 
-// ---------------- 高利贷 ----------------
+// ---------------- 丰川银行（高利贷） ----------------
 function renderLoan() {
   const me = state.market?.me;
   const cfg = state.market?.config || {};
-  if ($('#loanRate')) $('#loanRate').textContent = ((cfg.loanDailyRate || 0.08) * 100).toFixed(0) + '%';
+  const rate = cfg.loanRatePer100Ticks ?? 0.03;
+  const tickMs = state.market?.tickMs || 5000;
+  const termHours = cfg.loanTermHours ?? 2;
+  if ($('#loanRate')) $('#loanRate').textContent = (rate * 100).toFixed(1) + '%';
+
   const body = $('#loanBody');
+  if (!body) return;
   const loan = me?.loan;
-  if (loan) {
+
+  // ---------- 有欠款：显示明细 + 手动还款 ----------
+  if (loan && loan.debt > 0) {
     const left = Math.max(0, loan.dueAt - Date.now());
     const hh = Math.floor(left / 3600000);
     const mm = Math.floor((left % 3600000) / 60000);
     const ss = Math.floor((left % 60000) / 1000);
     const urgent = left < 15 * 60000;
+    const tick = state.market.tick || 0;
+    const lastTick = loan.lastTick ?? tick;
+    const passed = ((tick - lastTick) % 100 + 100) % 100;
+    const toNext = 100 - passed;
+    const minRepay = cfg.loanMinRepay ?? 1000;
+
     body.innerHTML = `
-      <div class="loan-body-row"><span>本金</span><b>${money(loan.principal)}</b></div>
-      <div class="loan-body-row"><span>当前欠款（复利）</span><b class="up">${money(loan.debt)}</b></div>
-      <div class="loan-body-row"><span>你的总资产</span><b>${money(me.equity)}</b></div>
-      <div class="loan-body-row"><span>剩余时间</span><b class="${urgent ? 'up' : ''}">${hh} 时 ${mm} 分 ${ss} 秒</b></div>
-      ${urgent ? '<p class="warn-text">⚠️ 快到时间了，还不上就要上天台</p>' : ''}
-      <div class="loan-actions">
-        <button id="repayBtn" class="btn btn-primary">一次性还清 ${money(loan.debt)}</button>
+      <div class="loan-body-row"><span>借款本金</span><b>${money(loan.principal)}</b></div>
+      <div class="loan-body-row"><span>当前欠款（已复利 ${loan.interestPeriods || 0} 期）</span><b class="up">${money(loan.debt)}</b></div>
+      <div class="loan-body-row"><span>下次计息</span><b>还有 ${toNext} 轮（约 ${Math.ceil((toNext * tickMs) / 60000)} 分钟）</b></div>
+      <div class="loan-body-row"><span>到期时间</span><b class="${urgent ? 'up' : ''}">${hh} 时 ${mm} 分 ${ss} 秒</b></div>
+      <div class="loan-body-row"><span>你的总资产</span><b class="${me.equity >= loan.debt ? 'down' : 'up'}">${money(me.equity)}</b></div>
+      ${urgent ? '<p class="warn-text">⚠️ 快到期了，还不上就要被写进记录册</p>' : ''}
+
+      <div class="loan-repay">
+        <button id="repayAllBtn" class="btn btn-primary">一次还清 ${money(loan.debt)}</button>
+        <div class="loan-input-row">
+          <input id="repayAmount" type="number" min="${minRepay}" step="1000" placeholder="还款金额（至少 ${minRepay}）" />
+          <button id="repayPartBtn" class="btn">还这么多</button>
+        </div>
+        <p class="loan-hint">现金 ${money(me.cash)}　·　手动还款随时可以，还清后额度立刻恢复</p>
       </div>`;
-    $('#repayBtn').addEventListener('click', async () => {
+
+    const doRepay = async (amount) => {
+      const btns = document.querySelectorAll('#repayAllBtn, #repayPartBtn');
+      btns.forEach((b) => (b.disabled = true));
       try {
-        const r = await api('/api/loan/repay', { method: 'POST' });
+        const payload = amount === undefined ? {} : { amount };
+        const r = await api('/api/loan/repay', { method: 'POST', body: JSON.stringify(payload) });
         state.market.me = r.player;
-        renderLoan();
         renderTopbar();
-        toast('还清了，天台没了', 'ok');
+        renderLoan();
+        toast(r.result.cleared ? '还清了，天台没了' : `已还 ${money(r.result.paid)}`, 'ok');
       } catch (e) {
         toast(e.message, 'err');
+      } finally {
+        btns.forEach((b) => (b.disabled = false));
       }
+    };
+    $('#repayAllBtn').addEventListener('click', () => doRepay());
+    $('#repayPartBtn').addEventListener('click', () => {
+      const v = Number($('#repayAmount').value);
+      if (!v) { toast('填个金额', 'err'); return; }
+      doRepay(v);
     });
-  } else if (me?.bankrupt) {
+    return;
+  }
+
+  // ---------- 已破产 ----------
+  if (me?.bankrupt) {
     body.innerHTML = '<p class="warn-text">你已经在天台楼下记录册里了，只能看着别人玩。</p>';
-  } else {
-    body.innerHTML = `
-      <div class="loan-body-row"><span>日利率</span><b>${((cfg.loanDailyRate || 0.08) * 100).toFixed(1)}%（按秒复利）</b></div>
-      <div class="loan-body-row"><span>借款期限</span><b>${cfg.loanTermHours || 2} 小时</b></div>
-      <div class="loan-body-row"><span>单笔上限</span><b>${money(cfg.loanMaxAmount || 5000000)}</b></div>
-      <div class="loan-input-row">
-        <input id="loanAmount" type="number" min="1000" step="1000" value="100000" />
-        <button id="borrowBtn" class="btn btn-primary">借！</button>
-      </div>
-      <p class="warn-text" style="margin-top:12px">⚠️ 到期时资产还不上欠款，账号会被判定破产，昵称写进「天台楼下记录册」。</p>`;
-    $('#borrowBtn').addEventListener('click', async () => {
-      const amount = Number($('#loanAmount').value);
+    return;
+  }
+
+  // ---------- 没欠款：三个固定档位 ----------
+  const tiers = cfg.loanTiers || [50000, 200000, 1000000];
+  const periods = (termHours * 3600 * 1000) / ((state.market?.tickMs || 5000) * 100);
+  const rows = tiers.map((amt) => {
+    const due = amt * Math.pow(1 + rate, periods);
+    return `<button class="loan-tier" data-amount="${amt}">
+      <span class="tier-amount">${money(amt)}</span>
+      <span class="tier-due">到期约欠 ${money(due)}</span>
+    </button>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div class="loan-body-row"><span>计息方式</span><b>每 100 轮复利 ${(rate * 100).toFixed(1)}%</b></div>
+    <div class="loan-body-row"><span>借款期限</span><b>${termHours} 小时（约 ${Math.round((termHours * 3600000) / (state.market?.tickMs || 5000))} 轮）</b></div>
+    <div class="loan-body-row"><span>可借档位</span><b>${tiers.length} 档</b></div>
+    <p class="loan-pick">选一个档位：</p>
+    <div class="loan-tiers">${rows}</div>
+    <p class="warn-text" style="margin-top:14px">⚠️ 到期时总资产还不上欠款，账号判定破产，昵称写进「天台楼下记录册」。</p>`;
+
+  body.querySelectorAll('.loan-tier').forEach((b) => {
+    b.addEventListener('click', async () => {
+      const amount = Number(b.dataset.amount);
+      if (!confirm(`确认向丰川银行借 ${money(amount)}？\n每 100 轮复利 ${(rate * 100).toFixed(1)}%，${termHours} 小时后到期。`)) return;
+      b.disabled = true;
       try {
         const r = await api('/api/loan/borrow', { method: 'POST', body: JSON.stringify({ amount }) });
         state.market.me = r.player;
-        renderLoan();
         renderTopbar();
-        toast('钱到账了，别忘记还', 'ok');
+        renderLoan();
+        toast('钱到账了，记得还', 'ok');
       } catch (e) {
         toast(e.message, 'err');
+      } finally {
+        b.disabled = false;
       }
     });
-  }
-  loadBook();
+  });
 }
 
 async function loadBook() {
@@ -768,7 +888,9 @@ async function loadAdmin() {
   const cfgFields = [
     ['tickMs', 'tick 间隔(ms)'], ['baseVolatility', '基础波动率'], ['meanReversion', '均值回归'],
     ['feeRate', '手续费率'], ['stampDuty', '印花税率'], ['maxLeverage', '最大杠杆'],
-    ['eventChance', '新闻概率/tick'], ['loanDailyRate', '日利率'], ['loanTermHours', '借款期限(h)'],
+    ['maxOrdersPerTick', '每轮最多下单次数'],
+    ['eventChance', '新闻概率/tick'],
+    ['loanRatePer100Ticks', '每100轮利率'], ['loanTermHours', '借款期限(h)'],
     ['adminPin', '管理员口令', 'text'], ['allowRegister', '开放注册(1/0)']
   ];
   $('#configForm').innerHTML = cfgFields.map(([k, label, type]) => `

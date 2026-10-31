@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
-<title>汐灯证券 · 模拟炒股</title>
+<title>小灯证券 · 模拟炒股</title>
 <link rel="stylesheet" href="/styles.css" />
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐟</text></svg>" />
+<link rel="icon" href="/assets/favicon.png" />
 </head>
 <body>
 <div class="bg-decor" aria-hidden="true">
@@ -18,10 +18,10 @@
 <section id="loginView" class="login-wrap">
   <div class="login-card">
     <div class="brand">
-      <div class="brand-logo">🐟</div>
+      <div class="brand-logo"><img src="/assets/logo.png" alt="小灯证券" /></div>
       <div>
-        <h1>汐灯证券</h1>
-        <p class="brand-sub">XD Stock Exchange · 模拟炒股</p>
+        <h1>小灯证券</h1>
+        <p class="brand-sub">XIAODENG SECURITIES · 模拟炒股</p>
       </div>
     </div>
 
@@ -45,7 +45,7 @@
 <section id="mainView" class="hidden">
   <header class="topbar">
     <div class="topbar-left">
-      <div class="logo-mini">🐟</div>
+      <div class="logo-mini"><img src="/assets/logo.png" alt="" /></div>
       <div class="index-box">
         <span class="index-label">灯证指数</span>
         <span id="indexValue" class="index-value">1000.00</span>
@@ -71,7 +71,7 @@
   <nav class="tabs" id="tabs">
     <button class="tab active" data-view="market">行情</button>
     <button class="tab" data-view="portfolio">我的</button>
-    <button class="tab" data-view="loan">高利贷</button>
+    <button class="tab" data-view="loan">丰川银行</button>
     <button class="tab" data-view="rank">排行榜</button>
     <button class="tab" data-view="admin">管理</button>
   </nav>
@@ -91,6 +91,7 @@
         <section class="panel chart-panel">
           <div class="chart-head">
             <div class="chart-title">
+              <img id="chartIcon" class="stock-icon-lg" alt="" />
               <h2 id="chartName">—</h2>
               <span id="chartCode" class="chip">—</span>
               <span id="chartTrait" class="chip chip-soft">—</span>
@@ -118,6 +119,7 @@
 
           <div id="chart" class="chart-canvas"></div>
           <div id="chartEmpty" class="chart-empty hidden">暂无数据</div>
+          <div id="chartLegend" class="chart-legend"></div>
         </section>
 
         <aside class="panel trade-panel">
@@ -159,6 +161,7 @@
             <div><span>名义价值</span><b id="costNotional">$0</b></div>
             <div><span>所需保证金</span><b id="costMargin">$0</b></div>
             <div><span>手续费</span><b id="costFee">$0</b></div>
+            <div class="cost-warn"><span>爆仓价</span><b id="costLiq">—</b></div>
           </div>
 
           <button id="orderBtn" class="btn btn-primary btn-block">买入开多</button>
@@ -181,13 +184,13 @@
       </div>
     </div>
 
-    <!-- ---------- 高利贷 ---------- -->
+    <!-- ---------- 丰川银行 ---------- -->
     <div class="view" id="view-loan">
       <div class="loan-hero">
-        <div class="loan-icon">💸</div>
+        <div class="loan-icon">🏦</div>
         <div>
-          <h2>灯哥钱庄</h2>
-          <p>日息 <b id="loanRate">8%</b>，按秒复利。到期还不上，直接上天台。</p>
+          <h2>丰川银行</h2>
+          <p>每 <b>100 轮</b>（约 8 分钟）计息 <b id="loanRate">3%</b>，复利滚存。到期还不上，直接上天台。</p>
         </div>
       </div>
       <div class="panel">

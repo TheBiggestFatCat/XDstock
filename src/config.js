@@ -18,17 +18,19 @@ export const DEFAULT_CONFIG = {
   minLeverage: 1,
   maxLeverage: 20,
   liquidationBuffer: 0.0,   // 保证金亏到 0 就强平
+  maxOrdersPerTick: 1,      // 每人每轮最多下几单（防止刷成交额抬小灯证券）
 
   // ---- 新闻 ----
   eventChance: 0.015,       // 每 tick 出新闻的概率
   eventDurationMin: 30,     // 新闻持续 tick 数
   eventDurationMax: 90,
 
-  // ---- 高利贷 ----
+  // ---- 丰川银行（高利贷）----
   loanEnabled: true,
-  loanDailyRate: 0.08,      // 日利率 8%，按 tick 复利
-  loanTermHours: 2,         // 借多久必须还
-  loanMaxAmount: 5000000,   // 单笔上限
+  loanTiers: [50000, 200000, 1000000],  // 三个固定档位
+  loanRatePer100Ticks: 0.03,            // 每 100 轮（约 8.3 分钟）复利 3%
+  loanTermHours: 2,                     // 借多久必须还
+  loanMinRepay: 1000,                   // 手动还款最小金额
 
   // ---- 券商特质（小灯证券）----
   brokerMidpoint: 0.1,      // 每 tick 成交笔数的中性点（约 1 笔 / 50 秒）
@@ -57,3 +59,6 @@ export const TF_LABELS = {
   '1h': '1 小时',
   '4h': '4 小时'
 };
+
+// 每多少 tick 结一次利息
+export const LOAN_PERIOD_TICKS = 100;
