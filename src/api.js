@@ -550,8 +550,10 @@ export async function handleApi(ctx) {
   }
 
   if (pathname === '/api/trades' && method === 'GET') {
-    const limit = Math.min(200, Math.max(1, Number(query.limit) || 50));
-    const mine = (db.trades || []).filter((t) => t.playerId === me.id);
+    const limit = Math.min(500, Math.max(1, Number(query.limit) || 50));
+    const code = query.code ? String(query.code).toUpperCase() : '';
+    let mine = (db.trades || []).filter((t) => t.playerId === me.id);
+    if (code) mine = mine.filter((t) => t.code === code);
     const rows = mine.slice(-limit).reverse();
     return json(res, 200, { total: mine.length, rows });
   }

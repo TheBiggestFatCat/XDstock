@@ -19,6 +19,7 @@ const state = {
   adminToken: localStorage.getItem('xd_admin') || '',
   adminSelected: new Set(),
   prevPrices: {},
+  myTrades: [],
   stream: null
 };
 
@@ -236,6 +237,7 @@ function selectStock(code) {
   ce.textContent = pct(chg0);
   ce.className = 'big-change ' + cls(chg0);
   updateCostPreview();
+  loadMyTrades();
   loadCandles();
 }
 
@@ -343,6 +345,16 @@ function buildChart() {
   chart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
 }
 
+async function loadMyTrades() {
+  try {
+    const d = await api(`/api/trades?code=${encodeURIComponent(state.code)}&limit=300`);
+    state.myTrades = d.rows || [];
+  } catch {
+    state.myTrades = [];
+  }
+  updateMarkers();
+}
+
 async function loadCandles() {
   const code = state.code;
   const tf = state.tf;
@@ -353,7 +365,14 @@ async function loadCandles() {
     renderMAs();
     state.plSig = null;
     updatePriceLines();
-    state.chart.timeScale().fitContent();
+    updateMarkers();
+    // 只显示最近一段，K 线不至于挤成一条线
+    const n = state.candles.length;
+    if (n > 12) {
+      state.chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, n - 70), to: n + 3 });
+    } else {
+      state.chart.timeScale().fitContent();
+    }
     $('#chartEmpty').classList.toggle('hidden', state.candles.length > 0);
   } catch (e) {
     toast('K 线加载失败：' + e.message, 'err');
@@ -381,6 +400,71 @@ function renderMAs() {
       }
     }
     series.setData(out);
+  }
+}
+
+// ---------------- K线上的买卖点 ----------------
+// 做多开仓 / 平空 = 买入(B)，做空开仓 / 平多 = 卖出(S)
+function tradeIsBuy(t) {
+  if (t.action === 'open') return t.side === 'long';
+  return t.side === 'short';
+}
+
+function buildMarkers(trades) {
+  const candles = state.candles;
+  if (!candles.length || !trades.length) return [];
+
+  // 每根 K 线上，B 和 S 各只放一个，多的标 ×N
+  const buckets = new Map();
+  for (const t of trades) {
+    const sec = Math.floor(Number(t.at) / 1000);
+    // 找到 time <= sec 的最后一根 K 线
+    let idx = -1;
+    for (let i = candles.length - 1; i >= 0; i--) {
+      if (candles[i].time <= sec) { idx = i; break; }
+    }
+    if (idx < 0) continue;
+    const key = candles[idx].time;
+    const buy = tradeIsBuy(t);
+    if (!buckets.has(key)) buckets.set(key, { buy: 0, sell: 0 });
+    const b = buckets.get(key);
+    if (buy) b.buy += 1;
+    else b.sell += 1;
+  }
+
+  const markers = [];
+  for (const [time, b] of [...buckets.entries()].sort((x, y) => x[0] - y[0])) {
+    if (b.buy > 0) {
+      markers.push({
+        time,
+        position: 'belowBar',
+        color: '#f04b4b',
+        shape: 'circle',
+        size: 2,
+        text: b.buy > 1 ? `B×${b.buy}` : 'B'
+      });
+    }
+    if (b.sell > 0) {
+      markers.push({
+        time,
+        position: 'aboveBar',
+        color: '#12b886',
+        shape: 'circle',
+        size: 2,
+        text: b.sell > 1 ? `S×${b.sell}` : 'S'
+      });
+    }
+  }
+  return markers;
+}
+
+function updateMarkers() {
+  if (!state.candleSeries || typeof state.candleSeries.setMarkers !== 'function') return;
+  const markers = buildMarkers(state.myTrades || []);
+  state.candleSeries.setMarkers(markers);
+  const hint = $('#bsHint');
+  if (hint) {
+    hint.classList.toggle('hidden', markers.length === 0);
   }
 }
 
@@ -421,10 +505,11 @@ function renderChartLegend(pos) {
   const el = $('#chartLegend');
   if (!el) return;
   if (!pos) {
-    el.innerHTML = '';
+    el.innerHTML = '<span class="bs-note">B 买入 · S 卖出</span>';
     return;
   }
   el.innerHTML = `
+    <span class="bs-note">B 买入 · S 卖出</span>
     <span><i style="background:#64748b"></i>成本 ${pos.entry.toFixed(2)}</span>
     ${pos.tp ? `<span><i style="background:#22c55e"></i>止盈 ${Number(pos.tp).toFixed(2)}</span>` : ''}
     ${pos.sl ? `<span><i style="background:#ef4444"></i>止损 ${Number(pos.sl).toFixed(2)}</span>` : ''}
@@ -654,6 +739,7 @@ async function placeOrder() {
     renderTopbar();
     updatePriceLines();
     if ($('#view-portfolio').classList.contains('active')) loadTrades();
+    loadMyTrades();
     toast(`${state.side === 'long' ? '开多' : '开空'} ${qty} 股 ${st.name}`, 'ok');
   } catch (e) {
     msg.textContent = e.message;
@@ -670,6 +756,7 @@ async function closePos(code) {
     renderTopbar();
     updatePriceLines();
     if ($('#view-portfolio').classList.contains('active')) loadTrades();
+    loadMyTrades();
     const pnl = r.result.pnl;
     toast(`平仓 ${r.result.code}，${pnl >= 0 ? '盈利' : '亏损'} ${money(Math.abs(pnl))}`, pnl >= 0 ? 'ok' : 'err');
   } catch (e) {
