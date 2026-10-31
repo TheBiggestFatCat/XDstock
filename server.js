@@ -221,7 +221,9 @@ function tickPayload(forPlayerId) {
       equity: playerEquity(d, p),
       positions,
       workQueued: !!p.workQueued,
-      workEarned: p.workEarned || 0
+      workEarned: p.workEarned || 0,
+      stealQueued: p.stealQueued || null,
+      stealEarned: p.stealEarned || 0
     };
   }
   return {
@@ -300,6 +302,40 @@ function loop() {
     p.workPaidTick = d.tick;
   }
 
+  // 偷钱结算：上一轮派出去的，这一轮动手
+  const stealMin = Number(d.config.stealMin ?? 100);
+  const stealMax = Number(d.config.stealMax ?? 10000);
+  const capRatio = Number(d.config.stealCapRatio ?? 0.01);
+  const stealAlerts = new Map();   // playerId -> [alert...]
+  const pushAlert = (id, alert) => {
+    if (!stealAlerts.has(id)) stealAlerts.set(id, []);
+    stealAlerts.get(id).push(alert);
+  };
+
+  for (const p of Object.values(d.players)) {
+    const q = p.stealQueued;
+    if (!q) continue;
+    p.stealQueued = null;
+
+    const victim = d.players[q.targetId];
+    if (!victim || victim.id === p.id) continue;
+
+    const cap = Math.max(0, victim.cash) * capRatio;
+    const want = stealMin + Math.random() * Math.max(0, stealMax - stealMin);
+    const amount = Math.floor(Math.min(want, cap, Math.max(0, victim.cash)));
+
+    if (amount < 1) {
+      pushAlert(p.id, { type: 'steal', ok: false, target: victim.nickname, amount: 0 });
+      continue;
+    }
+
+    victim.cash -= amount;
+    p.cash += amount;
+    p.stealEarned = (p.stealEarned || 0) + amount;
+    pushAlert(p.id, { type: 'steal', ok: true, mine: true, target: victim.nickname, amount });
+    pushAlert(victim.id, { type: 'steal', ok: true, mine: false, from: p.nickname, amount });
+  }
+
   // 通知到个人
   const byPlayer = new Map();
   for (const c of closes) {
@@ -320,6 +356,8 @@ function loop() {
     const payload = { ...base, me: tickPayload(c.playerId).me };
     const notes = byPlayer.get(c.playerId);
     if (notes) payload.closes = notes;
+    const alerts = stealAlerts.get(c.playerId);
+    if (alerts) payload.alerts = alerts;
     try {
       c.res.write(`data: ${JSON.stringify(payload)}\n\n`);
     } catch {

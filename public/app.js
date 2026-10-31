@@ -619,6 +619,7 @@ function onTick(d) {
   if ($('#view-rank').classList.contains('active')) loadRank();
   if ($('#view-work').classList.contains('active')) renderWork();
   if (d.closes && d.closes.length) handleCloses(d.closes);
+  if (d.alerts && d.alerts.length) handleAlerts(d.alerts);
 }
 
 function updatePriceCells() {
@@ -645,6 +646,18 @@ function updatePriceCells() {
     }
   }
   for (const [code, s] of Object.entries(m.stocks)) state.prevPrices[code] = s.price;
+}
+
+function handleAlerts(list) {
+  for (const a of list) {
+    if (a.type !== 'steal') continue;
+    if (!a.ok) {
+      toast(`小偷空手而归：${a.target} 身上没现金`, 'err');
+      continue;
+    }
+    if (a.mine) toast(`🥷 从 ${a.target} 那里偷到了 ${money(a.amount)}`, 'ok');
+    else toast(`🚨 ${a.from} 偷走了你 ${money(a.amount)}！`, 'err');
+  }
 }
 
 function handleCloses(list) {
@@ -1046,7 +1059,7 @@ async function loadRank(force = false) {
     state.rankSig = sig;
     wrap.innerHTML = `
       <table>
-        <thead><tr><th>#</th><th>玩家</th><th>总资产</th><th>现金</th><th>持仓</th></tr></thead>
+        <thead><tr><th>#</th><th>玩家</th><th>总资产</th><th>现金</th><th>持仓</th><th>操作</th></tr></thead>
         <tbody>
           ${d.rows.map((r, i) => {
             const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
@@ -1054,16 +1067,47 @@ async function loadRank(force = false) {
             const hold = r.positions.length
               ? r.positions.map((p) => `<span class="pill ${p.side}">${p.name} ${p.side === 'long' ? '多' : '空'} ×${p.qty} @${(p.leverage || 1).toFixed(0)}x</span>`).join(' ')
               : '<span class="stock-code">空仓</span>';
+            const cfg = state.market?.config || {};
+            const topN = Number(cfg.stealTopN ?? 3);
+            const queued = !!state.market?.me?.stealQueued;
+            const isTop = i < topN;
+            const isMe = r.id === state.market?.me?.id;
+            let actionCell = '<span class="stock-code">—</span>';
+            if (isTop && !isMe) {
+              if (queued) {
+                actionCell = '<span class="steal-done">已派出</span>';
+              } else if (r.cash <= 0) {
+                actionCell = '<span class="stock-code">没现金</span>';
+              } else {
+                const maxTake = Math.floor(r.cash * Number(cfg.stealCapRatio ?? 0.01));
+                actionCell = `<button class="steal-btn" data-steal="${r.id}" data-name="${escapeHtml(r.nickname)}" title="最多能偷 ${money(maxTake)}">偷钱</button>`;
+              }
+            }
             return `<tr class="${mine}">
               <td><span class="rank-medal">${medal || i + 1}</span></td>
               <td>${r.nickname}</td>
               <td class="${cls(r.equity - 100000)}">${money(r.equity)}</td>
               <td>${money(r.cash)}</td>
               <td style="text-align:left">${hold}</td>
+              <td>${actionCell}</td>
             </tr>`;
           }).join('')}
         </tbody>
       </table>`;
+    wrap.querySelectorAll('[data-steal]').forEach((b) => {
+      b.addEventListener('click', () => stealFrom(b.dataset.steal, b.dataset.name));
+    });
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
+async function stealFrom(targetId, name) {
+  try {
+    const r = await api('/api/steal', { method: 'POST', body: JSON.stringify({ targetId }) });
+    if (state.market?.me) state.market.me.stealQueued = { targetId };
+    toast(`小偷已出发，准备偷 ${name}`, 'ok');
+    loadRank(true);
   } catch (e) {
     toast(e.message, 'err');
   }

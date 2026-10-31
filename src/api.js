@@ -70,6 +70,8 @@ function publicPlayer(p, db) {
     equity: playerEquity(db, p),
     workQueued: !!p.workQueued,
     workEarned: p.workEarned || 0,
+    stealQueued: p.stealQueued || null,
+    stealEarned: p.stealEarned || 0,
     createdAt: p.createdAt
   };
 }
@@ -172,6 +174,10 @@ function marketPayload(db, me) {
       stampDuty: db.config.stampDuty,
       maxOrdersPerTick: db.config.maxOrdersPerTick,
       workReward: db.config.workReward ?? 1000,
+      stealMin: db.config.stealMin ?? 100,
+      stealMax: db.config.stealMax ?? 10000,
+      stealCapRatio: db.config.stealCapRatio ?? 0.01,
+      stealTopN: db.config.stealTopN ?? 3,
       startingCash: db.config.startingCash
     }
   };
@@ -236,6 +242,8 @@ export async function handleApi(ctx) {
         positions: {},
         workQueued: false,
         workEarned: 0,
+        stealQueued: null,
+        stealEarned: 0,
         createdAt: now()
       };
       db.players[id] = player;
@@ -443,7 +451,7 @@ export async function handleApi(ctx) {
       'tickMs', 'baseVolatility', 'meanReversion', 'eventImpactScale',
       'feeRate', 'stampDuty', 'minLeverage', 'maxLeverage',
       'eventChance', 'localEventChance', 'eventDurationMin', 'eventDurationMax',
-      'workReward',
+      'workReward', 'stealMin', 'stealMax', 'stealCapRatio', 'stealTopN',
       'maxOrdersPerTick',
       'brokerMidpoint', 'brokerSensitivity', 'brokerCap', 'brokerAlpha',
       'adminPin', 'allowRegister', 'marketOpen', 'pinLength'
@@ -547,6 +555,31 @@ export async function handleApi(ctx) {
     me.workQueued = true;
     saveDb();
     return json(res, 200, { ok: true, queued: true, reward: db.config.workReward ?? 1000 });
+  }
+
+  if (pathname === '/api/steal' && method === 'POST') {
+    const targetId = String(body.targetId || '');
+    const victim = db.players[targetId];
+    if (!victim) return json(res, 404, { error: '没这个人' });
+    if (victim.id === me.id) return json(res, 400, { error: '偷自己不算本事' });
+
+    // 只能偷排行榜前 N 名（按总资产实时算）
+    const topN = Number(db.config.stealTopN ?? 3);
+    const ranked = Object.values(db.players)
+      .map((p) => ({ id: p.id, equity: playerEquity(db, p) }))
+      .sort((a, b) => b.equity - a.equity)
+      .slice(0, topN)
+      .map((r) => r.id);
+    if (!ranked.includes(victim.id)) {
+      return json(res, 400, { error: `只能偷排行榜前 ${topN} 名` });
+    }
+
+    if (me.stealQueued) return json(res, 429, { error: '这一轮已经派过小偷了，等下一轮' });
+    if (victim.cash <= 0) return json(res, 400, { error: `${victim.nickname} 口袋比脸还干净` });
+
+    me.stealQueued = { targetId: victim.id, targetName: victim.nickname, at: db.tick };
+    saveDb();
+    return json(res, 200, { ok: true, target: victim.nickname });
   }
 
   if (pathname === '/api/trades' && method === 'GET') {

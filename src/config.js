@@ -29,6 +29,12 @@ export const DEFAULT_CONFIG = {
   // ---- 打工 ----
   workReward: 1000,         // 每按一次按钮，下一轮结算的工资
 
+  // ---- 偷钱 ----
+  stealMin: 100,            // 单次最少偷多少
+  stealMax: 10000,          // 单次最多偷多少
+  stealCapRatio: 0.01,      // 上限：被偷人现金的 1%
+  stealTopN: 3,             // 只能偷排行榜前几名
+
   // ---- 券商特质（小灯证券）----
   brokerMidpoint: 0.1,      // 每 tick 成交笔数的中性点（约 1 笔 / 50 秒）
   brokerMidFloor: 0.05,     // 中性点的地板：不设地板的话冷淡期 ratio≈1，
