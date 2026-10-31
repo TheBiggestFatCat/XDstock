@@ -1089,7 +1089,7 @@ async function loadRank(force = false) {
             }
             return `<tr class="${mine}">
               <td><span class="rank-medal">${medal || i + 1}</span></td>
-              <td>${r.nickname}</td>
+              <td><span class="rank-user">${rankAvatar(r)}<span class="rank-name">${r.nickname}</span></span></td>
               <td class="${cls(r.equity - 100000)}">${money(r.equity)}</td>
               <td>${money(r.cash)}</td>
               <td style="text-align:left">${hold}</td>
@@ -1104,6 +1104,23 @@ async function loadRank(force = false) {
   } catch (e) {
     toast(e.message, 'err');
   }
+}
+
+// 排行榜头像：有图用图，没图用昵称首字 + 稳定色
+function rankAvatar(r) {
+  if (r.avatar) {
+    return `<span class="rank-avatar"><img src="${r.avatar}" alt="" loading="lazy" /></span>`;
+  }
+  // 用「黄金角」散列，保证不同玩家的占位色拉得开
+  const key = String(r.id || r.nickname || '');
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  const hue = Math.round(((h % 1000) / 1000 * 137.508 * 2) % 360);
+  const ch = (r.nickname || '?').trim().charAt(0) || '?';
+  return `<span class="rank-avatar rank-avatar-letter" style="--h:${hue}">${ch}</span>`;
 }
 
 async function stealFrom(targetId, name) {
