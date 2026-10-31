@@ -440,7 +440,7 @@ function buildMarkers(trades) {
         position: 'belowBar',
         color: '#f04b4b',
         shape: 'circle',
-        size: 2,
+        size: 1,
         text: b.buy > 1 ? `B×${b.buy}` : 'B'
       });
     }
@@ -450,7 +450,7 @@ function buildMarkers(trades) {
         position: 'aboveBar',
         color: '#12b886',
         shape: 'circle',
-        size: 2,
+        size: 1,
         text: b.sell > 1 ? `S×${b.sell}` : 'S'
       });
     }
