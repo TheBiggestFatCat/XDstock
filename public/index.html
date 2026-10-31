@@ -32,11 +32,28 @@
       </label>
       <label class="field">
         <span>PIN</span>
-        <input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="4 位数字" autocomplete="off" />
+        <input id="loginPin" type="password" inputmode="numeric" maxlength="6" placeholder="6 位数字" autocomplete="off" />
       </label>
       <button id="loginBtn" class="btn btn-primary btn-block">进入市场</button>
       <p id="loginMsg" class="login-msg"></p>
       <p class="login-hint">首次输入昵称会自动开户，起始资金 <b id="startingCashHint">$100,000</b></p>
+    </div>
+
+    <div id="pinUpgrade" class="hidden">
+      <p class="pin-upgrade-tip">
+        🔐 PIN 已升级为 <b>6 位</b><br />
+        你的账号还是旧的 4 位 PIN，请设置一个新的 6 位 PIN
+      </p>
+      <label class="field">
+        <span>新 PIN（6 位数字）</span>
+        <input id="newPin" type="password" inputmode="numeric" maxlength="6" placeholder="6 位数字" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>再输一次</span>
+        <input id="newPin2" type="password" inputmode="numeric" maxlength="6" placeholder="再输一次" autocomplete="off" />
+      </label>
+      <button id="pinUpgradeBtn" class="btn btn-primary btn-block">确认修改</button>
+      <p id="pinUpgradeMsg" class="login-msg"></p>
     </div>
   </div>
 </section>
@@ -67,6 +84,10 @@
       </div>
     </div>
   </header>
+
+  <div id="closedBanner" class="closed-banner hidden">
+    🔒 市场休市中 · 行情已冻结，暂停交易
+  </div>
 
   <nav class="tabs" id="tabs">
     <button class="tab active" data-view="market">行情</button>
@@ -233,6 +254,16 @@
       </div>
       <div id="adminPanel" class="hidden">
         <div class="admin-grid">
+          <div class="panel">
+            <div class="panel-title">市场控制</div>
+            <div class="market-ctrl">
+              <div>
+                <div class="mc-state" id="marketState">—</div>
+                <div class="mc-hint">休市会立即冻结行情：价格、新闻、利息全部暂停</div>
+              </div>
+              <button id="marketToggleBtn" class="btn btn-primary">休市</button>
+            </div>
+          </div>
           <div class="panel">
             <div class="panel-title">标的管理</div>
             <div id="adminStocks" class="admin-stocks"></div>

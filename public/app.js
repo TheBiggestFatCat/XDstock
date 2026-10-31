@@ -80,6 +80,13 @@ async function doLogin() {
   $('#loginBtn').disabled = true;
   try {
     const r = await api('/api/login', { method: 'POST', body: JSON.stringify({ nickname, pin }) });
+    if (r.needPinUpgrade) {
+      state.upgradeToken = r.token;
+      $('.login-form').classList.add('hidden');
+      $('#pinUpgrade').classList.remove('hidden');
+      $('#newPin').focus();
+      return;
+    }
     state.token = r.token;
     localStorage.setItem('xd_token', r.token);
     state.me = r.player;
@@ -88,6 +95,36 @@ async function doLogin() {
     msg.textContent = e.message;
   } finally {
     $('#loginBtn').disabled = false;
+  }
+}
+
+async function upgradePin() {
+  const p1 = $('#newPin').value.trim();
+  const p2 = $('#newPin2').value.trim();
+  const msg = $('#pinUpgradeMsg');
+  msg.textContent = '';
+  if (!/^\d{6}$/.test(p1)) { msg.textContent = 'PIN 必须是 6 位数字'; return; }
+  if (p1 !== p2) { msg.textContent = '两次输入不一致'; return; }
+  $('#pinUpgradeBtn').disabled = true;
+  try {
+    const res = await fetch('/api/pin/upgrade', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + state.upgradeToken },
+      body: JSON.stringify({ pin: p1 })
+    });
+    const r = await res.json();
+    if (!res.ok) throw new Error(r.error || '修改失败');
+    state.token = r.token;
+    localStorage.setItem('xd_token', r.token);
+    state.upgradeToken = '';
+    state.me = r.player;
+    const mt = await api('/api/market');
+    state.market = mt;
+    await enterGame();
+  } catch (e) {
+    msg.textContent = e.message;
+  } finally {
+    $('#pinUpgradeBtn').disabled = false;
   }
 }
 
@@ -106,10 +143,19 @@ async function refreshMarket() {
   state.market = d;
   state.me = d.me;
   renderTopbar();
+  renderClosed();
   renderNews();
   renderStockList();
   renderPositions();
   if (d.config) $('#startingCashHint').textContent = money(d.config.startingCash || 100000);
+}
+
+function renderClosed() {
+  const closed = state.market && state.market.marketOpen === false;
+  const banner = $('#closedBanner');
+  if (banner) banner.classList.toggle('hidden', !closed);
+  // 按钮文案统一交给 updateCostPreview 处理，避免每 tick 被刷回去
+  updateCostPreview();
 }
 
 function renderTopbar() {
@@ -411,6 +457,9 @@ function onTick(d) {
   if (m.index.series.length > 600) m.index.series.shift();
   m.events = d.events || [];
 
+  if (d.closed !== undefined) m.marketOpen = !d.closed;
+  renderClosed();
+
   for (const [code, s] of Object.entries(d.stocks)) {
     if (!m.stocks[code]) continue;
     m.stocks[code].price = s.price;
@@ -432,7 +481,7 @@ function onTick(d) {
     const ce = $('#chartChange');
     ce.textContent = pct(st.changePct);
     ce.className = 'big-change ' + cls(st.changePct);
-    applyTickToChart(st.price);
+    if (d.closed !== true) applyTickToChart(st.price);
   }
   updateCostPreview();
   updatePriceLines();
@@ -511,7 +560,12 @@ function updateCostPreview() {
     $('#costLiq').className = 'down';
   }
   const btn = $('#orderBtn');
-  btn.textContent = state.side === 'long' ? '买入开多' : '卖出开空';
+  const closed = state.market?.marketOpen === false;
+  btn.disabled = closed;
+  btn.textContent = closed
+    ? '休市中，暂停交易'
+    : (state.side === 'long' ? '买入开多' : '卖出开空');
+  $('.trade-panel')?.classList.toggle('is-closed', closed);
 }
 
 async function placeOrder() {
@@ -894,6 +948,29 @@ async function loadAdmin() {
     });
   });
 
+  // 市场控制
+  const isOpen = d.marketOpen !== false;
+  const ms = $('#marketState');
+  if (ms) {
+    ms.textContent = isOpen ? '🟢 开市中' : '🔴 休市中（行情冻结）';
+    ms.className = 'mc-state ' + (isOpen ? 'open' : 'closed');
+  }
+  const mtb = $('#marketToggleBtn');
+  if (mtb) {
+    mtb.textContent = isOpen ? '立即休市' : '恢复开市';
+    mtb.className = 'btn ' + (isOpen ? 'btn-danger' : 'btn-primary');
+    mtb.onclick = async () => {
+      try {
+        await adminApi('/api/admin/market', { open: !isOpen });
+        toast(!isOpen ? '已开市' : '已休市，行情冻结', 'ok');
+        await loadAdmin();
+        await refreshMarket();
+      } catch (e) {
+        toast(e.message, 'err');
+      }
+    };
+  }
+
   // 新闻标的
   $('#newsStocks').innerHTML = d.stocks.map((s) =>
     `<button class="chip-toggle" data-code="${s.code}">${s.name}</button>`).join('') +
@@ -929,10 +1006,13 @@ async function loadAdmin() {
     ['loanRatePer100Ticks', '每100轮利率'], ['loanTermHours', '借款期限(h)'],
     ['adminPin', '管理员口令', 'text'], ['allowRegister', '开放注册(1/0)']
   ];
-  $('#configForm').innerHTML = cfgFields.map(([k, label, type]) => `
-    <label class="field"><span>${label}</span>
-      <input type="${type || 'number'}" ${type === 'text' ? '' : 'step="0.0001"'} data-cfg="${k}" value="${d.config[k]}" />
-    </label>`).join('');
+  $('#configForm').innerHTML = cfgFields.map(([k, label, type]) => {
+    let v = d.config[k];
+    if (typeof v === 'boolean') v = v ? 1 : 0;
+    return `<label class="field"><span>${label}</span>
+      <input type="${type || 'number'}" ${type === 'text' ? '' : 'step="0.0001"'} data-cfg="${k}" value="${v}" />
+    </label>`;
+  }).join('');
 }
 
 async function saveConfig() {
@@ -1019,6 +1099,8 @@ async function handleAvatarFile(file) {
 // ---------------- 事件绑定 ----------------
 function bind() {
   $('#loginBtn').addEventListener('click', doLogin);
+  $('#pinUpgradeBtn').addEventListener('click', upgradePin);
+  $('#newPin2').addEventListener('keydown', (e) => { if (e.key === 'Enter') upgradePin(); });
   $('#loginPin').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
   $('#loginNick').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#loginPin').focus(); });
 

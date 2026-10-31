@@ -99,7 +99,7 @@ function auth(ctx) {
   }
   const player = db.players[s.playerId];
   if (!player) return null;
-  return { token, player };
+  return { token, player, scope: s.scope || 'full' };
 }
 
 function adminAuth(ctx) {
@@ -136,6 +136,7 @@ function marketPayload(db, me) {
   return {
     tick: db.tick,
     tickMs: db.config.tickMs,
+    marketOpen: db.config.marketOpen !== false,
     startedAt: db.startedAt || 0,
     serverTime: now(),
     index: { value: db.index.value, series: db.index.series.slice(-600) },
@@ -180,7 +181,8 @@ export async function handleApi(ctx) {
     const pin = String(body.pin || '').trim();
     if (nickname.length < 1) return json(res, 400, { error: '昵称不能为空' });
     if (nickname.length > 16) return json(res, 400, { error: '昵称最多 16 个字' });
-    if (!/^\d{4}$/.test(pin)) return json(res, 400, { error: 'PIN 必须是 4 位数字' });
+    // 老账号可能还是 4 位，这里只做宽松校验；严格 6 位在「新建账号」分支里判
+    if (!/^\d{4,6}$/.test(pin)) return json(res, 400, { error: 'PIN 必须是 4~6 位数字' });
 
     const guardKey = `${clientIp(ctx)}:${nickname}`;
     const locked = loginLockSeconds(guardKey);
@@ -188,14 +190,35 @@ export async function handleApi(ctx) {
       return json(res, 429, { error: `密码错误次数过多，请 ${locked} 秒后再试` });
     }
 
+    const PIN_LEN = Number(db.config.pinLength ?? 6);
     let player = Object.values(db.players).find((p) => p.nickname === nickname);
+
     if (player) {
-      if (player.pin !== pin) {
+      // 老账号还是 4 位 PIN：允许登进来，但只能用来改密码
+      const legacy = String(player.pin || '').length !== PIN_LEN;
+      const pinOk = legacy
+        ? String(player.pin || '') === pin
+        : String(player.pin || '') === pin;
+      if (!pinOk) {
         noteLoginFailure(guardKey);
         return json(res, 401, { error: 'PIN 不对' });
       }
       loginFailures.delete(guardKey);
+
+      if (legacy) {
+        const t = uid(32);
+        db.sessions[t] = { playerId: player.id, at: now(), scope: 'upgrade' };
+        saveDb();
+        return json(res, 200, {
+          needPinUpgrade: true,
+          token: t,
+          player: { id: player.id, nickname: player.nickname, avatar: player.avatar || null }
+        });
+      }
     } else {
+      if (!new RegExp(`^\\d{${PIN_LEN}}$`).test(pin)) {
+        return json(res, 400, { error: `PIN 必须是 ${PIN_LEN} 位数字` });
+      }
       const id = uid(10);
       player = {
         id,
@@ -289,6 +312,8 @@ export async function handleApi(ctx) {
   if (pathname === '/api/admin/state' && method === 'GET') {
     return json(res, 200, {
       config: db.config,
+      marketOpen: db.config.marketOpen !== false,
+      closedAt: db.closedAt || 0,
       stocks: Object.values(db.stocks).map((s) => ({
         code: s.code,
         name: s.name,
@@ -362,6 +387,29 @@ export async function handleApi(ctx) {
     return json(res, 200, { ok: true, event: ev });
   }
 
+  if (pathname === '/api/admin/market' && method === 'POST') {
+    const wantOpen = body.open !== false;
+    const wasOpen = db.config.marketOpen !== false;
+    if (wantOpen === wasOpen) {
+      return json(res, 200, { ok: true, marketOpen: wantOpen, unchanged: true });
+    }
+    db.config.marketOpen = wantOpen;
+    if (!wantOpen) {
+      db.closedAt = now();
+    } else {
+      // 开市：把休市这段时间补给所有贷款，别让人白等
+      const delta = db.closedAt ? now() - db.closedAt : 0;
+      if (delta > 0) {
+        for (const p of Object.values(db.players)) {
+          if (p.loan && p.loan.dueAt) p.loan.dueAt += delta;
+        }
+      }
+      db.closedAt = 0;
+    }
+    saveDb();
+    return json(res, 200, { ok: true, marketOpen: db.config.marketOpen });
+  }
+
   if (pathname === '/api/admin/event/clear' && method === 'POST') {
     db.events = [];
     saveDb();
@@ -377,7 +425,7 @@ export async function handleApi(ctx) {
       'loanEnabled', 'loanRatePer100Ticks', 'loanTermHours', 'loanMinRepay',
       'maxOrdersPerTick',
       'brokerMidpoint', 'brokerSensitivity', 'brokerCap', 'brokerAlpha',
-      'adminPin', 'allowRegister'
+      'adminPin', 'allowRegister', 'marketOpen', 'pinLength'
     ];
     for (const [k, v] of Object.entries(patch)) {
       if (!allowed.includes(k)) continue;
@@ -391,6 +439,22 @@ export async function handleApi(ctx) {
   const a = auth(ctx);
   if (!a) return json(res, 401, { error: '请先登录' });
   const me = a.player;
+
+  // 老账号（4 位 PIN）：只能改密码，其它接口一律挡住
+  if (a.scope === 'upgrade' && pathname !== '/api/pin/upgrade') {
+    return json(res, 403, { error: '请先把 PIN 改成 6 位', needPinUpgrade: true });
+  }
+
+  if (pathname === '/api/pin/upgrade' && method === 'POST') {
+    const pin = String(body.pin || '');
+    if (!/^\d{6}$/.test(pin)) return json(res, 400, { error: 'PIN 必须是 6 位数字' });
+    me.pin = pin;
+    delete db.sessions[a.token];
+    const t = uid(32);
+    db.sessions[t] = { playerId: me.id, at: now() };
+    saveDb();
+    return json(res, 200, { ok: true, token: t, player: publicPlayer(me, db) });
+  }
 
   if (pathname === '/api/me' && method === 'GET') {
     saveDb();
@@ -427,6 +491,7 @@ export async function handleApi(ctx) {
   };
 
   if (pathname === '/api/order' && method === 'POST') {
+    if (db.config.marketOpen === false) return json(res, 423, { error: '休市中，暂停交易' });
     if (me.bankrupt) return json(res, 403, { error: '你已破产，只能看不能玩' });
     if (orderBlocked) return json(res, 429, { error: orderBlocked });
     const result = openPosition(db, me, {
@@ -444,6 +509,7 @@ export async function handleApi(ctx) {
   }
 
   if (pathname === '/api/close' && method === 'POST') {
+    if (db.config.marketOpen === false) return json(res, 423, { error: '休市中，暂停交易' });
     if (orderBlocked) return json(res, 429, { error: orderBlocked });
     const code = String(body.code || '').toUpperCase();
     const r = closePosition(db, me, code, 'manual');

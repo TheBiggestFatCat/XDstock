@@ -105,6 +105,10 @@ function migrate(d) {
   if (!d.startedAt) {
     merged.startedAt = Date.now() - (merged.tick || 0) * (merged.tickMs || 5000);
   }
+  // 管理员口令统一成 6 位：老的 '0000' 补两个 0
+  const ap = String(merged.config.adminPin ?? '000000');
+  if (ap.length < 6) merged.config.adminPin = ap.padEnd(6, '0');
+  if (merged.closedAt === undefined) merged.closedAt = 0;
   return merged;
 }
 

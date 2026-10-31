@@ -213,6 +213,7 @@ function tickPayload(forPlayerId) {
   return {
     type: 'tick',
     tick: d.tick,
+    closed: d.config.marketOpen === false,
     index: d.index.value,
     stocks,
     events: d.events
@@ -235,6 +236,22 @@ let lastTickAt = now();
 function loop() {
   const d = getDb();
   const cfg = d.config;
+
+  // 休市：冻结行情，只推状态不给价格
+  if (d.config.marketOpen === false) {
+    const frozen = tickPayload(null);
+    for (const c of clients) {
+      const payload = { ...frozen, me: tickPayload(c.playerId).me, closed: true };
+      try {
+        c.res.write(`data: ${JSON.stringify(payload)}\n\n`);
+      } catch {
+        clients.delete(c);
+      }
+    }
+    saveDb();
+    lastTickAt = now();
+    return;
+  }
 
   // 停牌到期自动复牌
   for (const st of Object.values(d.stocks)) {

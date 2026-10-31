@@ -39,9 +39,13 @@ export const DEFAULT_CONFIG = {
   brokerCap: 0.0002,
   brokerAlpha: 0.02,        // 中性点漂移速度
 
+  // ---- 市场状态 ----
+  marketOpen: true,         // 休市 = 冻结行情（价格不动、新闻不刷、利息暂停）
+
   // ---- 管理 ----
-  adminPin: '0000',
-  allowRegister: true
+  adminPin: '000000',
+  allowRegister: true,
+  pinLength: 6              // 玩家 PIN 位数
 };
 
 // 交易周期（tick 数）
