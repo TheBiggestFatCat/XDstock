@@ -90,26 +90,77 @@ function stepStock(st, cfg, events, brokerDrift) {
   st.price = p;
 }
 
-/** 生成一条随机新闻 */
+/**
+ * 新闻系统（机制照搬 bot 版）：
+ *   - 全球事件：持续若干 tick，每 tick 施加 trend 冲击
+ *   - 假消息：到期时自动生成辟谣，reverse = -t/(1+t) 把涨跌原样吐回去
+ *   - 晚消息：价格先动，消息延后 announceIn 轮才公布
+ *   - 突发：单公司一次性冲击 shock
+ */
 export function spawnNews(db) {
   const cfg = db.config;
-  if (Math.random() > (cfg.eventChance ?? 0)) return null;
   const pool = db.newsPool || [];
   if (!pool.length) return null;
+  if (Math.random() > (cfg.eventChance ?? 0.015)) return null;
 
   const tpl = pool[Math.floor(Math.random() * pool.length)];
-  const dur = Math.round(
-    uniform(cfg.eventDurationMin ?? 30, cfg.eventDurationMax ?? 90)
-  );
+  let dur = Math.round(uniform(cfg.eventDurationMin ?? 30, cfg.eventDurationMax ?? 90));
+  const isLate = !!tpl.late;
+  // 晚消息至少要活到「公布之后」还能再走几轮，否则价格刚动就没了
+  if (isLate) dur = Math.max(dur, 40);
+
   const ev = {
     id: 'ev_' + Math.random().toString(36).slice(2, 10),
+    kind: isLate ? 'late' : tpl.fake ? 'fake' : 'global',
     text: tpl.text,
     companies: tpl.companies || [],
-    trend: tpl.trend,
+    trend: Number(tpl.trend) || 0,
     duration: dur,
     remaining: dur,
     createdAt: now()
   };
+
+  // 晚消息：先不公布，价格先走
+  if (isLate) {
+    ev.announced = false;
+    ev.announceIn = Math.floor(uniform(12, Math.max(13, Math.min(30, dur - 10))));
+  } else {
+    ev.announced = true;
+  }
+
+  db.events.push(ev);
+  return ev;
+}
+
+/** 突发：单公司一次性冲击（瞬间打折）+ 一小段余波 */
+export function spawnLocalEvent(db) {
+  const cfg = db.config;
+  const pool = db.localNewsPool || [];
+  if (!pool.length) return null;
+  if (Math.random() > (cfg.localEventChance ?? 0.004)) return null;
+
+  const tpl = pool[Math.floor(Math.random() * pool.length)];
+  const dur = Math.round(uniform(20, 50));
+  const ev = {
+    id: 'ev_' + Math.random().toString(36).slice(2, 10),
+    kind: 'local',
+    text: tpl.text,
+    companies: tpl.companies || [],
+    trend: Number(tpl.trend) || 0,
+    duration: dur,
+    remaining: dur,
+    createdAt: now(),
+    announced: true
+  };
+
+  // 一次性冲击立刻生效
+  const shock = Number(tpl.shock) || 0;
+  for (const code of ev.companies) {
+    const st = db.stocks[code];
+    if (!st || st.status !== 'normal') continue;
+    st.price = Math.max(0.01, st.price * (1 + shock));
+  }
+
   db.events.push(ev);
   return ev;
 }
@@ -118,8 +169,45 @@ export function spawnNews(db) {
 export function stepMarket(db) {
   const cfg = db.config;
 
-  // 1. 处理新闻生命周期
-  db.events = db.events.filter((e) => e.remaining > 0);
+  // 1. 处理新闻生命周期：过期结算 + 假消息辟谣
+  const survivors = [];
+  for (const e of db.events) {
+    e.remaining -= 1;
+    if (e.remaining > 0) {
+      survivors.push(e);
+      continue;
+    }
+    // 到期：假消息自动生成一条辟谣，把之前的涨跌原样吐回去
+    if (e.kind === 'fake' && !e.debunked) {
+      const t = Number(e.trend) || 0;
+      if (t > -1 && t !== 0) {
+        const names = (e.companies || []).join('」「') || '相关公司';
+        survivors.push({
+          id: 'deb_' + Math.random().toString(36).slice(2, 10),
+          kind: 'debunk',
+          text: `「${names}」相关方正式辟谣，此前流传的消息并不属实，市场情绪迅速回落。`,
+          companies: e.companies || [],
+          trend: -t / (1 + t),
+          duration: Number(e.duration) || 30,
+          remaining: Number(e.duration) || 30,
+          createdAt: now(),
+          announced: true,
+          sourceId: e.id
+        });
+      }
+    }
+  }
+  db.events = survivors;
+
+  // 晚消息倒计时：到点了才公布
+  for (const e of db.events) {
+    if (e.announced !== false) continue;
+    e.announceIn = (e.announceIn ?? 1) - 1;
+    if (e.announceIn <= 0) {
+      e.announced = true;
+      e.publishAt = now();
+    }
+  }
 
   // 2. 券商活跃度中枢
   const trades = db.tradesThisTick || 0;
@@ -148,9 +236,9 @@ export function stepMarket(db) {
     if (st.series.length > cap) st.series.splice(0, st.series.length - cap);
   }
 
-  // 4. 新闻倒计时 + 可能生成新新闻
-  for (const e of db.events) e.remaining -= 1;
+  // 4. 生成新新闻（全球事件 + 突发）
   spawnNews(db);
+  spawnLocalEvent(db);
 
   // 5. 指数：只算正常交易的票
   const live = stocks.filter((s) => s.status === 'normal');

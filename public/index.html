@@ -79,6 +79,14 @@
   <main class="content">
     <!-- ---------- 行情 ---------- -->
     <div class="view active" id="view-market">
+      <div class="panel news-panel">
+        <div class="news-head">
+          <span class="news-title">📢 市场快讯</span>
+          <span class="news-count" id="newsCount"></span>
+        </div>
+        <div id="newsFeed" class="news-feed"></div>
+      </div>
+
       <div class="market-grid">
         <aside class="panel stock-list-panel">
           <div class="panel-title">
@@ -94,7 +102,6 @@
               <img id="chartIcon" class="stock-icon-lg" alt="" />
               <h2 id="chartName">—</h2>
               <span id="chartCode" class="chip">—</span>
-              <span id="chartTrait" class="chip chip-soft">—</span>
             </div>
             <div class="chart-price">
               <span id="chartPrice" class="big-price">—</span>

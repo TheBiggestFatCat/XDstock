@@ -2,12 +2,12 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getDb, saveDb, now } from './src/store.js';
+import { getDb, saveDb, now, backupDb } from './src/store.js';
 import { stepMarket, seedHistory } from './src/engine.js';
 import { checkPositions, playerEquity, positionPnl } from './src/trading.js';
 import { accrueLoans } from './src/loans.js';
 import { handleApi } from './src/api.js';
-import { DEFAULT_NEWS } from './src/news.js';
+import { GLOBAL_NEWS, LOCAL_NEWS } from './src/news.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -15,10 +15,10 @@ const DATA_DIR = path.join(__dirname, 'data');
 const PORT = Number(process.env.PORT || 8971);
 
 const db = getDb();
-if (!db.newsPool || !db.newsPool.length) {
-  db.newsPool = DEFAULT_NEWS;
-  saveDb(true);
-}
+// 新闻池以代码为准，每次启动都刷新（改 news.js 后重启即可生效）
+db.newsPool = GLOBAL_NEWS;
+db.localNewsPool = LOCAL_NEWS;
+saveDb(true);
 
 // 全新存档：先空跑两小时把 K 线铺出来
 if (db.tick === 0 && Object.values(db.stocks).every((s) => s.series.length <= 1)) {
@@ -215,9 +215,17 @@ function tickPayload(forPlayerId) {
     tick: d.tick,
     index: d.index.value,
     stocks,
-    events: d.events.map((e) => ({
-      id: e.id, text: e.text, companies: e.companies, trend: e.trend, remaining: e.remaining
-    })),
+    events: d.events
+      .filter((e) => e.announced !== false)
+      .map((e) => ({
+        id: e.id,
+        kind: e.kind || 'global',
+        text: e.text,
+        companies: e.companies,
+        trend: e.trend,
+        remaining: e.remaining,
+        createdAt: e.createdAt
+      })),
     me
   };
 }
@@ -284,6 +292,10 @@ function loop() {
 }
 
 const timer = setInterval(loop, Math.max(1000, db.config.tickMs || 5000));
+
+// 启动时先备份一次，之后每 30 分钟一份
+backupDb('boot');
+setInterval(() => backupDb(), 30 * 60 * 1000);
 
 server.listen(PORT, () => {
   console.log(`\n  小灯证券 · 网页版`);

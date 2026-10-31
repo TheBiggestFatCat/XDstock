@@ -54,6 +54,8 @@ export function createDb() {
     sessions: {},
     adminSessions: {},
     events: [],
+    newsPool: [],
+    localNewsPool: [],
     tradesThisTick: 0,
     book: [], // 天台楼下记录册
     newsPool: []
@@ -99,6 +101,7 @@ function migrate(d) {
   merged.events = d.events || [];
   merged.book = d.book || [];
   merged.newsPool = d.newsPool || [];
+  merged.localNewsPool = d.localNewsPool || [];
   if (!d.startedAt) {
     merged.startedAt = Date.now() - (merged.tick || 0) * (merged.tickMs || 5000);
   }
@@ -139,6 +142,38 @@ function flush() {
 process.on('SIGINT', () => { flush(); process.exit(0); });
 process.on('SIGTERM', () => { flush(); process.exit(0); });
 process.on('exit', () => { flush(); });
+
+const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+const BACKUP_KEEP = 40;
+
+/** 把当前 db.json 复制一份到 data/backups/，最多保留 40 份 */
+export function backupDb(tag = '') {
+  try {
+    if (!db) return null;
+    flush();
+    if (!fs.existsSync(DB_FILE)) return null;
+    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-` +
+      `${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    const name = `db-${stamp}${tag ? '-' + tag : ''}.json`;
+    const target = path.join(BACKUP_DIR, name);
+    fs.copyFileSync(DB_FILE, target);
+    // 只保留最近 N 份
+    const files = fs.readdirSync(BACKUP_DIR)
+      .filter((f) => f.startsWith('db-') && f.endsWith('.json'))
+      .sort();
+    while (files.length > BACKUP_KEEP) {
+      const old = files.shift();
+      try { fs.unlinkSync(path.join(BACKUP_DIR, old)); } catch { /* ignore */ }
+    }
+    return target;
+  } catch (e) {
+    console.error('[store] 备份失败:', e.message);
+    return null;
+  }
+}
 
 export function uid(len = 16) {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';

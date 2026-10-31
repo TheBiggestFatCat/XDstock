@@ -8,6 +8,37 @@ import { borrow, repay } from './loans.js';
 
 const TOKEN_TTL = 30 * 24 * 3600 * 1000;
 
+// 登录失败计数：同一 IP + 昵称 连错 5 次，锁 60 秒
+const loginFailures = new Map();
+const LOGIN_MAX_FAIL = 5;
+const LOGIN_LOCK_MS = 60 * 1000;
+
+function loginLockSeconds(key) {
+  const rec = loginFailures.get(key);
+  if (!rec || !rec.until) return 0;
+  const left = rec.until - Date.now();
+  if (left <= 0) {
+    loginFailures.delete(key);
+    return 0;
+  }
+  return Math.ceil(left / 1000);
+}
+
+function noteLoginFailure(key) {
+  const rec = loginFailures.get(key) || { count: 0, until: 0 };
+  rec.count += 1;
+  if (rec.count >= LOGIN_MAX_FAIL) {
+    rec.until = Date.now() + LOGIN_LOCK_MS;
+    rec.count = 0;
+  }
+  loginFailures.set(key, rec);
+  if (loginFailures.size > 5000) loginFailures.clear();
+}
+
+function clientIp(ctx) {
+  return (ctx.req?.socket?.remoteAddress || 'unknown').replace(/^::ffff:/, '');
+}
+
 function json(res, code, obj) {
   const body = JSON.stringify(obj);
   res.writeHead(code, {
@@ -99,8 +130,6 @@ function marketPayload(db, me) {
       changePct: prev ? ((st.price - prev) / prev) * 100 : 0,
       dayChangePct: ((st.price - st.initialPrice) / st.initialPrice) * 100,
       status: st.status,
-      traitName: st.trait?.name,
-      traitDesc: st.trait?.desc,
       initialPrice: st.initialPrice
     };
   }
@@ -111,14 +140,18 @@ function marketPayload(db, me) {
     serverTime: now(),
     index: { value: db.index.value, series: db.index.series.slice(-600) },
     stocks,
-    events: db.events.map((e) => ({
-      id: e.id,
-      text: e.text,
-      companies: e.companies,
-      trend: e.trend,
-      remaining: e.remaining,
-      duration: e.duration
-    })),
+    events: db.events
+      .filter((e) => e.announced !== false)
+      .map((e) => ({
+        id: e.id,
+        kind: e.kind || 'global',
+        text: e.text,
+        companies: e.companies,
+        trend: e.trend,
+        remaining: e.remaining,
+        duration: e.duration,
+        createdAt: e.createdAt
+      })),
     me: me ? publicPlayer(me, db) : null,
     config: {
       minLeverage: db.config.minLeverage,
@@ -146,11 +179,22 @@ export async function handleApi(ctx) {
     const nickname = String(body.nickname || '').trim().slice(0, 16);
     const pin = String(body.pin || '').trim();
     if (nickname.length < 1) return json(res, 400, { error: '昵称不能为空' });
+    if (nickname.length > 16) return json(res, 400, { error: '昵称最多 16 个字' });
     if (!/^\d{4}$/.test(pin)) return json(res, 400, { error: 'PIN 必须是 4 位数字' });
+
+    const guardKey = `${clientIp(ctx)}:${nickname}`;
+    const locked = loginLockSeconds(guardKey);
+    if (locked > 0) {
+      return json(res, 429, { error: `密码错误次数过多，请 ${locked} 秒后再试` });
+    }
 
     let player = Object.values(db.players).find((p) => p.nickname === nickname);
     if (player) {
-      if (player.pin !== pin) return json(res, 401, { error: 'PIN 不对' });
+      if (player.pin !== pin) {
+        noteLoginFailure(guardKey);
+        return json(res, 401, { error: 'PIN 不对' });
+      }
+      loginFailures.delete(guardKey);
     } else {
       const id = uid(10);
       player = {
@@ -329,7 +373,7 @@ export async function handleApi(ctx) {
     const allowed = [
       'tickMs', 'baseVolatility', 'meanReversion', 'eventImpactScale',
       'feeRate', 'stampDuty', 'minLeverage', 'maxLeverage',
-      'eventChance', 'eventDurationMin', 'eventDurationMax',
+      'eventChance', 'localEventChance', 'eventDurationMin', 'eventDurationMax',
       'loanEnabled', 'loanRatePer100Ticks', 'loanTermHours', 'loanMinRepay',
       'maxOrdersPerTick',
       'brokerMidpoint', 'brokerSensitivity', 'brokerCap', 'brokerAlpha',

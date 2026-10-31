@@ -21,7 +21,8 @@ export const DEFAULT_CONFIG = {
   maxOrdersPerTick: 1,      // 每人每轮最多下几单（防止刷成交额抬小灯证券）
 
   // ---- 新闻 ----
-  eventChance: 0.015,       // 每 tick 出新闻的概率
+  eventChance: 0.015,       // 每 tick 出全球新闻的概率
+  localEventChance: 0.004,  // 每 tick 出「突发」的概率
   eventDurationMin: 30,     // 新闻持续 tick 数
   eventDurationMax: 90,
 

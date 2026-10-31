@@ -106,6 +106,7 @@ async function refreshMarket() {
   state.market = d;
   state.me = d.me;
   renderTopbar();
+  renderNews();
   renderStockList();
   renderPositions();
   if (d.config) $('#startingCashHint').textContent = money(d.config.startingCash || 100000);
@@ -153,7 +154,6 @@ function renderStockList() {
       <img class="stock-icon" src="${st.icon || ''}" alt="${st.name}" loading="lazy" />
       <div class="stock-main">
         <div class="stock-name">${st.name}<span class="stock-code">${st.code}${statusTag}</span></div>
-        <div class="stock-trait">${st.traitName || ''}</div>
       </div>
       <div class="stock-right">
         <div class="stock-price ${cls(st.changePct)}" data-price="${st.code}">${st.price.toFixed(2)}</div>
@@ -172,8 +172,6 @@ function selectStock(code) {
   $('#chartName').textContent = st.name;
   $('#chartCode').textContent = st.code;
   $('#chartIcon').src = st.icon || '';
-  $('#chartTrait').textContent = st.traitName || '';
-  $('#chartTrait').title = st.traitDesc || '';
   $('#chartPrice').textContent = st.price.toFixed(2);
   $('#chartPrice').className = 'big-price ' + cls(st.changePct);
   const ce = $('#chartChange');
@@ -181,6 +179,43 @@ function selectStock(code) {
   ce.className = 'big-change ' + cls(st.changePct);
   updateCostPreview();
   loadCandles();
+}
+
+// ---------------- 市场快讯 ----------------
+// 注意：假消息和晚消息都用和普通消息一样的徽章，
+// 否则玩家一眼就能看出哪条会被辟谣，假消息机制就白做了。
+// 线索只藏在文案里（「网传」「传」「自称」）。
+const NEWS_BADGE = {
+  global: { up: ['利好', 'badge-up'], down: ['利空', 'badge-down'] },
+  local: { up: ['突发·利好', 'badge-hot'], down: ['突发·利空', 'badge-hot-bad'] },
+  debunk: { up: ['辟谣', 'badge-debunk'], down: ['辟谣', 'badge-debunk'] }
+};
+
+function newsBadge(ev) {
+  const up = (ev.trend || 0) > 0;
+  const table = NEWS_BADGE[ev.kind] || NEWS_BADGE.global;
+  const [label, klass] = up ? table.up : table.down;
+  return `<span class="news-badge ${klass}">${label}</span>`;
+}
+
+function renderNews() {
+  const feed = $('#newsFeed');
+  if (!feed) return;
+  const list = (state.market?.events || []).slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const cnt = $('#newsCount');
+  if (cnt) cnt.textContent = list.length ? `${list.length} 条` : '';
+  if (!list.length) {
+    feed.innerHTML = '<div class="news-empty">暂无消息，市场风平浪静</div>';
+    return;
+  }
+  feed.innerHTML = list.slice(0, 4).map((ev) => {
+    const left = Math.max(1, ev.remaining || 1);
+    return `<div class="news-item">
+      ${newsBadge(ev)}
+      <span class="news-text">${ev.text}</span>
+      <span class="news-left">剩 ${left} 轮</span>
+    </div>`;
+  }).join('');
 }
 
 // ---------------- 图表 ----------------
@@ -388,6 +423,7 @@ function onTick(d) {
   }
 
   renderTopbar();
+  renderNews();
   updatePriceCells();
   const st = m.stocks[state.code];
   if (st) {
