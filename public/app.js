@@ -768,18 +768,22 @@ async function loadAdmin() {
   const cfgFields = [
     ['tickMs', 'tick 间隔(ms)'], ['baseVolatility', '基础波动率'], ['meanReversion', '均值回归'],
     ['feeRate', '手续费率'], ['stampDuty', '印花税率'], ['maxLeverage', '最大杠杆'],
-    ['eventChance', '新闻概率/tick'], ['loanDailyRate', '日利率'], ['loanTermHours', '借款期限(h)']
+    ['eventChance', '新闻概率/tick'], ['loanDailyRate', '日利率'], ['loanTermHours', '借款期限(h)'],
+    ['adminPin', '管理员口令', 'text'], ['allowRegister', '开放注册(1/0)']
   ];
-  $('#configForm').innerHTML = cfgFields.map(([k, label]) => `
+  $('#configForm').innerHTML = cfgFields.map(([k, label, type]) => `
     <label class="field"><span>${label}</span>
-      <input type="number" step="0.0001" data-cfg="${k}" value="${d.config[k]}" />
+      <input type="${type || 'number'}" ${type === 'text' ? '' : 'step="0.0001"'} data-cfg="${k}" value="${d.config[k]}" />
     </label>`).join('');
 }
 
 async function saveConfig() {
   const patch = {};
   $$('#configForm [data-cfg]').forEach((inp) => {
-    patch[inp.dataset.cfg] = Number(inp.value);
+    const k = inp.dataset.cfg;
+    if (k === 'adminPin') patch[k] = String(inp.value);
+    else if (k === 'allowRegister') patch[k] = Boolean(Number(inp.value));
+    else patch[k] = Number(inp.value);
   });
   try {
     await adminApi('/api/admin/config', { patch });
