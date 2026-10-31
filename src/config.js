@@ -43,7 +43,7 @@ export const DEFAULT_CONFIG = {
   marketOpen: true,         // 休市 = 冻结行情（价格不动、新闻不刷、利息暂停）
 
   // ---- 管理 ----
-  adminPin: '000000',
+  adminPin: '135791',       // 管理员口令（部署后可在管理面板里改）
   allowRegister: true,
   pinLength: 6              // 玩家 PIN 位数
 };
