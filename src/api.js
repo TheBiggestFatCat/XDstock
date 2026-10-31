@@ -153,16 +153,13 @@ function marketPayload(db, me) {
     stocks,
     events: db.events
       .filter((e) => e.announced !== false)
+      // 只下发「已经公布」的信息：文案 + 方向
+      // trend / after 属于未来走势，绝不能给前端，否则 F12 一看就知道会不会反转
       .map((e) => ({
         id: e.id,
-        kind: e.kind || 'global',
         text: e.text,
         companies: e.companies,
         dir: e.dir || (e.trend > 0 ? 1 : -1),
-        after: e.after || null,
-        trend: e.trend,
-        remaining: e.remaining,
-        duration: e.duration,
         createdAt: e.createdAt
       })),
     me: me ? publicPlayer(me, db) : null,

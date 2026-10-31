@@ -225,17 +225,22 @@ function tickPayload(forPlayerId) {
     index: d.index.value,
     indexChanges: changesFor(d.index.series, TIMEFRAMES),
     stocks,
+    config: {
+      minLeverage: d.config.minLeverage,
+      maxLeverage: d.config.maxLeverage,
+      feeRate: d.config.feeRate,
+      stampDuty: d.config.stampDuty,
+      maxOrdersPerTick: d.config.maxOrdersPerTick,
+      loanRatePer100Ticks: d.config.loanRatePer100Ticks
+    },
     events: d.events
       .filter((e) => e.announced !== false)
+      // 同样只下发已公布的文案和方向
       .map((e) => ({
         id: e.id,
-        kind: e.kind || 'global',
         text: e.text,
         companies: e.companies,
         dir: e.dir || (e.trend > 0 ? 1 : -1),
-        after: e.after || null,
-        trend: e.trend,
-        remaining: e.remaining,
         createdAt: e.createdAt
       })),
     me

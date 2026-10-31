@@ -154,6 +154,7 @@ async function refreshMarket() {
   renderNews();
   renderStockList();
   renderPositions();
+  syncLeverageLimits();
   if (d.config) $('#startingCashHint').textContent = money(d.config.startingCash || 100000);
 }
 
@@ -249,14 +250,11 @@ const NEWS_BADGE = {
 };
 
 function newsBadge(ev) {
-  // 看消息本身是利好还是利空，而不是当前价格在涨还是在跌
-  const up = (ev.dir !== undefined ? ev.dir : (ev.trend || 0)) > 0;
-  const table = NEWS_BADGE[ev.kind] || NEWS_BADGE.global;
-  const [label, klass] = up ? table.up : table.down;
-  // 公布后如果走了反转，额外标一下，让玩家知道「消息出来反而跌」
-  const flip = ev.after === 'reverse'
-    ? '<span class="news-flip" title="消息公布后走势反转">反</span>' : '';
-  return `<span class="news-badge ${klass}">${label}</span>${flip}`;
+  // 只按消息本身的方向标利好/利空。
+  // 绝不暴露「之后会反转」——那是未来信息，会让人提前埋伏。
+  const up = Number(ev.dir ?? 1) > 0;
+  const [label, klass] = up ? NEWS_BADGE.global.up : NEWS_BADGE.global.down;
+  return `<span class="news-badge ${klass}">${label}</span>`;
 }
 
 function renderNews() {
@@ -482,6 +480,8 @@ function onTick(d) {
   m.events = d.events || [];
 
   if (d.closed !== undefined) m.marketOpen = !d.closed;
+  // 后台改了参数（杠杆上限等），下一轮就同步过来
+  if (d.config) m.config = { ...(m.config || {}), ...d.config };
   renderClosed();
 
   for (const [code, s] of Object.entries(d.stocks)) {
@@ -498,6 +498,7 @@ function onTick(d) {
   renderTopbar();
   renderNews();
   updatePriceCells();
+  syncLeverageLimits();
   const st = m.stocks[state.code];
   if (st) {
     const chgNow = stockChange(st);
@@ -562,6 +563,25 @@ function handleCloses(list) {
 }
 
 // ---------------- 下单 ----------------
+// 让杠杆滑条的范围跟随后台设置，后台改了立刻生效
+function syncLeverageLimits() {
+  const cfg = state.market?.config || {};
+  const el = $('#orderLev');
+  if (!el) return;
+  let min = Number(cfg.minLeverage ?? 1);
+  let max = Number(cfg.maxLeverage ?? 20);
+  if (!(min >= 1)) min = 1;
+  if (!(max >= min)) max = min;
+  if (el.min !== String(min)) el.min = String(min);
+  if (el.max !== String(max)) el.max = String(max);
+  el.step = '1';
+  let v = Number(el.value) || min;
+  if (v < min) v = min;
+  if (v > max) v = max;
+  if (String(v) !== el.value) el.value = String(v);
+  updateCostPreview();
+}
+
 function updateCostPreview() {
   const st = state.market?.stocks?.[state.code];
   if (!st) return;
@@ -575,7 +595,9 @@ function updateCostPreview() {
   $('#costNotional').textContent = money(notional);
   $('#costMargin').textContent = money(margin + fee + stamp);
   $('#costFee').textContent = money(fee + stamp);
-  $('#levLabel').textContent = lev + 'x';
+  const levMin = Number(cfg.minLeverage ?? 1);
+  const levMax = Number(cfg.maxLeverage ?? 20);
+  $('#levLabel').textContent = `${lev}x（${levMin}~${levMax} 倍）`;
   // 爆仓价：保证金亏光的位置 = 现价 ×(1 ∓ 1/杠杆)
   const liqPx = state.side === 'long' ? st.price * (1 - 1 / lev) : st.price * (1 + 1 / lev);
   if (liqPx <= 0.01) {
