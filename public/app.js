@@ -44,6 +44,13 @@ function cls(v) {
   if (v < -0.0001) return 'down';
   return 'flat';
 }
+// 按当前 K 线周期取涨跌幅（后端已经算好 5 个周期）
+function stockChange(st) {
+  if (!st) return 0;
+  if (st.changes && st.changes[state.tf] !== undefined) return st.changes[state.tf];
+  return st.changePct || 0;
+}
+
 function toast(msg, type = '') {
   const el = $('#toast');
   el.textContent = msg;
@@ -164,7 +171,9 @@ function renderTopbar() {
   $('#indexValue').textContent = m.index.value.toFixed(2);
   const idxSeries = m.index.series;
   const prevIdx = idxSeries.length > 1 ? idxSeries[idxSeries.length - 2] : m.index.value;
-  const idxChg = prevIdx ? ((m.index.value - prevIdx) / prevIdx) * 100 : 0;
+  const idxChg = (m.index.changes && m.index.changes[state.tf] !== undefined)
+    ? m.index.changes[state.tf]
+    : (prevIdx ? ((m.index.value - prevIdx) / prevIdx) * 100 : 0);
   const ie = $('#indexChange');
   ie.textContent = pct(idxChg);
   ie.className = 'index-change ' + cls(idxChg);
@@ -192,6 +201,7 @@ function renderStockList() {
   const list = Object.values(m.stocks);
   wrap.innerHTML = '';
   for (const st of list) {
+    const chg = stockChange(st);
     const div = document.createElement('div');
     div.className = 'stock-item' + (st.code === state.code ? ' active' : '') + (st.status !== 'normal' ? ' suspended' : '');
     div.dataset.code = st.code;
@@ -202,8 +212,8 @@ function renderStockList() {
         <div class="stock-name">${st.name}<span class="stock-code">${st.code}${statusTag}</span></div>
       </div>
       <div class="stock-right">
-        <div class="stock-price ${cls(st.changePct)}" data-price="${st.code}">${st.price.toFixed(2)}</div>
-        <div class="stock-chg ${cls(st.changePct)}" data-chg="${st.code}">${pct(st.changePct)}</div>
+        <div class="stock-price ${cls(chg)}" data-price="${st.code}">${st.price.toFixed(2)}</div>
+        <div class="stock-chg ${cls(chg)}" data-chg="${st.code}">${pct(chg)}</div>
       </div>`;
     div.addEventListener('click', () => selectStock(st.code));
     wrap.appendChild(div);
@@ -215,14 +225,15 @@ function selectStock(code) {
   $$('.stock-item').forEach((el) => el.classList.toggle('active', el.dataset.code === code));
   const st = state.market.stocks[code];
   if (!st) return;
+  const chg0 = stockChange(st);
   $('#chartName').textContent = st.name;
   $('#chartCode').textContent = st.code;
   $('#chartIcon').src = st.icon || '';
   $('#chartPrice').textContent = st.price.toFixed(2);
-  $('#chartPrice').className = 'big-price ' + cls(st.changePct);
+  $('#chartPrice').className = 'big-price ' + cls(chg0);
   const ce = $('#chartChange');
-  ce.textContent = pct(st.changePct);
-  ce.className = 'big-change ' + cls(st.changePct);
+  ce.textContent = pct(chg0);
+  ce.className = 'big-change ' + cls(chg0);
   updateCostPreview();
   loadCandles();
 }
@@ -255,11 +266,9 @@ function renderNews() {
     return;
   }
   feed.innerHTML = list.slice(0, 4).map((ev) => {
-    const left = Math.max(1, ev.remaining || 1);
     return `<div class="news-item">
       ${newsBadge(ev)}
       <span class="news-text">${ev.text}</span>
-      <span class="news-left">剩 ${left} 轮</span>
     </div>`;
   }).join('');
 }
@@ -397,6 +406,7 @@ function renderChartLegend(pos) {
     <span><i style="background:#64748b"></i>成本 ${pos.entry.toFixed(2)}</span>
     ${pos.tp ? `<span><i style="background:#22c55e"></i>止盈 ${Number(pos.tp).toFixed(2)}</span>` : ''}
     ${pos.sl ? `<span><i style="background:#ef4444"></i>止损 ${Number(pos.sl).toFixed(2)}</span>` : ''}
+    ${(pos.leverage || 1) > 1 ? `<span><i style="background:#f97316"></i>爆仓 ${(pos.side === 'long' ? pos.entry * (1 - 1 / (pos.leverage || 1)) : pos.entry * (1 + 1 / (pos.leverage || 1))).toFixed(2)}</span>` : ''}
     <span class="legend-hint">${pos.side === 'long' ? '做多' : '做空'} ${pos.qty} 股 · ${(pos.leverage || 1).toFixed(1)}x</span>`;
 }
 
@@ -430,6 +440,14 @@ function updatePriceLines() {
   add(pos.entry, '#64748b', '成本');
   add(pos.tp, '#22c55e', '止盈');
   add(pos.sl, '#ef4444', '止损');
+  // 爆仓价：保证金亏光的位置
+  const lev = pos.leverage || 1;
+  if (lev > 1) {
+    const liq = pos.side === 'long'
+      ? pos.entry * (1 - 1 / lev)
+      : pos.entry * (1 + 1 / lev);
+    add(liq, '#f97316', '爆仓');
+  }
 }
 
 // ---------------- SSE ----------------
@@ -476,11 +494,12 @@ function onTick(d) {
   updatePriceCells();
   const st = m.stocks[state.code];
   if (st) {
+    const chgNow = stockChange(st);
     $('#chartPrice').textContent = st.price.toFixed(2);
-    $('#chartPrice').className = 'big-price ' + cls(st.changePct);
+    $('#chartPrice').className = 'big-price ' + cls(chgNow);
     const ce = $('#chartChange');
-    ce.textContent = pct(st.changePct);
-    ce.className = 'big-change ' + cls(st.changePct);
+    ce.textContent = pct(chgNow);
+    ce.className = 'big-change ' + cls(chgNow);
     if (d.closed !== true) applyTickToChart(st.price);
   }
   updateCostPreview();
@@ -497,11 +516,12 @@ function updatePriceCells() {
     const chgEl = document.querySelector(`[data-chg="${code}"]`);
     if (!priceEl) continue;
     const prev = state.prevPrices[code];
+    const chg = stockChange(s);
     priceEl.textContent = s.price.toFixed(2);
-    priceEl.className = 'stock-price ' + cls(s.changePct);
+    priceEl.className = 'stock-price ' + cls(chg);
     if (chgEl) {
-      chgEl.textContent = pct(s.changePct);
-      chgEl.className = 'stock-chg ' + cls(s.changePct);
+      chgEl.textContent = pct(chg);
+      chgEl.className = 'stock-chg ' + cls(chg);
     }
     if (prev !== undefined && Math.abs(prev - s.price) > 1e-9) {
       const item = priceEl.closest('.stock-item');
@@ -994,7 +1014,7 @@ async function loadAdmin() {
 
   // 活跃事件
   $('#activeEvents').innerHTML = (d.events || []).length
-    ? d.events.map((e) => `<div class="active-event">${e.text.slice(0, 40)} · 剩 ${e.remaining} 轮</div>`).join('')
+    ? d.events.map((e) => `<div class="active-event">${e.text.slice(0, 40)}</div>`).join('')
     : '<div class="active-event">当前没有活跃新闻</div>';
 
   // 参数
@@ -1120,6 +1140,16 @@ function bind() {
       b.classList.add('active');
       state.tf = b.dataset.tf;
       state.candles = [];
+      renderStockList();
+      renderTopbar();
+      const cur = state.market?.stocks?.[state.code];
+      if (cur) {
+        const c = stockChange(cur);
+        $('#chartPrice').className = 'big-price ' + cls(c);
+        const ce2 = $('#chartChange');
+        ce2.textContent = pct(c);
+        ce2.className = 'big-change ' + cls(c);
+      }
       loadCandles();
     });
   });

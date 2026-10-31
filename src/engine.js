@@ -229,6 +229,7 @@ export function stepMarket(db) {
   // 3. 每只票走一步
   for (const st of stocks) {
     if (st.status !== 'normal') continue;
+    if (st.isIndex) continue;   // 指数不自己走，等下面按成分算
     stepStock(st, cfg, db.events, st.trait?.id === 'broker' ? brokerDrift : 0);
 
     st.series.push(Number(st.price.toFixed(4)));
@@ -240,8 +241,8 @@ export function stepMarket(db) {
   spawnNews(db);
   spawnLocalEvent(db);
 
-  // 5. 指数：只算正常交易的票
-  const live = stocks.filter((s) => s.status === 'normal');
+  // 5. 指数：只算正常交易的真股票（不含指数自己）
+  const live = stocks.filter((s) => s.status === 'normal' && !s.isIndex);
   if (live.length) {
     const ratio =
       live.reduce((sum, s) => sum + s.price / s.initialPrice, 0) / live.length;
@@ -251,6 +252,16 @@ export function stepMarket(db) {
   const cap = cfg.historyTicks ?? 3600;
   if (db.index.series.length > cap) {
     db.index.series.splice(0, db.index.series.length - cap);
+  }
+
+  // 指数标的的价格 = 指数点位
+  const idxStock = db.stocks.DENG;
+  if (idxStock) {
+    idxStock.price = db.index.value;
+    idxStock.series.push(Number(db.index.value.toFixed(4)));
+    if (idxStock.series.length > cap) {
+      idxStock.series.splice(0, idxStock.series.length - cap);
+    }
   }
 
   db.tick += 1;
@@ -310,4 +321,24 @@ export function seedHistory(db, ticks = 2400) {
   db.config.eventChance = realChance;
   db.tradesThisTick = 0;
   db.startedAt = Date.now() - db.tick * (db.config.tickMs || 5000);
+}
+
+
+/**
+ * 按 K 线跨度算涨跌幅：取「当前 tick 往前推 N 个 tick」的价格作为基准。
+ * N 就是各周期的 tick 数（1m=12, 5m=60, 15m=180, 1h=720, 4h=2880）。
+ */
+export function changesFor(series, tfTicks) {
+  const out = {};
+  if (!series || series.length < 2) {
+    for (const k of Object.keys(tfTicks)) out[k] = 0;
+    return out;
+  }
+  const last = series[series.length - 1];
+  for (const [key, ticks] of Object.entries(tfTicks)) {
+    const idx = Math.max(0, series.length - 1 - ticks);
+    const base = series[idx];
+    out[key] = base ? ((last - base) / base) * 100 : 0;
+  }
+  return out;
 }

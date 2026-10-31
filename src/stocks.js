@@ -124,3 +124,15 @@ export const STOCK_CODES = Object.keys(STOCK_SEED);
 
 // 指数基点
 export const INDEX_BASE = 1000;
+
+
+// 灯证指数本身也做成一个可交易的标的（1:1 复制指数点位）
+export const INDEX_STOCK = {
+  code: 'DENG',
+  name: '灯证指数',
+  icon: '/assets/logo.png',
+  industry: '指数',
+  desc: '七只标的的等权合成指数',
+  initialPrice: 1000,
+  trait: { id: 'index', name: '指数', desc: '跟大盘同涨同跌' }
+};

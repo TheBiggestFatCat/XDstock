@@ -504,6 +504,8 @@ input.tpsl-input {
 .chart-legend span:nth-child(1) i { border-color: #64748b; }
 .chart-legend span:nth-child(2) i { border-color: #22c55e; }
 .chart-legend span:nth-child(3) i { border-color: #ef4444; }
+.chart-legend span:nth-child(4) i { border-color: #f97316; }
+.chart-legend span:nth-child(5) i { border-color: #a855f7; }
 .chart-legend .legend-hint { color: var(--ink-3); margin-left: auto; }
 
 /* ---------- 爆仓价 ---------- */

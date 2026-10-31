@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getDb, saveDb, now, backupDb } from './src/store.js';
-import { stepMarket, seedHistory } from './src/engine.js';
+import { stepMarket, seedHistory, changesFor } from './src/engine.js';
+import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, positionPnl } from './src/trading.js';
 import { accrueLoans } from './src/loans.js';
 import { handleApi } from './src/api.js';
@@ -188,6 +189,7 @@ function tickPayload(forPlayerId) {
     stocks[code] = {
       price: Number(st.price.toFixed(4)),
       changePct: prev ? ((st.price - prev) / prev) * 100 : 0,
+      changes: changesFor(st.series, TIMEFRAMES),
       status: st.status
     };
   }
@@ -198,6 +200,7 @@ function tickPayload(forPlayerId) {
     for (const [code, pos] of Object.entries(p.positions || {})) {
       const st = d.stocks[code];
       positions[code] = {
+        code,
         side: pos.side,
         qty: pos.qty,
         entry: pos.entry,
@@ -216,6 +219,7 @@ function tickPayload(forPlayerId) {
     tick: d.tick,
     closed: d.config.marketOpen === false,
     index: d.index.value,
+    indexChanges: changesFor(d.index.series, TIMEFRAMES),
     stocks,
     events: d.events
       .filter((e) => e.announced !== false)

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
-import { candlesFromSeries } from './engine.js';
+import { candlesFromSeries, changesFor } from './engine.js';
 import { TIMEFRAMES } from './config.js';
 import { playerEquity, openPosition, closePosition, positionPnl } from './trading.js';
 import { borrow, repay } from './loans.js';
@@ -118,7 +118,10 @@ function adminAuth(ctx) {
 
 function marketPayload(db, me) {
   const stocks = {};
-  for (const [code, st] of Object.entries(db.stocks)) {
+  // 指数排在最前面
+  const ordered = Object.values(db.stocks).sort((a, b) => (b.isIndex ? 1 : 0) - (a.isIndex ? 1 : 0));
+  for (const st of ordered) {
+    const code = st.code;
     const prev = st.series.length > 1 ? st.series[st.series.length - 2] : st.price;
     stocks[code] = {
       code,
@@ -127,6 +130,9 @@ function marketPayload(db, me) {
       industry: st.industry,
       desc: st.desc,
       price: st.price,
+      isIndex: !!st.isIndex,
+      // 按各 K 线周期算涨跌幅（前端跟着当前周期显示）
+      changes: changesFor(st.series, TIMEFRAMES),
       changePct: prev ? ((st.price - prev) / prev) * 100 : 0,
       dayChangePct: ((st.price - st.initialPrice) / st.initialPrice) * 100,
       status: st.status,
@@ -139,7 +145,11 @@ function marketPayload(db, me) {
     marketOpen: db.config.marketOpen !== false,
     startedAt: db.startedAt || 0,
     serverTime: now(),
-    index: { value: db.index.value, series: db.index.series.slice(-600) },
+    index: {
+      value: db.index.value,
+      series: db.index.series.slice(-600),
+      changes: changesFor(db.index.series, TIMEFRAMES)
+    },
     stocks,
     events: db.events
       .filter((e) => e.announced !== false)

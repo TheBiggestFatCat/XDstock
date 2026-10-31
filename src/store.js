@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_CONFIG } from './config.js';
-import { STOCK_SEED, STOCK_CODES, INDEX_BASE } from './stocks.js';
+import { STOCK_SEED, STOCK_CODES, INDEX_BASE, INDEX_STOCK } from './stocks.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(__dirname, '..');
@@ -39,6 +39,21 @@ function freshStock(code) {
 
 export function createDb() {
   const stocks = {};
+  // 指数排在最前面
+  stocks[INDEX_STOCK.code] = {
+    ...freshStock('TGW'),          // 借一份骨架
+    code: INDEX_STOCK.code,
+    name: INDEX_STOCK.name,
+    icon: INDEX_STOCK.icon,
+    industry: INDEX_STOCK.industry,
+    desc: INDEX_STOCK.desc,
+    initialPrice: INDEX_STOCK.initialPrice,
+    trait: INDEX_STOCK.trait,
+    price: INDEX_BASE,
+    fair: INDEX_BASE,
+    series: [INDEX_BASE],
+    isIndex: true
+  };
   for (const code of STOCK_CODES) stocks[code] = freshStock(code);
 
   return {
@@ -87,6 +102,35 @@ function migrate(d) {
   const merged = { ...base, ...d };
   merged.config = { ...base.config, ...(d.config || {}) };
   merged.stocks = { ...base.stocks, ...(d.stocks || {}) };
+  // 补齐指数标的
+  if (!merged.stocks[INDEX_STOCK.code]) {
+    merged.stocks[INDEX_STOCK.code] = {
+      code: INDEX_STOCK.code,
+      name: INDEX_STOCK.name,
+      icon: INDEX_STOCK.icon,
+      industry: INDEX_STOCK.industry,
+      desc: INDEX_STOCK.desc,
+      initialPrice: INDEX_STOCK.initialPrice,
+      trait: INDEX_STOCK.trait,
+      price: merged.index?.value || INDEX_BASE,
+      fair: merged.index?.value || INDEX_BASE,
+      status: 'normal',
+      statusUntil: 0,
+      series: (merged.index?.series || [INDEX_BASE]).slice(-3600),
+      streak: 0,
+      brokerMid: DEFAULT_CONFIG.brokerMidpoint,
+      isIndex: true
+    };
+  }
+  merged.stocks[INDEX_STOCK.code].isIndex = true;
+  // 指数标的的历史用指数序列补全，否则各周期涨跌幅会算成同一个数
+  const idxStock = merged.stocks[INDEX_STOCK.code];
+  const idxSeries = merged.index?.series || [];
+  if (idxSeries.length > (idxStock.series?.length || 0)) {
+    idxStock.series = idxSeries.slice(-(merged.config?.historyTicks || 3600));
+  }
+  idxStock.price = merged.index?.value ?? idxStock.price;
+
   // 补齐新增标的 / 补字段
   for (const code of STOCK_CODES) {
     if (!merged.stocks[code]) {
