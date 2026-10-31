@@ -184,8 +184,12 @@ textarea { resize: vertical; }
   position: sticky; top: 63px; z-index: 29;
   display: flex; gap: 6px; padding: 10px 20px 0;
   overflow-x: auto;
-  background: linear-gradient(to bottom, rgba(244, 250, 248, .96), rgba(244, 250, 248, 0));
+  /* 整体透明度调低，让 tab 栏不再压住下面的内容 */
+  opacity: .78;
+  background: linear-gradient(to bottom, rgba(244, 250, 248, .78), rgba(244, 250, 248, 0));
+  transition: opacity .25s ease;
 }
+.tabs:hover { opacity: 1; }
 .tabs::-webkit-scrollbar { display: none; }
 .tab {
   flex: none;
