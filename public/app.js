@@ -1273,6 +1273,8 @@ async function loadAdmin() {
     ['maxOrdersPerTick', '每轮最多下单次数'],
     ['eventChance', '新闻概率/tick'],
     ['workReward', '每次打工工资'],
+    ['stealMin', '偷钱最少金额'], ['stealMax', '偷钱最多金额'],
+    ['stealCapRatio', '偷钱上限比例(0.001=0.1%)'],
     ['adminPin', '管理员口令', 'text'], ['allowRegister', '开放注册(1/0)']
   ];
   $('#configForm').innerHTML = cfgFields.map(([k, label, type]) => {
