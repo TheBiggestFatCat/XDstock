@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>汐灯证券 · 模拟炒股</title>
+<link rel="stylesheet" href="/styles.css" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐟</text></svg>" />
+</head>
+<body>
+<div class="bg-decor" aria-hidden="true">
+  <span class="blob blob-a"></span>
+  <span class="blob blob-b"></span>
+  <span class="blob blob-c"></span>
+</div>
+
+<!-- ==================== 登录 ==================== -->
+<section id="loginView" class="login-wrap">
+  <div class="login-card">
+    <div class="brand">
+      <div class="brand-logo">🐟</div>
+      <div>
+        <h1>汐灯证券</h1>
+        <p class="brand-sub">XD Stock Exchange · 模拟炒股</p>
+      </div>
+    </div>
+
+    <div class="login-form">
+      <label class="field">
+        <span>昵称</span>
+        <input id="loginNick" type="text" maxlength="16" placeholder="给自己起个名字" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>PIN</span>
+        <input id="loginPin" type="password" inputmode="numeric" maxlength="4" placeholder="4 位数字" autocomplete="off" />
+      </label>
+      <button id="loginBtn" class="btn btn-primary btn-block">进入市场</button>
+      <p id="loginMsg" class="login-msg"></p>
+      <p class="login-hint">首次输入昵称会自动开户，起始资金 <b id="startingCashHint">$100,000</b></p>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== 主界面 ==================== -->
+<section id="mainView" class="hidden">
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="logo-mini">🐟</div>
+      <div class="index-box">
+        <span class="index-label">灯证指数</span>
+        <span id="indexValue" class="index-value">1000.00</span>
+        <span id="indexChange" class="index-change">+0.00%</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="cash-box">
+        <span class="cash-label">总资产</span>
+        <span id="equityValue" class="cash-value">$0</span>
+      </div>
+      <button id="avatarBtn" class="avatar-btn" title="更换头像">
+        <img id="avatarImg" alt="" />
+        <span id="avatarFallback">🐟</span>
+      </button>
+      <div class="user-box">
+        <span id="nickDisplay" class="nick">—</span>
+        <button id="logoutBtn" class="btn-link">退出</button>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-view="market">行情</button>
+    <button class="tab" data-view="portfolio">我的</button>
+    <button class="tab" data-view="loan">高利贷</button>
+    <button class="tab" data-view="rank">排行榜</button>
+    <button class="tab" data-view="admin">管理</button>
+  </nav>
+
+  <main class="content">
+    <!-- ---------- 行情 ---------- -->
+    <div class="view active" id="view-market">
+      <div class="market-grid">
+        <aside class="panel stock-list-panel">
+          <div class="panel-title">
+            <span>实时行情</span>
+            <span class="panel-sub" id="tickInfo">—</span>
+          </div>
+          <div id="stockList" class="stock-list"></div>
+        </aside>
+
+        <section class="panel chart-panel">
+          <div class="chart-head">
+            <div class="chart-title">
+              <h2 id="chartName">—</h2>
+              <span id="chartCode" class="chip">—</span>
+              <span id="chartTrait" class="chip chip-soft">—</span>
+            </div>
+            <div class="chart-price">
+              <span id="chartPrice" class="big-price">—</span>
+              <span id="chartChange" class="big-change">—</span>
+            </div>
+          </div>
+
+          <div class="chart-toolbar">
+            <div class="tf-group" id="tfGroup">
+              <button data-tf="1m" class="tf active">1分</button>
+              <button data-tf="5m" class="tf">5分</button>
+              <button data-tf="15m" class="tf">15分</button>
+              <button data-tf="1h" class="tf">1时</button>
+              <button data-tf="4h" class="tf">4时</button>
+            </div>
+            <div class="ma-group" id="maGroup">
+              <label><input type="checkbox" data-ma="5" checked /><span class="ma-dot" style="--c:#f59e0b"></span>MA5</label>
+              <label><input type="checkbox" data-ma="10" checked /><span class="ma-dot" style="--c:#3b82f6"></span>MA10</label>
+              <label><input type="checkbox" data-ma="30" /><span class="ma-dot" style="--c:#a855f7"></span>MA30</label>
+            </div>
+          </div>
+
+          <div id="chart" class="chart-canvas"></div>
+          <div id="chartEmpty" class="chart-empty hidden">暂无数据</div>
+        </section>
+
+        <aside class="panel trade-panel">
+          <div class="panel-title">下单</div>
+          <div class="side-switch" id="sideSwitch">
+            <button class="side-btn active" data-side="long">做多</button>
+            <button class="side-btn" data-side="short">做空</button>
+          </div>
+
+          <label class="field">
+            <span>数量（股）</span>
+            <input id="orderQty" type="number" min="1" step="1" value="100" />
+          </label>
+
+          <div class="quick-qty">
+            <button data-qty="100">100</button>
+            <button data-qty="500">500</button>
+            <button data-qty="1000">1k</button>
+            <button data-qty="max">全仓</button>
+          </div>
+
+          <label class="field">
+            <span>杠杆 <b id="levLabel">1x</b></span>
+            <input id="orderLev" type="range" min="1" max="20" step="1" value="1" />
+          </label>
+
+          <div class="row-2">
+            <label class="field">
+              <span>止盈价</span>
+              <input id="orderTp" type="number" step="0.01" placeholder="可选" />
+            </label>
+            <label class="field">
+              <span>止损价</span>
+              <input id="orderSl" type="number" step="0.01" placeholder="可选" />
+            </label>
+          </div>
+
+          <div class="cost-box">
+            <div><span>名义价值</span><b id="costNotional">$0</b></div>
+            <div><span>所需保证金</span><b id="costMargin">$0</b></div>
+            <div><span>手续费</span><b id="costFee">$0</b></div>
+          </div>
+
+          <button id="orderBtn" class="btn btn-primary btn-block">买入开多</button>
+          <p id="orderMsg" class="order-msg"></p>
+        </aside>
+      </div>
+
+      <div class="panel positions-panel">
+        <div class="panel-title">我的持仓</div>
+        <div id="positionsTable" class="table-wrap"></div>
+      </div>
+    </div>
+
+    <!-- ---------- 我的 ---------- -->
+    <div class="view" id="view-portfolio">
+      <div class="stat-grid" id="statGrid"></div>
+      <div class="panel">
+        <div class="panel-title">持仓明细</div>
+        <div id="portfolioTable" class="table-wrap"></div>
+      </div>
+    </div>
+
+    <!-- ---------- 高利贷 ---------- -->
+    <div class="view" id="view-loan">
+      <div class="loan-hero">
+        <div class="loan-icon">💸</div>
+        <div>
+          <h2>灯哥钱庄</h2>
+          <p>日息 <b id="loanRate">8%</b>，按秒复利。到期还不上，直接上天台。</p>
+        </div>
+      </div>
+      <div class="panel">
+        <div id="loanBody"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">天台楼下记录册</div>
+        <div id="bookList" class="book-list"></div>
+      </div>
+    </div>
+
+    <!-- ---------- 排行榜 ---------- -->
+    <div class="view" id="view-rank">
+      <div class="panel">
+        <div class="panel-title">
+          <span>资产排行</span>
+          <button id="refreshRank" class="btn-link">刷新</button>
+        </div>
+        <div id="rankTable" class="table-wrap"></div>
+      </div>
+    </div>
+
+    <!-- ---------- 管理 ---------- -->
+    <div class="view" id="view-admin">
+      <div id="adminLock" class="panel admin-lock">
+        <div class="panel-title">管理员登录</div>
+        <label class="field">
+          <span>管理员口令</span>
+          <input id="adminPin" type="password" placeholder="默认 0000" />
+        </label>
+        <button id="adminLoginBtn" class="btn btn-primary">验证</button>
+        <p id="adminMsg" class="order-msg"></p>
+      </div>
+      <div id="adminPanel" class="hidden">
+        <div class="admin-grid">
+          <div class="panel">
+            <div class="panel-title">标的管理</div>
+            <div id="adminStocks" class="admin-stocks"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">手动新闻</div>
+            <label class="field"><span>内容</span><textarea id="newsText" rows="3" placeholder="例如：丰川集团宣布收购…"></textarea></label>
+            <label class="field"><span>涉及标的（不选 = 全市场）</span></label>
+            <div id="newsStocks" class="chip-select"></div>
+            <div class="row-2">
+              <label class="field"><span>冲击（每 tick）</span><input id="newsTrend" type="number" step="0.001" value="0.004" /></label>
+              <label class="field"><span>持续（tick）</span><input id="newsDuration" type="number" step="10" value="60" /></label>
+            </div>
+            <button id="newsBtn" class="btn btn-primary">发布新闻</button>
+            <div id="activeEvents" class="active-events"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">参数设置</div>
+            <div id="configForm" class="config-form"></div>
+            <button id="configSaveBtn" class="btn btn-primary">保存参数</button>
+            <p id="configMsg" class="order-msg"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</section>
+
+<input id="avatarInput" type="file" accept="image/*" class="hidden" />
+<div id="toast" class="toast"></div>
+
+<script src="/vendor/lightweight-charts.js"></script>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

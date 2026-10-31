@@ -1,0 +1,15 @@
+{
+  "name": "xdstock",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "汐灯证券 · 网页版模拟炒股",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

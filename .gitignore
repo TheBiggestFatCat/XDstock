@@ -1,0 +1,8 @@
+﻿node_modules/
+data/
+_shots/
+_chrome_profile/
+_shots_tokens.json
+*.log
+package-lock.json
+.DS_Store

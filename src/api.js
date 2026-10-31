@@ -1,0 +1,410 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
+import { candlesFromSeries } from './engine.js';
+import { TIMEFRAMES } from './config.js';
+import { playerEquity, openPosition, closePosition, positionPnl } from './trading.js';
+import { borrow, repay } from './loans.js';
+
+const TOKEN_TTL = 30 * 24 * 3600 * 1000;
+
+function json(res, code, obj) {
+  const body = JSON.stringify(obj);
+  res.writeHead(code, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store'
+  });
+  res.end(body);
+}
+
+function publicPlayer(p, db) {
+  const positions = {};
+  for (const [code, pos] of Object.entries(p.positions || {})) {
+    const st = db.stocks[code];
+    if (!st) continue;
+    const pnl = positionPnl(pos, st.price);
+    positions[code] = {
+      ...pos,
+      price: st.price,
+      pnl,
+      pnlPct: pos.margin > 0 ? (pnl / pos.margin) * 100 : 0,
+      equity: pos.margin + pnl
+    };
+  }
+  return {
+    id: p.id,
+    nickname: p.nickname,
+    avatar: p.avatar || null,
+    cash: p.cash,
+    positions,
+    equity: playerEquity(db, p),
+    loan: p.loan || null,
+    bankrupt: !!p.bankrupt,
+    createdAt: p.createdAt
+  };
+}
+
+function auth(ctx) {
+  const db = getDb();
+  const h = ctx.headers['authorization'] || '';
+  let token = h.startsWith('Bearer ') ? h.slice(7) : null;
+  if (!token && ctx.query.token) token = ctx.query.token;
+  if (!token) return null;
+  const s = db.sessions[token];
+  if (!s) return null;
+  if (now() - s.at > TOKEN_TTL) {
+    delete db.sessions[token];
+    return null;
+  }
+  const player = db.players[s.playerId];
+  if (!player) return null;
+  return { token, player };
+}
+
+function adminAuth(ctx) {
+  const db = getDb();
+  const h = ctx.headers['authorization'] || '';
+  const token = h.startsWith('Bearer ') ? h.slice(7) : ctx.query.token;
+  if (!token) return false;
+  const s = db.adminSessions[token];
+  if (!s) return false;
+  if (now() - s.at > 12 * 3600 * 1000) {
+    delete db.adminSessions[token];
+    return false;
+  }
+  return true;
+}
+
+function marketPayload(db, me) {
+  const stocks = {};
+  for (const [code, st] of Object.entries(db.stocks)) {
+    const prev = st.series.length > 1 ? st.series[st.series.length - 2] : st.price;
+    stocks[code] = {
+      code,
+      name: st.name,
+      industry: st.industry,
+      desc: st.desc,
+      price: st.price,
+      changePct: prev ? ((st.price - prev) / prev) * 100 : 0,
+      dayChangePct: ((st.price - st.initialPrice) / st.initialPrice) * 100,
+      status: st.status,
+      traitName: st.trait?.name,
+      traitDesc: st.trait?.desc,
+      initialPrice: st.initialPrice
+    };
+  }
+  return {
+    tick: db.tick,
+    tickMs: db.config.tickMs,
+    startedAt: db.startedAt || 0,
+    serverTime: now(),
+    index: { value: db.index.value, series: db.index.series.slice(-600) },
+    stocks,
+    events: db.events.map((e) => ({
+      id: e.id,
+      text: e.text,
+      companies: e.companies,
+      trend: e.trend,
+      remaining: e.remaining,
+      duration: e.duration
+    })),
+    me: me ? publicPlayer(me, db) : null,
+    config: {
+      minLeverage: db.config.minLeverage,
+      maxLeverage: db.config.maxLeverage,
+      feeRate: db.config.feeRate,
+      stampDuty: db.config.stampDuty,
+      loanEnabled: db.config.loanEnabled,
+      loanDailyRate: db.config.loanDailyRate,
+      loanTermHours: db.config.loanTermHours,
+      loanMaxAmount: db.config.loanMaxAmount,
+      startingCash: db.config.startingCash
+    }
+  };
+}
+
+export async function handleApi(ctx) {
+  const db = getDb();
+  const { method, pathname, query, body, res } = ctx;
+
+  // ---------- 登录 ----------
+  if (pathname === '/api/login' && method === 'POST') {
+    if (!db.config.allowRegister) return json(res, 403, { error: '当前关闭注册' });
+    const nickname = String(body.nickname || '').trim().slice(0, 16);
+    const pin = String(body.pin || '').trim();
+    if (nickname.length < 1) return json(res, 400, { error: '昵称不能为空' });
+    if (!/^\d{4}$/.test(pin)) return json(res, 400, { error: 'PIN 必须是 4 位数字' });
+
+    let player = Object.values(db.players).find((p) => p.nickname === nickname);
+    if (player) {
+      if (player.pin !== pin) return json(res, 401, { error: 'PIN 不对' });
+    } else {
+      const id = uid(10);
+      player = {
+        id,
+        nickname,
+        pin,
+        avatar: null,
+        cash: db.config.startingCash ?? 100000,
+        positions: {},
+        loan: null,
+        bankrupt: false,
+        createdAt: now()
+      };
+      db.players[id] = player;
+    }
+
+    const token = uid(32);
+    db.sessions[token] = { playerId: player.id, at: now() };
+    saveDb();
+    return json(res, 200, { token, player: publicPlayer(player, db) });
+  }
+
+  // ---------- 公共行情 ----------
+  if (pathname === '/api/market' && method === 'GET') {
+    const a = auth(ctx);
+    return json(res, 200, marketPayload(db, a?.player));
+  }
+
+  if (pathname === '/api/candles' && method === 'GET') {
+    const code = String(query.code || '').toUpperCase();
+    const tf = String(query.tf || '1m');
+    const group = TIMEFRAMES[tf] || 12;
+    const isIndex = code === 'INDEX';
+    const src = isIndex ? db.index : db.stocks[code];
+    if (!src) return json(res, 404, { error: '标的不存在' });
+    const candles = candlesFromSeries(
+      src.series, group, db.config.tickMs ?? 5000,
+      Math.max(0, db.tick - src.series.length), 400, db.startedAt || 0
+    );
+    return json(res, 200, { code, tf, candles });
+  }
+
+  if (pathname === '/api/leaderboard' && method === 'GET') {
+    const rows = Object.values(db.players).map((p) => {
+      const equity = playerEquity(db, p);
+      const positions = Object.entries(p.positions || {}).map(([code, pos]) => {
+        const st = db.stocks[code];
+        return {
+          code,
+          name: st?.name || code,
+          side: pos.side,
+          qty: pos.qty,
+          entry: pos.entry,
+          price: st?.price ?? 0,
+          leverage: pos.leverage,
+          pnl: st ? positionPnl(pos, st.price) : 0
+        };
+      });
+      return {
+        id: p.id,
+        nickname: p.nickname,
+        avatar: p.avatar || null,
+        cash: p.cash,
+        equity,
+        bankrupt: !!p.bankrupt,
+        positions
+      };
+    });
+    rows.sort((a, b) => b.equity - a.equity);
+    return json(res, 200, { rows });
+  }
+
+  if (pathname === '/api/book' && method === 'GET') {
+    return json(res, 200, { book: db.book.slice().reverse() });
+  }
+
+  // ---------- 管理 ----------
+  if (pathname === '/api/admin/login' && method === 'POST') {
+    if (String(body.pin || '') !== String(db.config.adminPin || '0000')) {
+      return json(res, 401, { error: '管理员口令不对' });
+    }
+    const t = uid(24);
+    db.adminSessions[t] = { at: now() };
+    saveDb();
+    return json(res, 200, { token: t });
+  }
+
+  if (pathname.startsWith('/api/admin/')) {
+    if (!adminAuth(ctx)) return json(res, 401, { error: '需要管理员权限' });
+  }
+
+  if (pathname === '/api/admin/state' && method === 'GET') {
+    return json(res, 200, {
+      config: db.config,
+      stocks: Object.values(db.stocks).map((s) => ({
+        code: s.code,
+        name: s.name,
+        price: s.price,
+        status: s.status,
+        statusUntil: s.statusUntil,
+        traitName: s.trait?.name
+      })),
+      events: db.events,
+      players: Object.values(db.players).map((p) => ({
+        id: p.id,
+        nickname: p.nickname,
+        equity: playerEquity(db, p),
+        cash: p.cash,
+        bankrupt: !!p.bankrupt
+      })),
+      book: db.book.slice().reverse()
+    });
+  }
+
+  if (pathname === '/api/admin/stock' && method === 'POST') {
+    const code = String(body.code || '').toUpperCase();
+    const st = db.stocks[code];
+    if (!st) return json(res, 400, { error: '标的不存在' });
+    const action = String(body.action || '');
+    if (action === 'suspend') {
+      st.status = 'suspended';
+      st.statusUntil = now() + Number(body.hours || 1) * 3600 * 1000;
+    } else if (action === 'resume') {
+      st.status = 'normal';
+      st.statusUntil = 0;
+    } else if (action === 'delist') {
+      st.status = 'delisted';
+      st.statusUntil = 0;
+    } else if (action === 'list') {
+      st.status = 'normal';
+      st.statusUntil = 0;
+    } else if (action === 'set') {
+      if (body.price) {
+        st.price = Number(body.price);
+        st.series.push(Number(body.price.toFixed(4)));
+      }
+      if (body.fair) st.fair = Number(body.fair);
+    } else {
+      return json(res, 400, { error: '未知操作' });
+    }
+    saveDb();
+    return json(res, 200, { ok: true, stock: st });
+  }
+
+  if (pathname === '/api/admin/news' && method === 'POST') {
+    const text = String(body.text || '').trim();
+    if (!text) return json(res, 400, { error: '新闻内容为空' });
+    const companies = Array.isArray(body.companies)
+      ? body.companies.map((c) => String(c).toUpperCase()).filter((c) => db.stocks[c])
+      : [];
+    const trend = Number(body.trend ?? 0.004);
+    const duration = Math.max(1, Math.round(Number(body.duration || 60)));
+    const ev = {
+      id: 'ev_' + Math.random().toString(36).slice(2, 10),
+      text,
+      companies,
+      trend,
+      duration,
+      remaining: duration,
+      createdAt: now(),
+      manual: true
+    };
+    db.events.push(ev);
+    saveDb();
+    return json(res, 200, { ok: true, event: ev });
+  }
+
+  if (pathname === '/api/admin/event/clear' && method === 'POST') {
+    db.events = [];
+    saveDb();
+    return json(res, 200, { ok: true });
+  }
+
+  if (pathname === '/api/admin/config' && method === 'POST') {
+    const patch = body.patch || {};
+    const allowed = [
+      'tickMs', 'baseVolatility', 'meanReversion', 'eventImpactScale',
+      'feeRate', 'stampDuty', 'minLeverage', 'maxLeverage',
+      'eventChance', 'eventDurationMin', 'eventDurationMax',
+      'loanEnabled', 'loanDailyRate', 'loanTermHours', 'loanMaxAmount',
+      'brokerMidpoint', 'brokerSensitivity', 'brokerCap', 'brokerAlpha',
+      'adminPin', 'allowRegister'
+    ];
+    for (const [k, v] of Object.entries(patch)) {
+      if (!allowed.includes(k)) continue;
+      db.config[k] = v;
+    }
+    saveDb();
+    return json(res, 200, { ok: true, config: db.config });
+  }
+
+  // ---------- 需要登录 ----------
+  const a = auth(ctx);
+  if (!a) return json(res, 401, { error: '请先登录' });
+  const me = a.player;
+
+  if (pathname === '/api/me' && method === 'GET') {
+    saveDb();
+    return json(res, 200, { player: publicPlayer(me, db) });
+  }
+
+  if (pathname === '/api/logout' && method === 'POST') {
+    delete db.sessions[a.token];
+    saveDb();
+    return json(res, 200, { ok: true });
+  }
+
+  if (pathname === '/api/avatar' && method === 'POST') {
+    const dataUrl = String(body.dataUrl || '');
+    const m = /^data:image\/(png|jpeg|webp);base64,(.+)$/.exec(dataUrl);
+    if (!m) return json(res, 400, { error: '图片格式不支持' });
+    const buf = Buffer.from(m[2], 'base64');
+    if (buf.length > 800 * 1024) return json(res, 400, { error: '图片太大（限 800KB）' });
+    const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
+    const file = `${me.id}.${ext}`;
+    fs.writeFileSync(path.join(AVATAR_DIR, file), buf);
+    me.avatar = `/avatars/${file}?v=${Date.now()}`;
+    saveDb();
+    return json(res, 200, { avatar: me.avatar });
+  }
+
+  if (pathname === '/api/order' && method === 'POST') {
+    if (me.bankrupt) return json(res, 403, { error: '你已破产，只能看不能玩' });
+    const result = openPosition(db, me, {
+      code: String(body.code || '').toUpperCase(),
+      side: body.side,
+      qty: body.qty,
+      leverage: body.leverage,
+      tp: body.tp,
+      sl: body.sl
+    });
+    if (!result.ok) return json(res, 400, result);
+    saveDb();
+    return json(res, 200, { ok: true, player: publicPlayer(me, db) });
+  }
+
+  if (pathname === '/api/close' && method === 'POST') {
+    const code = String(body.code || '').toUpperCase();
+    const r = closePosition(db, me, code, 'manual');
+    if (!r.ok) return json(res, 400, r);
+    saveDb();
+    return json(res, 200, { ok: true, result: r, player: publicPlayer(me, db) });
+  }
+
+  if (pathname === '/api/tpsl' && method === 'POST') {
+    const code = String(body.code || '').toUpperCase();
+    const pos = me.positions[code];
+    if (!pos) return json(res, 400, { error: '没有这只票的持仓' });
+    pos.tp = body.tp ? Number(body.tp) : null;
+    pos.sl = body.sl ? Number(body.sl) : null;
+    saveDb();
+    return json(res, 200, { ok: true, position: pos });
+  }
+
+  if (pathname === '/api/loan/borrow' && method === 'POST') {
+    const r = borrow(db, me, body.amount);
+    if (!r.ok) return json(res, 400, r);
+    saveDb();
+    return json(res, 200, { ok: true, player: publicPlayer(me, db) });
+  }
+
+  if (pathname === '/api/loan/repay' && method === 'POST') {
+    const r = repay(db, me);
+    if (!r.ok) return json(res, 400, r);
+    saveDb();
+    return json(res, 200, { ok: true, player: publicPlayer(me, db) });
+  }
+
+  return json(res, 404, { error: '接口不存在' });
+}
