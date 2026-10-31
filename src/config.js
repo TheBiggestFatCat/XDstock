@@ -21,10 +21,10 @@ export const DEFAULT_CONFIG = {
   maxOrdersPerTick: 1,      // 每人每轮最多下几单（防止刷成交额抬小灯证券）
 
   // ---- 新闻 ----
-  eventChance: 0.015,       // 每 tick 出全球新闻的概率
-  localEventChance: 0.004,  // 每 tick 出「突发」的概率
-  eventDurationMin: 30,     // 新闻持续 tick 数
-  eventDurationMax: 90,
+  eventChance: 0.012,       // 每 tick 触发一条新新闻的概率
+  // 每条新闻总时长 80~200 轮（见 engine.js 的两阶段机制）
+  eventDurationMin: 80,
+  eventDurationMax: 200,
 
   // ---- 丰川银行（高利贷）----
   loanEnabled: true,

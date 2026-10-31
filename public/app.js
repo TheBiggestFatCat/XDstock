@@ -249,10 +249,14 @@ const NEWS_BADGE = {
 };
 
 function newsBadge(ev) {
-  const up = (ev.trend || 0) > 0;
+  // 看消息本身是利好还是利空，而不是当前价格在涨还是在跌
+  const up = (ev.dir !== undefined ? ev.dir : (ev.trend || 0)) > 0;
   const table = NEWS_BADGE[ev.kind] || NEWS_BADGE.global;
   const [label, klass] = up ? table.up : table.down;
-  return `<span class="news-badge ${klass}">${label}</span>`;
+  // 公布后如果走了反转，额外标一下，让玩家知道「消息出来反而跌」
+  const flip = ev.after === 'reverse'
+    ? '<span class="news-flip" title="消息公布后走势反转">反</span>' : '';
+  return `<span class="news-badge ${klass}">${label}</span>${flip}`;
 }
 
 function renderNews() {
@@ -344,6 +348,8 @@ function renderMAs() {
   for (const period of [5, 10, 30]) {
     const series = state.maSeries[period];
     if (!series) continue;
+    // 关键：visible:false 创建出来的线，setData 不会自动显示，必须显式切可见性
+    series.applyOptions({ visible: !!state.maVisible[period] });
     if (!state.maVisible[period]) {
       series.setData([]);
       continue;
@@ -1061,7 +1067,7 @@ async function publishNews() {
     await adminApi('/api/admin/news', {
       text,
       companies,
-      trend: Number($('#newsTrend').value),
+      dir: Number($('#newsDir').value),
       duration: Number($('#newsDuration').value)
     });
     toast('新闻已发布', 'ok');
@@ -1176,7 +1182,13 @@ function bind() {
       if (b.dataset.qty === 'max') {
         if (!st) return;
         const cash = state.market?.me?.cash || 0;
-        const qty = Math.floor((cash * lev) / st.price);
+        const cfg = state.market?.config || {};
+        // 先算清每 1 股要花多少钱：保证金 + 手续费 + 卖出方向的印花税
+        const perShare = st.price / lev
+          + st.price * (cfg.feeRate || 0)
+          + st.price * (state.side === 'short' ? (cfg.stampDuty || 0) : 0);
+        // 留 0.5% 余量，避免浮点误差和结算时价格跳动导致「现金不足」
+        const qty = Math.floor((cash * 0.995) / perShare);
         $('#orderQty').value = Math.max(1, qty);
       } else {
         $('#orderQty').value = b.dataset.qty;

@@ -634,3 +634,10 @@ input.tpsl-input {
 .trade-panel.is-closed { opacity: .72; }
 
 .market-ctrl .btn { white-space: nowrap; flex: none; }
+
+.news-flip {
+  display: inline-block; margin-left: 4px;
+  font-size: 10px; font-weight: 700; line-height: 1;
+  padding: 3px 5px; border-radius: 6px;
+  background: #fef2f2; color: #dc2626; border: 1px solid #fecaca;
+}

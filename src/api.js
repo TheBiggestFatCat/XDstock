@@ -158,6 +158,8 @@ function marketPayload(db, me) {
         kind: e.kind || 'global',
         text: e.text,
         companies: e.companies,
+        dir: e.dir || (e.trend > 0 ? 1 : -1),
+        after: e.after || null,
         trend: e.trend,
         remaining: e.remaining,
         duration: e.duration,
@@ -380,16 +382,23 @@ export async function handleApi(ctx) {
     const companies = Array.isArray(body.companies)
       ? body.companies.map((c) => String(c).toUpperCase()).filter((c) => db.stocks[c])
       : [];
-    const trend = Number(body.trend ?? 0.004);
-    const duration = Math.max(1, Math.round(Number(body.duration || 60)));
+    const dir = Number(body.dir ?? 1) >= 0 ? 1 : -1;
+    const duration = Math.min(200, Math.max(80, Math.round(Number(body.duration || 120))));
+    const leakTicks = Math.min(10, Math.max(5, Math.round(Number(body.leakTicks || 7))));
+    // 手动新闻也走两阶段：先偷跑 5~10 轮，再公布
     const ev = {
       id: 'ev_' + Math.random().toString(36).slice(2, 10),
+      kind: 'leak',
       text,
       companies,
-      trend,
+      dir,
+      trend: dir * (0.005 + Math.random() * 0.004),
+      leakTicks,
+      leakLeft: leakTicks,
       duration,
       remaining: duration,
       createdAt: now(),
+      announced: false,
       manual: true
     };
     db.events.push(ev);

@@ -274,9 +274,15 @@
             <label class="field"><span>涉及标的（不选 = 全市场）</span></label>
             <div id="newsStocks" class="chip-select"></div>
             <div class="row-2">
-              <label class="field"><span>冲击（每 tick）</span><input id="newsTrend" type="number" step="0.001" value="0.004" /></label>
-              <label class="field"><span>持续（tick）</span><input id="newsDuration" type="number" step="10" value="60" /></label>
+              <label class="field"><span>方向</span>
+                <select id="newsDir">
+                  <option value="1">利好</option>
+                  <option value="-1">利空</option>
+                </select>
+              </label>
+              <label class="field"><span>持续（轮，80~200）</span><input id="newsDuration" type="number" step="10" value="120" /></label>
             </div>
+            <p class="panel-sub" style="margin:-4px 0 12px">发布后先偷跑 5~10 轮，再公布消息</p>
             <button id="newsBtn" class="btn btn-primary">发布新闻</button>
             <div id="activeEvents" class="active-events"></div>
           </div>

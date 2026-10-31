@@ -1,8 +1,12 @@
-﻿node_modules/
+node_modules/
 data/
 _shots/
-_chrome_profile/
 _shots_tokens.json
 *.log
 package-lock.json
 .DS_Store
+
+# 测试用的临时文件
+_chrome_profile*/
+_*.mjs
+deploy_pkg.tar.gz

@@ -8,7 +8,7 @@ import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, positionPnl } from './src/trading.js';
 import { accrueLoans } from './src/loans.js';
 import { handleApi } from './src/api.js';
-import { GLOBAL_NEWS, LOCAL_NEWS } from './src/news.js';
+import { NEWS_POOL } from './src/news.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -17,8 +17,12 @@ const PORT = Number(process.env.PORT || 8971);
 
 const db = getDb();
 // 新闻池以代码为准，每次启动都刷新（改 news.js 后重启即可生效）
-db.newsPool = GLOBAL_NEWS;
-db.localNewsPool = LOCAL_NEWS;
+db.newsPool = NEWS_POOL;
+db.localNewsPool = [];
+// 清掉旧机制留下的新闻（没有 leakTicks 字段的都是上一版的）
+const stale = (db.events || []).filter((e) => typeof e.leakTicks !== 'number');
+db.events = (db.events || []).filter((e) => typeof e.leakTicks === 'number');
+if (stale.length) console.log(`  清理了 ${stale.length} 条旧格式新闻`);
 saveDb(true);
 
 // 全新存档：先空跑两小时把 K 线铺出来
@@ -228,6 +232,8 @@ function tickPayload(forPlayerId) {
         kind: e.kind || 'global',
         text: e.text,
         companies: e.companies,
+        dir: e.dir || (e.trend > 0 ? 1 : -1),
+        after: e.after || null,
         trend: e.trend,
         remaining: e.remaining,
         createdAt: e.createdAt
