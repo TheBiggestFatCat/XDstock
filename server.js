@@ -64,9 +64,10 @@ function serveStatic(res, filePath) {
       return;
     }
     const ext = path.extname(filePath).toLowerCase();
+    const noCache = ['.html', '.js', '.css'].includes(ext);
     res.writeHead(200, {
       'Content-Type': MIME[ext] || 'application/octet-stream',
-      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=600'
+      'Cache-Control': noCache ? 'no-cache, must-revalidate' : 'public, max-age=3600'
     });
     fs.createReadStream(filePath).pipe(res);
   });

@@ -76,7 +76,7 @@ async function doLogin() {
   const msg = $('#loginMsg');
   msg.textContent = '';
   if (!nickname) { msg.textContent = '先填个昵称'; return; }
-  if (!/^\d{4}$/.test(pin)) { msg.textContent = 'PIN 必须是 4 位数字'; return; }
+  if (!/^\d{6}$/.test(pin)) { msg.textContent = 'PIN 必须是 6 位数字'; return; }
   $('#loginBtn').disabled = true;
   try {
     const r = await api('/api/login', { method: 'POST', body: JSON.stringify({ nickname, pin }) });

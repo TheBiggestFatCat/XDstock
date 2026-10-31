@@ -15,6 +15,36 @@ node server.js
 - 老账号还是 4 位 PIN 的：照常用旧 PIN 登录，进去后会被要求设置新 6 位 PIN
   （此时 token 只能用来改密码，其它接口全部 403）
 
+## 线上部署
+
+已经部署在 `47.103.83.218`，直接访问：
+
+```
+http://47.103.83.218/
+```
+
+| 项 | 值 |
+|---|---|
+| 目录 | `/opt/xdstock` |
+| 服务 | `systemd` 的 `xdstock.service`（开机自启、崩溃自动重启） |
+| 端口 | 80（外网可直接访问，其它端口被云安全组挡了） |
+| Node | `/opt/node/bin/node` v22.14.0 |
+| 内存占用 | 约 15 MB |
+| 数据 | `/opt/xdstock/data/db.json`，备份在 `data/backups/` |
+
+常用命令：
+
+```bash
+systemctl status xdstock      # 看状态
+systemctl restart xdstock     # 重启（改代码后）
+journalctl -u xdstock -f      # 看实时日志
+```
+
+更新代码：把改动的文件传到 `/opt/xdstock` 对应位置，然后 `systemctl restart xdstock`。
+
+> 服务器上原本的 QQ 机器人（astrbot / snowluma / t2i-service / dashscope-shim）
+> 已经全部停止，并把重启策略改成了 `no`，开机不会自己起来。
+
 ## 技术栈
 
 | 层 | 选择 | 理由 |
