@@ -531,6 +531,7 @@ function onTick(d) {
   updatePriceLines();
   renderPositions();
   if ($('#view-portfolio').classList.contains('active')) renderPortfolio();
+  if ($('#view-rank').classList.contains('active')) loadRank();
   if ($('#view-loan').classList.contains('active')) renderLoan();
   if (d.closes && d.closes.length) handleCloses(d.closes);
 }
@@ -1032,10 +1033,19 @@ async function loadBook() {
 }
 
 // ---------------- 排行榜 ----------------
-async function loadRank() {
+async function loadRank(force = false) {
   try {
     const d = await api('/api/leaderboard');
     const wrap = $('#rankTable');
+    const sig = d.rows
+      .map((r) => `${r.id}:${Math.round(r.equity)}:${r.cash.toFixed(0)}:${r.positions.length}`)
+      .join('|');
+    if (!force && sig === state.rankSig && wrap.querySelector('table')) {
+      const t = $('#rankTime');
+      if (t) t.textContent = '刚刚同步';
+      return;
+    }
+    state.rankSig = sig;
     wrap.innerHTML = `
       <table>
         <thead><tr><th>#</th><th>玩家</th><th>总资产</th><th>现金</th><th>持仓</th></tr></thead>
@@ -1269,7 +1279,7 @@ function switchView(name) {
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + name));
   if (name === 'portfolio') { renderPortfolio(); loadTrades(); }
   if (name === 'loan') renderLoan();
-  if (name === 'rank') loadRank();
+  if (name === 'rank') loadRank(true);
   if (name === 'admin') {
     if (state.adminToken) loadAdmin();
     else {
@@ -1394,7 +1404,6 @@ function bind() {
     e.target.value = '';
   });
 
-  $('#refreshRank').addEventListener('click', loadRank);
   $('#refreshTrades')?.addEventListener('click', loadTrades);
   $('#adminLoginBtn').addEventListener('click', adminLogin);
   $('#newsBtn').addEventListener('click', publishNews);
