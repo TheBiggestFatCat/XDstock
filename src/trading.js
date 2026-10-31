@@ -3,7 +3,7 @@ import { now } from './store.js';
 const TRADE_LOG_MAX = 4000;
 
 /** 记一条交易流水（超出上限就丢最老的） */
-function logTrade(db, entry) {
+export function logTrade(db, entry) {
   if (!Array.isArray(db.trades)) db.trades = [];
   db.trades.push({
     id: 't_' + Math.random().toString(36).slice(2, 10),

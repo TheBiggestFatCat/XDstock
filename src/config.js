@@ -32,7 +32,7 @@ export const DEFAULT_CONFIG = {
   // ---- 偷钱 ----
   stealMin: 100,            // 单次最少偷多少
   stealMax: 10000,          // 单次最多偷多少
-  stealCapRatio: 0.01,      // 上限：被偷人现金的 1%
+  stealCapRatio: 0.001,     // 上限：被偷人「总资产」的 0.1%（实际只能从现金里拿）
   stealTopN: 3,             // 只能偷排行榜前几名
 
   // ---- 券商特质（小灯证券）----

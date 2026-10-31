@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { getDb, saveDb, now, backupDb } from './src/store.js';
 import { stepMarket, seedHistory, changesFor } from './src/engine.js';
 import { TIMEFRAMES } from './src/config.js';
-import { checkPositions, playerEquity, positionPnl } from './src/trading.js';
+import { checkPositions, playerEquity, positionPnl, logTrade } from './src/trading.js';
 import { handleApi } from './src/api.js';
 import { NEWS_POOL } from './src/news.js';
 
@@ -320,18 +320,72 @@ function loop() {
     const victim = d.players[q.targetId];
     if (!victim || victim.id === p.id) continue;
 
-    const cap = Math.max(0, victim.cash) * capRatio;
-    const want = stealMin + Math.random() * Math.max(0, stealMax - stealMin);
-    const amount = Math.floor(Math.min(want, cap, Math.max(0, victim.cash)));
-
-    if (amount < 1) {
+    // 边界一：对方现金必须 > 0，否则没得偷
+    const victimCash = Math.max(0, Number(victim.cash) || 0);
+    if (victimCash < 1) {
       pushAlert(p.id, { type: 'steal', ok: false, target: victim.nickname, amount: 0 });
       continue;
     }
 
-    victim.cash -= amount;
-    p.cash += amount;
+    // 边界二：上限按「总资产」算，但总资产可能是负的（浮亏爆表），先夹到 0
+    const equity = Math.max(0, playerEquity(d, victim));
+    const cap = equity * capRatio;
+
+    // 边界三：随机区间可能小于 0（配置写反），兜一下
+    const lo = Math.max(0, Math.min(stealMin, stealMax));
+    const hi = Math.max(lo, stealMax);
+    const want = lo + Math.random() * (hi - lo);
+
+    // 边界四：取三者最小，再保证不超过对方现金、不出现负数
+    let amount = Math.floor(Math.min(want, cap, victimCash));
+    if (!Number.isFinite(amount) || amount < 0) amount = 0;
+
+    // 边界五：兜底 1 块钱以下的变动没意义，直接算空手
+    if (amount < 1 || victimCash <= 0) {
+      pushAlert(p.id, { type: 'steal', ok: false, target: victim.nickname, amount: 0 });
+      continue;
+    }
+
+    // 边界六：真扣的时候再夹一次，绝不让现金变负
+    amount = Math.min(amount, victimCash);
+    victim.cash = Math.max(0, victimCash - amount);
+    p.cash = (Number(p.cash) || 0) + amount;
     p.stealEarned = (p.stealEarned || 0) + amount;
+
+    // 双方都记一笔流水
+    logTrade(d, {
+      playerId: p.id,
+      nickname: p.nickname,
+      code: '',
+      name: `偷了 ${victim.nickname}`,
+      action: 'steal',
+      side: 'long',
+      qty: 0,
+      price: 0,
+      leverage: 1,
+      amount,
+      pnl: amount,
+      fee: 0,
+      stamp: 0,
+      reason: 'steal'
+    });
+    logTrade(d, {
+      playerId: victim.id,
+      nickname: victim.nickname,
+      code: '',
+      name: `被 ${p.nickname} 偷走`,
+      action: 'stolen',
+      side: 'long',
+      qty: 0,
+      price: 0,
+      leverage: 1,
+      amount,
+      pnl: -amount,
+      fee: 0,
+      stamp: 0,
+      reason: 'stolen'
+    });
+
     pushAlert(p.id, { type: 'steal', ok: true, mine: true, target: victim.nickname, amount });
     pushAlert(victim.id, { type: 'steal', ok: true, mine: false, from: p.nickname, amount });
   }

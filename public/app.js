@@ -929,7 +929,9 @@ const REASON_LABEL = {
   tp: ['止盈', 'pill long'],
   sl: ['止损', 'pill short'],
   liquidated: ['爆仓', 'pill short'],
-  delisted: ['退市', 'pill short']
+  delisted: ['退市', 'pill short'],
+  steal: ['偷来的', 'pill long'],
+  stolen: ['被偷了', 'pill short']
 };
 
 function fmtTime(ts) {
@@ -956,8 +958,9 @@ async function loadTrades() {
         <tbody>
           ${d.rows.map((t) => {
             const [label, klass] = REASON_LABEL[t.reason] || ['手动', 'pill gray'];
+            const isSteal = t.action === 'steal' || t.action === 'stolen';
             const isOpen = t.action === 'open';
-            const pnlCell = t.action === 'close'
+            const pnlCell = (t.action === 'close' || isSteal)
               ? `<span class="${cls(t.pnl)}">${money(t.pnl)}</span>`
               : '<span class="stock-code">—</span>';
             // 手续费 = 交易手续费 + 印花税（做空开仓、平多卖出时才有印花税）
@@ -970,14 +973,14 @@ async function loadTrades() {
               : money(t.margin ?? 0);
             return `<tr>
               <td class="stock-code">${fmtTime(t.at)}</td>
-              <td>${t.name || t.code} <span class="stock-code">${t.code}</span></td>
-              <td>${isOpen ? '开仓' : '平仓'}</td>
-              <td><span class="pill ${t.side}">${t.side === 'long' ? '多' : '空'}</span></td>
-              <td>${t.qty}</td>
-              <td>${Number(t.price).toFixed(2)}</td>
-              <td>${(t.leverage || 1).toFixed(1)}x</td>
-              <td>${amountCell}</td>
-              <td>${feeCell}</td>
+              <td>${t.name || t.code}${t.code ? ` <span class="stock-code">${t.code}</span>` : ''}</td>
+              <td>${isSteal ? (t.action === 'steal' ? '偷钱' : '被偷') : isOpen ? '开仓' : '平仓'}</td>
+              <td>${isSteal ? '<span class="stock-code">—</span>' : `<span class="pill ${t.side}">${t.side === 'long' ? '多' : '空'}</span>`}</td>
+              <td>${isSteal ? '—' : t.qty}</td>
+              <td>${isSteal ? '—' : Number(t.price).toFixed(2)}</td>
+              <td>${isSteal ? '—' : (t.leverage || 1).toFixed(1) + 'x'}</td>
+              <td>${isSteal ? money(t.amount || 0) : amountCell}</td>
+              <td>${isSteal ? '<span class="stock-code">—</span>' : feeCell}</td>
               <td>${pnlCell}</td>
               <td><span class="${klass}">${label}</span></td>
             </tr>`;
@@ -1079,8 +1082,9 @@ async function loadRank(force = false) {
               } else if (r.cash <= 0) {
                 actionCell = '<span class="stock-code">没现金</span>';
               } else {
-                const maxTake = Math.floor(r.cash * Number(cfg.stealCapRatio ?? 0.01));
-                actionCell = `<button class="steal-btn" data-steal="${r.id}" data-name="${escapeHtml(r.nickname)}" title="最多能偷 ${money(maxTake)}">偷钱</button>`;
+                const capByEquity = Math.floor(r.equity * Number(cfg.stealCapRatio ?? 0.001));
+                const maxTake = Math.max(0, Math.min(capByEquity, r.cash));
+                actionCell = `<button class="steal-btn" data-steal="${r.id}" data-name="${escapeHtml(r.nickname)}" title="总资产 0.1% = ${money(capByEquity)}，实际最多能拿走 ${money(maxTake)}">偷钱</button>`;
               }
             }
             return `<tr class="${mine}">
@@ -1107,6 +1111,7 @@ async function stealFrom(targetId, name) {
     const r = await api('/api/steal', { method: 'POST', body: JSON.stringify({ targetId }) });
     if (state.market?.me) state.market.me.stealQueued = { targetId };
     toast(`小偷已出发，准备偷 ${name}`, 'ok');
+    if ($('#view-portfolio').classList.contains('active')) loadTrades();
     loadRank(true);
   } catch (e) {
     toast(e.message, 'err');
