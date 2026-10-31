@@ -176,8 +176,7 @@ function marketPayload(db, me) {
       workReward: db.config.workReward ?? 1000,
       stealMin: db.config.stealMin ?? 100,
       stealMax: db.config.stealMax ?? 10000,
-      stealCapRatio: db.config.stealCapRatio ?? 0.01,
-      stealTopN: db.config.stealTopN ?? 3,
+      stealCapRatio: db.config.stealCapRatio ?? 0.001,
       startingCash: db.config.startingCash
     }
   };
@@ -451,7 +450,7 @@ export async function handleApi(ctx) {
       'tickMs', 'baseVolatility', 'meanReversion', 'eventImpactScale',
       'feeRate', 'stampDuty', 'minLeverage', 'maxLeverage',
       'eventChance', 'localEventChance', 'eventDurationMin', 'eventDurationMax',
-      'workReward', 'stealMin', 'stealMax', 'stealCapRatio', 'stealTopN',
+      'workReward', 'stealMin', 'stealMax', 'stealCapRatio',
       'maxOrdersPerTick',
       'brokerMidpoint', 'brokerSensitivity', 'brokerCap', 'brokerAlpha',
       'adminPin', 'allowRegister', 'marketOpen', 'pinLength'
@@ -562,17 +561,6 @@ export async function handleApi(ctx) {
     const victim = db.players[targetId];
     if (!victim) return json(res, 404, { error: '没这个人' });
     if (victim.id === me.id) return json(res, 400, { error: '偷自己不算本事' });
-
-    // 只能偷排行榜前 N 名（按总资产实时算）
-    const topN = Number(db.config.stealTopN ?? 3);
-    const ranked = Object.values(db.players)
-      .map((p) => ({ id: p.id, equity: playerEquity(db, p) }))
-      .sort((a, b) => b.equity - a.equity)
-      .slice(0, topN)
-      .map((r) => r.id);
-    if (!ranked.includes(victim.id)) {
-      return json(res, 400, { error: `只能偷排行榜前 ${topN} 名` });
-    }
 
     if (me.stealQueued) return json(res, 429, { error: '这一轮已经派过小偷了，等下一轮' });
     if (victim.cash <= 0) return json(res, 400, { error: `${victim.nickname} 口袋比脸还干净` });

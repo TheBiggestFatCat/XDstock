@@ -1071,12 +1071,10 @@ async function loadRank(force = false) {
               ? r.positions.map((p) => `<span class="pill ${p.side}">${p.name} ${p.side === 'long' ? '多' : '空'} ×${p.qty} @${(p.leverage || 1).toFixed(0)}x</span>`).join(' ')
               : '<span class="stock-code">空仓</span>';
             const cfg = state.market?.config || {};
-            const topN = Number(cfg.stealTopN ?? 3);
             const queued = !!state.market?.me?.stealQueued;
-            const isTop = i < topN;
             const isMe = r.id === state.market?.me?.id;
             let actionCell = '<span class="stock-code">—</span>';
-            if (isTop && !isMe) {
+            if (!isMe) {
               if (queued) {
                 actionCell = '<span class="steal-done">已派出</span>';
               } else if (r.cash <= 0) {
