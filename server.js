@@ -223,7 +223,8 @@ function tickPayload(forPlayerId) {
       workQueued: !!p.workQueued,
       workEarned: p.workEarned || 0,
       stealQueued: p.stealQueued || null,
-      stealEarned: p.stealEarned || 0
+      stealEarned: p.stealEarned || 0,
+      stealReadyAt: p.stealReadyAt || 0
     };
   }
   return {
@@ -305,7 +306,8 @@ function loop() {
   // 偷钱结算：上一轮派出去的，这一轮动手
   const stealMin = Number(d.config.stealMin ?? 100);
   const stealMax = Number(d.config.stealMax ?? 10000);
-  const capRatio = Number(d.config.stealCapRatio ?? 0.01);
+  const capRatio = Number(d.config.stealCapRatio ?? 0.001);
+  const stealCd = Math.max(0, Number(d.config.stealCooldownTicks ?? 60));
   const stealAlerts = new Map();   // playerId -> [alert...]
   const pushAlert = (id, alert) => {
     if (!stealAlerts.has(id)) stealAlerts.set(id, []);
@@ -351,6 +353,8 @@ function loop() {
     victim.cash = Math.max(0, victimCash - amount);
     p.cash = (Number(p.cash) || 0) + amount;
     p.stealEarned = (p.stealEarned || 0) + amount;
+    // 得手才进冷却，空手不罚
+    if (stealCd > 0) p.stealReadyAt = d.tick + stealCd;
 
     // 双方都记一笔流水
     logTrade(d, {
@@ -386,7 +390,7 @@ function loop() {
       reason: 'stolen'
     });
 
-    pushAlert(p.id, { type: 'steal', ok: true, mine: true, target: victim.nickname, amount });
+    pushAlert(p.id, { type: 'steal', ok: true, mine: true, target: victim.nickname, amount, cd: stealCd });
     pushAlert(victim.id, { type: 'steal', ok: true, mine: false, from: p.nickname, amount });
   }
 

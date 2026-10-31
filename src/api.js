@@ -72,6 +72,7 @@ function publicPlayer(p, db) {
     workEarned: p.workEarned || 0,
     stealQueued: p.stealQueued || null,
     stealEarned: p.stealEarned || 0,
+    stealReadyAt: p.stealReadyAt || 0,
     createdAt: p.createdAt
   };
 }
@@ -177,6 +178,7 @@ function marketPayload(db, me) {
       stealMin: db.config.stealMin ?? 100,
       stealMax: db.config.stealMax ?? 10000,
       stealCapRatio: db.config.stealCapRatio ?? 0.001,
+      stealCooldownTicks: db.config.stealCooldownTicks ?? 60,
       startingCash: db.config.startingCash
     }
   };
@@ -243,6 +245,7 @@ export async function handleApi(ctx) {
         workEarned: 0,
         stealQueued: null,
         stealEarned: 0,
+        stealReadyAt: 0,
         createdAt: now()
       };
       db.players[id] = player;
@@ -450,7 +453,7 @@ export async function handleApi(ctx) {
       'tickMs', 'baseVolatility', 'meanReversion', 'eventImpactScale',
       'feeRate', 'stampDuty', 'minLeverage', 'maxLeverage',
       'eventChance', 'localEventChance', 'eventDurationMin', 'eventDurationMax',
-      'workReward', 'stealMin', 'stealMax', 'stealCapRatio',
+      'workReward', 'stealMin', 'stealMax', 'stealCapRatio', 'stealCooldownTicks',
       'maxOrdersPerTick',
       'brokerMidpoint', 'brokerSensitivity', 'brokerCap', 'brokerAlpha',
       'adminPin', 'allowRegister', 'marketOpen', 'pinLength'
@@ -561,6 +564,18 @@ export async function handleApi(ctx) {
     const victim = db.players[targetId];
     if (!victim) return json(res, 404, { error: '没这个人' });
     if (victim.id === me.id) return json(res, 400, { error: '偷自己不算本事' });
+
+    // 冷却中直接拦下来
+    const cdUntil = Number(me.stealReadyAt) || 0;
+    if (db.tick < cdUntil) {
+      const left = cdUntil - db.tick;
+      const ms = left * Number(db.config.tickMs || 5000);
+      return json(res, 429, {
+        error: `偷钱冷却中，还要等 ${left} 轮（约 ${Math.ceil(ms / 60000)} 分钟）`,
+        cooldownLeft: left,
+        readyAt: cdUntil
+      });
+    }
 
     if (me.stealQueued) return json(res, 429, { error: '这一轮已经派过小偷了，等下一轮' });
     if (victim.cash <= 0) return json(res, 400, { error: `${victim.nickname} 口袋比脸还干净` });

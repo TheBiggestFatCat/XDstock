@@ -655,7 +655,10 @@ function handleAlerts(list) {
       toast(`小偷空手而归：${a.target} 身上没现金`, 'err');
       continue;
     }
-    if (a.mine) toast(`🥷 从 ${a.target} 那里偷到了 ${money(a.amount)}`, 'ok');
+    if (a.mine) {
+      const cdNote = a.cd ? `（冷却 ${a.cd} 轮）` : '';
+      toast(`🥷 从 ${a.target} 那里偷到了 ${money(a.amount)}${cdNote}`, 'ok');
+    }
     else toast(`🚨 ${a.from} 偷走了你 ${money(a.amount)}！`, 'err');
   }
 }
@@ -1071,11 +1074,16 @@ async function loadRank(force = false) {
               ? r.positions.map((p) => `<span class="pill ${p.side}">${p.name} ${p.side === 'long' ? '多' : '空'} ×${p.qty} @${(p.leverage || 1).toFixed(0)}x</span>`).join(' ')
               : '<span class="stock-code">空仓</span>';
             const cfg = state.market?.config || {};
-            const queued = !!state.market?.me?.stealQueued;
-            const isMe = r.id === state.market?.me?.id;
+            const meNow = state.market?.me || {};
+            const queued = !!meNow.stealQueued;
+            const isMe = r.id === meNow.id;
+            const tickNow = state.market?.tick || 0;
+            const cdLeft = Math.max(0, (Number(meNow.stealReadyAt) || 0) - tickNow);
             let actionCell = '<span class="stock-code">—</span>';
             if (!isMe) {
-              if (queued) {
+              if (cdLeft > 0) {
+                actionCell = `<span class="steal-cd" title="冷却结束后可以再偷">冷却 ${cdLeft}</span>`;
+              } else if (queued) {
                 actionCell = '<span class="steal-done">已派出</span>';
               } else if (r.cash <= 0) {
                 actionCell = '<span class="stock-code">没现金</span>';
@@ -1275,6 +1283,7 @@ async function loadAdmin() {
     ['workReward', '每次打工工资'],
     ['stealMin', '偷钱最少金额'], ['stealMax', '偷钱最多金额'],
     ['stealCapRatio', '偷钱上限比例(0.001=0.1%)'],
+    ['stealCooldownTicks', '偷钱冷却(轮)'],
     ['adminPin', '管理员口令', 'text'], ['allowRegister', '开放注册(1/0)']
   ];
   $('#configForm').innerHTML = cfgFields.map(([k, label, type]) => {
