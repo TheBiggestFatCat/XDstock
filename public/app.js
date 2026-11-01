@@ -1033,22 +1033,6 @@ async function placeOrder() {
   }
 }
 
-async function closePos(code) {
-  try {
-    const r = await api('/api/close', { method: 'POST', body: JSON.stringify({ code }) });
-    state.market.me = r.player;
-    renderPositions();
-    renderTopbar();
-    updatePriceLines();
-    if ($('#view-portfolio').classList.contains('active')) loadTrades();
-    if (state.listTab === 'positions') renderSidePositions();
-    loadMyTrades();
-    const pnl = r.result.pnl;
-    toast(`平仓 ${r.result.code}，${pnl >= 0 ? '盈利' : '亏损'} ${money(Math.abs(pnl))}`, pnl >= 0 ? 'ok' : 'err');
-  } catch (e) {
-    toast(e.message, 'err');
-  }
-}
 
 function positionSignature(pos) {
   return pos
@@ -1121,15 +1105,12 @@ function renderPositions(force = false) {
               <input class="tpsl-input" data-code="${p.code}" data-field="tp" type="number" step="0.01" value="${p.tp ?? ''}" placeholder="止盈" />
               <input class="tpsl-input" data-code="${p.code}" data-field="sl" type="number" step="0.01" value="${p.sl ?? ''}" placeholder="止损" />
             </td>
-            <td><button class="mini-btn danger" data-close="${p.code}">平仓</button></td>
+            <td class="op-hint">用右上「平仓」挂单</td>
           </tr>`;
         }).join('')}
       </tbody>
     </table>`;
 
-  wrap.querySelectorAll('[data-close]').forEach((b) => {
-    b.addEventListener('click', () => closePos(b.dataset.close));
-  });
   wrap.querySelectorAll('.tpsl-input').forEach((inp) => {
     inp.addEventListener('change', async () => {
       const code = inp.dataset.code;
@@ -1187,14 +1168,11 @@ function renderPortfolio() {
             <td>${p.price.toFixed(2)}</td>
             <td class="${cls(p.pnl)}">${money(p.pnl)}</td>
             <td>${money(p.margin)}</td>
-            <td><button class="mini-btn danger" data-close="${p.code}">平仓</button></td>
+            <td class="op-hint">用行情页「平仓」挂单</td>
           </tr>`;
         }).join('')}
       </tbody>
     </table>`;
-  wrap.querySelectorAll('[data-close]').forEach((b) => {
-    b.addEventListener('click', () => closePos(b.dataset.close));
-  });
 }
 
 // ---------------- 交易记录 ----------------

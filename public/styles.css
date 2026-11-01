@@ -1241,3 +1241,6 @@ input.tpsl-input {
   margin: 0 0 10px;
 }
 .close-hint.hidden { display: none; }
+
+/* 平仓按钮移除后的说明文字 */
+.op-hint { font-size: 11px; color: var(--ink-3); white-space: nowrap; }
