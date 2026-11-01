@@ -125,6 +125,12 @@ function migrate(d) {
     };
   }
   merged.stocks[INDEX_STOCK.code].isIndex = true;
+
+  // 老存档补上 ST 字段
+  for (const s2 of Object.values(merged.stocks)) {
+    if (typeof s2.stTicks !== 'number') s2.stTicks = 0;
+    if (typeof s2.st !== 'boolean') s2.st = false;
+  }
   // 指数标的的历史用指数序列补全，否则各周期涨跌幅会算成同一个数
   const idxStock = merged.stocks[INDEX_STOCK.code];
   const idxSeries = merged.index?.series || [];

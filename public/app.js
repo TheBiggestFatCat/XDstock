@@ -220,6 +220,44 @@ function renderTopbar() {
   $('#tickInfo').textContent = '第 ' + m.tick + ' 轮 · ' + (m.tickMs / 1000) + 's';
 }
 
+const ST_DEFAULT_PRICE = 3;
+
+/** 图表上方的 ST / 退市提示条 */
+function renderStBanner(st) {
+  let el = $('#stBanner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'stBanner';
+    el.className = 'st-banner hidden';
+    const head = document.querySelector('.chart-head');
+    if (head && head.parentNode) head.parentNode.insertBefore(el, head.nextSibling);
+  }
+  if (!el || !st) return;
+
+  const cfg = state.market?.config || {};
+  const line = Number(cfg.stPrice ?? ST_DEFAULT_PRICE);
+  const limit = Number(cfg.stDelistTicks ?? 100);
+  const left = Math.max(0, limit - (st.stTicks || 0));
+
+  if (st.status === 'delisted') {
+    el.className = 'st-banner delisted';
+    el.innerHTML = `🚫 已退市 · 该标的停止交易，持仓已按最后价强制平仓`;
+    return;
+  }
+  if (!st.st) {
+    el.className = 'st-banner hidden';
+    el.innerHTML = '';
+    return;
+  }
+  const pctLeft = limit > 0 ? Math.min(100, ((st.stTicks || 0) / limit) * 100) : 0;
+  el.className = 'st-banner';
+  el.innerHTML = `
+    <span class="st-tag">ST</span>
+    <span>股价已连续 <b>${st.stTicks}</b> 轮低于 ${line.toFixed(2)} 元</span>
+    <span class="st-countdown">再连续 ${left} 轮不回到 ${line.toFixed(2)} 上方就退市</span>
+    <span class="st-bar"><i style="width:${pctLeft.toFixed(1)}%"></i></span>`;
+}
+
 function renderStockList() {
   const m = state.market;
   if (!m) return;
@@ -232,10 +270,11 @@ function renderStockList() {
     div.className = 'stock-item' + (st.code === state.code ? ' active' : '') + (st.status !== 'normal' ? ' suspended' : '');
     div.dataset.code = st.code;
     const statusTag = st.status === 'suspended' ? ' · 停牌' : st.status === 'delisted' ? ' · 退市' : '';
+    const stBadge = st.st && st.status !== 'delisted' ? '<span class="st-badge">ST</span>' : '';
     div.innerHTML = `
       <img class="stock-icon" src="${st.icon || ''}" alt="${st.name}" loading="lazy" />
       <div class="stock-main">
-        <div class="stock-name">${st.name}<span class="stock-code">${st.code}${statusTag}</span></div>
+        <div class="stock-name">${stBadge}${st.name}<span class="stock-code">${st.code}${statusTag}</span></div>
       </div>
       <div class="stock-right">
         <div class="stock-price ${cls(chg)}" data-price="${st.code}">${st.price.toFixed(2)}</div>
@@ -854,7 +893,11 @@ function selectStock(code) {
   const st = state.market.stocks[code];
   if (!st) return;
   const chg0 = stockChange(st);
-  $('#chartName').textContent = st.name;
+  const stBadge = st.st && st.status !== 'delisted'
+    ? '<span class="st-badge big">ST</span>'
+    : '';
+  $('#chartName').innerHTML = stBadge + escapeHtml(st.name);
+  renderStBanner(st);
   $('#chartCode').textContent = st.code;
   $('#chartIcon').src = st.icon || '';
   $('#chartPrice').textContent = st.price.toFixed(2);
@@ -1316,6 +1359,10 @@ function onTick(d) {
     loadEquityCurve();
   }
   if ($('#view-rank').classList.contains('active')) loadRank();
+  // ST 进度每轮都在变，刷一下标题区和列表徽章
+  const curSt = state.market?.stocks?.[state.code];
+  if (curSt && curSt.st !== undefined) renderStBanner(curSt);
+
   if ($('#view-work').classList.contains('active')) renderWork();
   if ($('#view-shop').classList.contains('active')) renderShop();
   if (state.tradeTab === 'log' && $('#logPane') && !$('#logPane').classList.contains('hidden')) {

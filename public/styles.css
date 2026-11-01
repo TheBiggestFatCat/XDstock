@@ -1439,3 +1439,64 @@ input.tpsl-input {
 .hi-chg.down { color: var(--down); }
 .hi-chg.flat { color: var(--ink-3); }
 .hi-amp { color: var(--ink-3); }
+
+/* ---------- ST 与退市 ---------- */
+.st-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 2px 4px;
+  margin-right: 4px;
+  border-radius: 4px;
+  background: #ef4444;
+  color: #fff;
+  letter-spacing: .5px;
+  vertical-align: 1px;
+}
+.st-badge.big { font-size: 11px; padding: 3px 6px; margin-right: 8px; vertical-align: 3px; }
+
+.st-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
+  margin: 0 0 6px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #fff1f0, #fff7f5);
+  border: 1px solid #fecaca;
+  font-size: 12px;
+  color: #b42318;
+}
+.st-banner.hidden { display: none; }
+.st-banner.delisted {
+  background: #f4f4f5;
+  border-color: #d4d4d8;
+  color: #52525b;
+}
+.st-tag {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: #ef4444;
+  color: #fff;
+}
+.st-banner b { font-weight: 700; }
+.st-countdown { color: #9a3412; }
+.st-bar {
+  flex: 1;
+  min-width: 80px;
+  height: 5px;
+  border-radius: 3px;
+  background: #fee2e2;
+  overflow: hidden;
+}
+.st-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #f87171, #dc2626);
+  border-radius: 3px;
+  transition: width .3s;
+}

@@ -101,6 +101,18 @@ function stepStock(st, cfg, events, brokerDrift) {
   }
 
   st.price = p;
+
+  // ST 判定：连续低于阈值就戴帽，回到阈值上方自动摘帽
+  const stPrice = Math.max(0.01, Number(cfg.stPrice ?? 3));
+  if (!st.isIndex && st.status !== 'delisted') {
+    if (st.price < stPrice) {
+      st.stTicks = (st.stTicks || 0) + 1;
+      st.st = true;
+    } else {
+      st.stTicks = 0;
+      st.st = false;
+    }
+  }
 }
 
 /**

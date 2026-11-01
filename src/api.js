@@ -157,7 +157,11 @@ function marketPayload(db, me) {
       changePct: prev ? ((st.price - prev) / prev) * 100 : 0,
       dayChangePct: ((st.price - st.initialPrice) / st.initialPrice) * 100,
       status: st.status,
-      initialPrice: st.initialPrice
+      initialPrice: st.initialPrice,
+      st: !!st.st,
+      stTicks: st.stTicks || 0,
+      stPrice: db.config.stPrice ?? 3,
+      stDelistTicks: db.config.stDelistTicks ?? 100
     };
   }
   return {
@@ -186,7 +190,7 @@ function marketPayload(db, me) {
       })),
     notices: (db.notices || [])
       .filter((n) => now() - n.at < 24 * 3600 * 1000)
-      .map((n) => ({ id: n.id, text: n.text, at: n.at })),
+      .map((n) => ({ id: n.id, text: n.text, at: n.at, kind: n.kind || null })),
     me: me ? publicPlayer(me, db) : null,
     config: {
       minLeverage: db.config.minLeverage,
@@ -374,6 +378,8 @@ export async function handleApi(ctx) {
         price: s.price,
         status: s.status,
         statusUntil: s.statusUntil,
+        st: !!s.st,
+        stTicks: s.stTicks || 0,
         isIndex: !!s.isIndex,
         traitName: s.trait?.name,
         trait: s.trait || {}
@@ -524,6 +530,7 @@ export async function handleApi(ctx) {
       'equitySampleTicks', 'equityMaxPoints',
       'shopFakeNewsPrice', 'shopFakeNewsChance',
       'shopBodyguardPrice', 'shopBodyguardTicks',
+      'stPrice', 'stDelistTicks',
       'maxOrdersPerTick', 'maxFillNotionalPerTick',
       'limitOrderEnabled', 'orderTtlTicks', 'maxPendingOrders',
       'playerImpactEnabled', 'playerImpactRef', 'playerImpactStrength',

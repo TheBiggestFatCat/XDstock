@@ -44,6 +44,10 @@ export const DEFAULT_CONFIG = {
   orderTtlTicks: 720,       // 挂单多久没成交自动撤（720 轮 = 1 小时）
   maxPendingOrders: 5,      // 每人最多同时挂几笔
 
+  // ---- ST 与退市 ----
+  stPrice: 3,          // 股价跌破这个值进入 ST
+  stDelistTicks: 100,  // 连续这么多轮低于该值就退市
+
   // ---- 商城 ----
   shopFakeNewsPrice: 500000,   // 假新闻售价
   shopFakeNewsChance: 0.2,     // 真的会影响市场的概率（其余只显示不生效）

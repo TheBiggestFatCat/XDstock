@@ -8,6 +8,7 @@ import { stepMarket, seedHistory, changesFor } from './src/engine.js';
 import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, positionPnl, logTrade } from './src/trading.js';
 import { processOrders } from './src/orders.js';
+import { checkDelist } from './src/delist.js';
 import { handleApi } from './src/api.js';
 import { NEWS_POOL } from './src/news.js';
 
@@ -315,6 +316,19 @@ function loop() {
   }
 
   stepMarket(d);
+
+  // ST 连续低于阈值 → 自动退市（先平仓，下面的撮合会撤掉它的挂单）
+  try {
+    const gone = checkDelist(d);
+    if (gone.length) {
+      for (const g of gone) {
+        console.log(`[delist] ${g.name}(${g.code}) 退市，清掉 ${g.closed} 个持仓`);
+      }
+      saveDb();
+    }
+  } catch (e) {
+    console.error('[delist] 退市处理出错:', e.message);
+  }
 
   // 挂单撮合：价格已经更新，先看看有没有到价的单子
   let orderEvents = [];
