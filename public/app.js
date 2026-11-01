@@ -162,6 +162,8 @@ async function refreshMarket() {
   renderNews();
   renderStockList();
   renderPositions();
+  renderMyOrders();
+  renderMyOrders();
   if (state.listTab === 'positions') renderSidePositions();
   syncLeverageLimits();
   if (d.config) $('#startingCashHint').textContent = money(d.config.startingCash || 100000);
@@ -275,6 +277,81 @@ function renderSidePositions() {
     el.addEventListener('click', () => selectStock(el.dataset.pos));
   });
 }
+
+// ---------------- 限价挂单 ----------------
+async function placeLimit() {
+  const st = state.market?.stocks?.[state.code];
+  if (!st) return;
+  const limit = Number($('#orderLimit').value);
+  if (!(limit > 0)) { toast('先填挂单价', 'err'); return; }
+
+  const qty = Number($('#orderQty').value);
+  const lev = Number($('#orderLev').value) || 1;
+  const pos = state.market?.me?.positions?.[state.code];
+
+  // 有同方向持仓 → 挂「平仓单」；没有 → 挂「开仓单」
+  const isClose = pos && pos.side === state.side;
+  const payload = isClose
+    ? { code: st.code, action: 'close', side: state.side, limit }
+    : {
+        code: st.code,
+        action: 'open',
+        side: state.side,
+        qty,
+        leverage: lev,
+        tp: Number($('#orderTp').value) || null,
+        sl: Number($('#orderSl').value) || null,
+        limit
+      };
+
+  try {
+    await api('/api/order/limit', { method: 'POST', body: JSON.stringify(payload) });
+    toast(`挂单已提交：${isClose ? '平仓' : '开仓'} @ ${limit.toFixed(2)}`, 'ok');
+    $('#orderLimit').value = '';
+    refreshMarket();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
+function renderMyOrders() {
+  const box = $('#myOrders');
+  if (!box) return;
+  const list = state.market?.me?.orders || [];
+  if (!list.length) {
+    box.innerHTML = '';
+    return;
+  }
+  const tickNow = state.market?.tick || 0;
+  box.innerHTML = `<div class="my-orders-head">我的挂单 ${list.length}</div>` +
+    list.map((o) => {
+      const buy = (o.action === 'open' && o.side === 'long') || (o.action === 'close' && o.side === 'short');
+      const left = Math.max(0, (o.expireTick || 0) - tickNow);
+      const label = o.action === 'close' ? '平' : '开';
+      return `<div class="mo-row">
+        <span class="mo-side ${buy ? 'buy' : 'sell'}">${label}${buy ? '买' : '卖'}</span>
+        <span class="mo-name">${o.name}</span>
+        <span class="mo-qty">${o.qty}股</span>
+        <span class="mo-price">@${Number(o.limit).toFixed(2)}</span>
+        <span class="mo-left">${left}轮</span>
+        <button class="mo-cancel" data-cancel="${o.id}">撤</button>
+      </div>`;
+    }).join('');
+
+  box.querySelectorAll('[data-cancel]').forEach((b) => {
+    b.addEventListener('click', async () => {
+      try {
+        await api('/api/order/cancel', { method: 'POST', body: JSON.stringify({ id: b.dataset.cancel }) });
+        toast('已撤单', 'ok');
+        refreshMarket();
+      } catch (e) {
+        toast(e.message, 'err');
+      }
+    });
+  });
+}
+
+async function placeLimitStub() {}
 
 function selectStock(code) {
   state.code = code;
@@ -733,6 +810,7 @@ function onTick(d) {
   }
   if (d.closes && d.closes.length) handleCloses(d.closes);
   if (d.alerts && d.alerts.length) handleAlerts(d.alerts);
+  if (d.orderEvents && d.orderEvents.length) handleOrderEvents(d.orderEvents);
 }
 
 function updatePriceCells() {
@@ -759,6 +837,19 @@ function updatePriceCells() {
     }
   }
   for (const [code, s] of Object.entries(m.stocks)) state.prevPrices[code] = s.price;
+}
+
+function handleOrderEvents(list) {
+  for (const e of list) {
+    if (e.type === 'fill') {
+      const side = e.side === 'long' ? '多' : '空';
+      toast(`✓ 挂单成交：${e.name} ${side} ${e.qty} 股 @ ${Number(e.price).toFixed(2)}`, 'ok');
+    } else if (e.type === 'cancel') {
+      toast(`挂单已撤销：${e.name}（${e.reason}）`, 'err');
+    } else if (e.type === 'fail') {
+      toast(`挂单未成交：${e.name}（${e.reason}）`, 'err');
+    }
+  }
 }
 
 function handleAlerts(list) {
@@ -1939,6 +2030,7 @@ function bind() {
     $(sel).addEventListener('input', updateCostPreview);
   });
   $('#orderBtn').addEventListener('click', placeOrder);
+  $('#orderLimitBtn')?.addEventListener('click', placeLimit);
 
   $('#avatarBtn').addEventListener('click', () => $('#avatarInput').click());
   $('#avatarInput').addEventListener('change', (e) => {

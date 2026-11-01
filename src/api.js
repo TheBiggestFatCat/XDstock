@@ -5,6 +5,7 @@ import { candlesFromSeries, changesFor } from './engine.js';
 import { TIMEFRAMES } from './config.js';
 import { getBuild } from './build.js';
 import { playerEquity, openPosition, closePosition, positionPnl } from './trading.js';
+import { placeLimitOrder, cancelOrder } from './orders.js';
 
 const TOKEN_TTL = 30 * 24 * 3600 * 1000;
 
@@ -74,6 +75,19 @@ function publicPlayer(p, db) {
     stealQueued: p.stealQueued || null,
     stealEarned: p.stealEarned || 0,
     stealReadyAt: p.stealReadyAt || 0,
+    orders: (p.orders || []).map((o) => ({
+      id: o.id,
+      code: o.code,
+      name: o.name,
+      action: o.action,
+      side: o.side,
+      qty: o.qty,
+      limit: o.limit,
+      leverage: o.leverage,
+      reserve: Math.round((o.reserve || 0) * 100) / 100,
+      expireTick: o.expireTick,
+      createdAt: o.createdAt
+    })),
     income: (p.workEarned || 0) + (p.stealEarned || 0),
     createdAt: p.createdAt
   };
@@ -178,6 +192,9 @@ function marketPayload(db, me) {
       stampDuty: db.config.stampDuty,
       maxOrdersPerTick: db.config.maxOrdersPerTick,
       maxOrderQty: db.config.maxOrderQty ?? 1000,
+      limitOrderEnabled: db.config.limitOrderEnabled ?? 1,
+      orderTtlTicks: db.config.orderTtlTicks ?? 720,
+      maxPendingOrders: db.config.maxPendingOrders ?? 5,
       playerImpactEnabled: db.config.playerImpactEnabled ?? 1,
       workRatePerTick: db.config.workRatePerTick ?? 50,
       workOnlineMultiplier: db.config.workOnlineMultiplier ?? 2,
@@ -253,6 +270,7 @@ export async function handleApi(ctx) {
         stealQueued: null,
         stealEarned: 0,
         stealReadyAt: 0,
+        orders: [],
         eq: [],
         createdAt: now()
       };
@@ -490,6 +508,7 @@ export async function handleApi(ctx) {
       'workRatePerTick', 'workOnlineMultiplier', 'workBankTicks', 'stealMin', 'stealMax', 'stealCapRatio', 'stealCooldownTicks',
       'equitySampleTicks', 'equityMaxPoints',
       'maxOrdersPerTick', 'maxOrderQty',
+      'limitOrderEnabled', 'orderTtlTicks', 'maxPendingOrders',
       'playerImpactEnabled', 'playerImpactRef', 'playerImpactStrength',
       'playerImpactDecay', 'playerImpactMax', 'playerImpactFlowMax',
       'brokerMidpoint', 'brokerMidFloor', 'brokerSensitivity', 'brokerCap', 'brokerAlpha',
@@ -685,6 +704,20 @@ export async function handleApi(ctx) {
     if (code) mine = mine.filter((t) => t.code === code);
     const rows = mine.slice(-limit).reverse();
     return json(res, 200, { total: mine.length, rows });
+  }
+
+  if (pathname === '/api/order/limit' && method === 'POST') {
+    const r = placeLimitOrder(db, me, body);
+    if (!r.ok) return json(res, 400, r);
+    saveDb();
+    return json(res, 200, { ok: true, order: r.order, player: publicPlayer(me, db) });
+  }
+
+  if (pathname === '/api/order/cancel' && method === 'POST') {
+    const r = cancelOrder(db, me, String(body.id || ''));
+    if (!r.ok) return json(res, 400, r);
+    saveDb();
+    return json(res, 200, { ok: true, player: publicPlayer(me, db) });
   }
 
   if (pathname === '/api/tpsl' && method === 'POST') {

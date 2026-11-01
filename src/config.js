@@ -39,6 +39,11 @@ export const DEFAULT_CONFIG = {
   playerImpactMax: 0.008,        // 单轮最多推动 0.8%
   playerImpactFlowMax: 40,       // 压力上限（防止堆到离谱）
 
+  // ---- 挂单 ----
+  limitOrderEnabled: 1,     // 1=允许限价挂单
+  orderTtlTicks: 720,       // 挂单多久没成交自动撤（720 轮 = 1 小时）
+  maxPendingOrders: 5,      // 每人最多同时挂几笔
+
   // ---- 每笔下单限制 ----
   maxOrderQty: 1000,             // 单笔最多买多少股
 

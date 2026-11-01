@@ -7,6 +7,7 @@ import { getBuild } from './src/build.js';
 import { stepMarket, seedHistory, changesFor } from './src/engine.js';
 import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, positionPnl, logTrade } from './src/trading.js';
+import { processOrders } from './src/orders.js';
 import { handleApi } from './src/api.js';
 import { NEWS_POOL } from './src/news.js';
 
@@ -227,7 +228,20 @@ function tickPayload(forPlayerId) {
       workOnline: onlineIds.has(p.id),
       stealQueued: p.stealQueued || null,
       stealEarned: p.stealEarned || 0,
-      stealReadyAt: p.stealReadyAt || 0
+      stealReadyAt: p.stealReadyAt || 0,
+      orders: (p.orders || []).map((o) => ({
+        id: o.id,
+        code: o.code,
+        name: o.name,
+        action: o.action,
+        side: o.side,
+        qty: o.qty,
+        limit: o.limit,
+        leverage: o.leverage,
+        reserve: Math.round((o.reserve || 0) * 100) / 100,
+        expireTick: o.expireTick,
+        createdAt: o.createdAt
+      }))
     };
   }
   return {
@@ -296,6 +310,14 @@ function loop() {
   }
 
   stepMarket(d);
+
+  // 挂单撮合：价格已经更新，先看看有没有到价的单子
+  let orderEvents = [];
+  try {
+    orderEvents = processOrders(d);
+  } catch (e) {
+    console.error('[orders] 撮合出错:', e.message);
+  }
 
   const closes = checkPositions(d);
 
@@ -446,6 +468,9 @@ function loop() {
     if (notes) payload.closes = notes;
     const alerts = stealAlerts.get(c.playerId);
     if (alerts) payload.alerts = alerts;
+
+    const myOrders = orderEvents.filter((e) => e.playerId === c.playerId);
+    if (myOrders.length) payload.orderEvents = myOrders;
     try {
       c.res.write(`data: ${JSON.stringify(payload)}\n\n`);
     } catch {

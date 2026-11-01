@@ -199,8 +199,16 @@
             <div class="cost-warn"><span>爆仓价</span><b id="costLiq">—</b></div>
           </div>
 
+          <label class="field">
+            <span>挂单价 <i class="field-hint">填了就是限价单，不填按市价立即成交</i></span>
+            <input id="orderLimit" type="number" step="0.01" placeholder="留空 = 市价" />
+          </label>
+
           <button id="orderBtn" class="btn btn-primary btn-block">买入开多</button>
+          <button id="orderLimitBtn" class="btn btn-ghost btn-block">挂单</button>
           <p id="orderMsg" class="order-msg"></p>
+
+          <div id="myOrders" class="my-orders"></div>
           </div>
 
           <div id="logPane" class="trade-pane hidden">
