@@ -167,10 +167,16 @@ function migrate(d) {
   const ap = String(merged.config.adminPin ?? '000000');
   if (ap.length < 6) merged.config.adminPin = ap.padEnd(6, '0');
   if (merged.closedAt === undefined) merged.closedAt = 0;
-  // 老存档没有逐轮时间表：先给个空表，之后每轮往里记
+  // 老存档没有逐轮时间表：按现在的时间回填一段，保证坐标轴末端就是「现在」
   if (!Array.isArray(merged.tickTimes) || !merged.tickTimes.length) {
-    merged.tickTimes = [];
-    merged.tickTimesStart = merged.tick + 1;
+    const tms = merged.config.tickMs || 5000;
+    const cap = Math.max(600, Number(merged.config.historyTicks ?? 3600) + 600);
+    const n = Math.max(1, Math.min(cap, merged.tick + 1));
+    const nowMs = Date.now();
+    merged.tickTimes = Array.from({ length: n }, (_, i) => nowMs - (n - 1 - i) * tms);
+    merged.tickTimesStart = merged.tick - n + 1;
+    // 基准也一起对齐，避免回填之前那段用旧基准算出来对不上
+    merged.startedAt = nowMs - merged.tick * tms;
   }
   return merged;
 }
