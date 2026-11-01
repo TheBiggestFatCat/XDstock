@@ -159,6 +159,11 @@
           </div>
 
           <div id="orderPane" class="trade-pane">
+          <div class="mode-switch" id="modeSwitch">
+            <button class="mode-btn active" data-mode="open">开仓</button>
+            <button class="mode-btn" data-mode="close">平仓</button>
+          </div>
+
           <div class="side-switch" id="sideSwitch">
             <button class="side-btn active" data-side="long">做多</button>
             <button class="side-btn" data-side="short">做空</button>
@@ -198,6 +203,8 @@
             <div><span>手续费</span><b id="costFee">$0</b></div>
             <div class="cost-warn"><span>爆仓价</span><b id="costLiq">—</b></div>
           </div>
+
+          <p id="closeHint" class="close-hint hidden"></p>
 
           <label class="field">
             <span>挂单价 <i class="field-hint">所有下单都是挂单，下一轮开始撮合</i></span>

@@ -26,6 +26,7 @@ const state = {
   eqTrading: null,
   listTab: 'quotes',
   limitAuto: true,
+  orderMode: 'open',
   tradeTab: 'order',
   stockTradesLoaded: false,
   stream: null
@@ -296,33 +297,78 @@ async function placeLimit() {
   const limit = Number($('#orderLimit').value);
   if (!(limit > 0)) { toast('先填挂单价', 'err'); return; }
 
-  const qty = Number($('#orderQty').value);
-  const lev = Number($('#orderLev').value) || 1;
+  const mode = state.orderMode || 'open';
   const pos = state.market?.me?.positions?.[state.code];
 
-  // 有同方向持仓 → 挂「平仓单」；没有 → 挂「开仓单」
-  const isClose = pos && pos.side === state.side;
-  const payload = isClose
-    ? { code: st.code, action: 'close', side: state.side, limit }
-    : {
-        code: st.code,
-        action: 'open',
-        side: state.side,
-        qty,
-        leverage: lev,
-        tp: Number($('#orderTp').value) || null,
-        sl: Number($('#orderSl').value) || null,
-        limit
-      };
+  let payload;
+  if (mode === 'close') {
+    if (!pos) { toast('这只票没有持仓可平', 'err'); return; }
+    payload = { code: st.code, action: 'close', side: pos.side, limit };
+  } else {
+    payload = {
+      code: st.code,
+      action: 'open',
+      side: state.side,
+      qty: Number($('#orderQty').value),
+      leverage: Number($('#orderLev').value) || 1,
+      tp: Number($('#orderTp').value) || null,
+      sl: Number($('#orderSl').value) || null,
+      limit
+    };
+  }
 
   try {
     await api('/api/order/limit', { method: 'POST', body: JSON.stringify(payload) });
-    toast(`挂单已提交：${isClose ? '平仓' : '开仓'} @ ${limit.toFixed(2)}`, 'ok');
-    $('#orderLimit').value = '';
+    toast(`挂单已提交：${mode === 'close' ? '平仓' : '开仓'} @ ${limit.toFixed(2)}`, 'ok');
     refreshMarket();
   } catch (e) {
     toast(e.message, 'err');
   }
+}
+
+/** 开仓 / 平仓 模式切换 */
+function switchOrderMode(mode) {
+  state.orderMode = mode;
+  $$('.mode-btn').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
+
+  const isClose = mode === 'close';
+  // 平仓不需要数量/杠杆/止盈止损
+  ['#orderQty', '#orderLev', '#orderTp', '#orderSl'].forEach((sel) => {
+    const el = $(sel);
+    const field = el?.closest('.field') || el?.closest('.quick-qty');
+    if (field) field.classList.toggle('hidden', isClose);
+  });
+  $('.quick-qty')?.classList.toggle('hidden', isClose);
+
+  // 成本预估框在平仓模式下没意义，一起藏起来
+  $('.cost-box')?.classList.toggle('hidden', isClose);
+
+  const hint = $('#closeHint');
+  const pos = state.market?.me?.positions?.[state.code];
+  if (hint) {
+    hint.classList.toggle('hidden', !isClose);
+    if (isClose) {
+      const perTick = Number(state.market?.config?.maxFillQtyPerTick ?? 1000);
+      hint.textContent = pos
+        ? `当前持仓：${pos.side === 'long' ? '多' : '空'} ${pos.qty} 股 · ${(pos.leverage || 1).toFixed(0)}x · 成本 ${pos.entry.toFixed(2)}；每轮最多成交 ${perTick} 股`
+        : '这只票没有持仓';
+    }
+  }
+  updateOrderBtnLabel();
+}
+
+function updateOrderBtnLabel() {
+  const btn = $('#orderBtn');
+  if (!btn) return;
+  const mode = state.orderMode || 'open';
+  if (mode === 'close') {
+    const pos = state.market?.me?.positions?.[state.code];
+    btn.textContent = pos ? (pos.side === 'long' ? '挂单平多' : '挂单平空') : '没有持仓';
+    btn.disabled = !pos;
+    return;
+  }
+  btn.textContent = state.side === 'long' ? '挂单开多' : '挂单开空';
+  btn.disabled = false;
 }
 
 function renderMyOrders() {
@@ -381,6 +427,7 @@ function selectStock(code) {
   ce.className = 'big-change ' + cls(chg0);
   updateCostPreview();
   syncLimitPrice(true);
+  switchOrderMode(state.orderMode || 'open');
   loadMyTrades();
   loadCandles();
   state.stockTradesLoaded = false;
@@ -810,6 +857,7 @@ function onTick(d) {
   }
   updateCostPreview();
   syncLimitPrice();
+  updateOrderBtnLabel();
   updatePriceLines();
   renderPositions();
   renderMyOrders();
@@ -1697,7 +1745,7 @@ async function loadAdmin() {
         ['minLeverage', '最小杠杆'],
         ['maxLeverage', '最大杠杆'],
         ['maxOrdersPerTick', '每轮最多下单'],
-        ['maxOrderQty', '单笔最多股数']
+        ['maxFillQtyPerTick', '每轮最多成交(股)']
       ]
     },
     {
@@ -2066,6 +2114,9 @@ function bind() {
   });
   document.querySelectorAll('.list-tab').forEach((b) => {
     b.addEventListener('click', () => switchListTab(b.dataset.ltab));
+  });
+  document.querySelectorAll('.mode-btn').forEach((b) => {
+    b.addEventListener('click', () => switchOrderMode(b.dataset.mode));
   });
   $('#indexBox')?.addEventListener('click', () => {
     switchView('market');

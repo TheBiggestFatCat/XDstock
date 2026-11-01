@@ -74,10 +74,6 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
   qty = Math.floor(num(qty));
   if (!(qty > 0)) return { ok: false, error: '数量必须是正整数' };
 
-  const qtyCap = Math.floor(Number(cfg.maxOrderQty ?? 1000));
-  if (qtyCap > 0 && qty > qtyCap) {
-    return { ok: false, error: `单笔最多 ${qtyCap} 股，大单请分几轮下（市价冲击更小）` };
-  }
 
   leverage = num(leverage, 1);
   if (leverage < (cfg.minLeverage ?? 1) || leverage > (cfg.maxLeverage ?? 20)) {
@@ -146,28 +142,42 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
   return { ok: true, position: player.positions[code] };
 }
 
-export function closePosition(db, player, code, reason = 'manual') {
+export function closePosition(db, player, code, reason = 'manual', qty = null) {
   const cfg = db.config;
   const pos = player.positions[code];
   if (!pos) return { ok: false, error: '没有这只票的持仓' };
   const st = db.stocks[code];
   if (!st) return { ok: false, error: '标的不存在' };
 
+  // 不传 qty 就是全平（止盈止损/手动平仓），传了就是部分平
+  const closeQty = qty ? Math.min(pos.qty, Math.max(1, Math.floor(qty))) : pos.qty;
+  const ratio = closeQty / pos.qty;
+
   const price = st.price;
-  const notional = pos.qty * price;
-  const pnl = positionPnl(pos, price);
+  const notional = closeQty * price;
+  const pnl = (pos.side === 'long' ? price - pos.entry : pos.entry - price) * closeQty;
   const fee = notional * (cfg.feeRate ?? 0);
   // 平多 = 卖出，收印花税；平空 = 买入，不收
   const stamp = pos.side === 'long' ? notional * (cfg.stampDuty ?? 0) : 0;
 
-  let equity = pos.margin + pnl;
-  if (equity < 0) equity = 0; // 亏损不会超过保证金
+  const sideNow = pos.side;
+  const entry = pos.entry;
+  const marginPart = pos.margin * ratio;
+  let equity = marginPart + pnl;
+  if (equity < 0) equity = 0; // 亏损不会超过这部分保证金
   const back = Math.max(0, equity - fee - stamp);
 
   player.cash += back;
   // 平多 = 卖出压低；平空 = 买回推高
   addFlow(st, cfg, pos.side === 'long' ? -notional : notional);
-  delete player.positions[code];
+
+  if (closeQty >= pos.qty) {
+    delete player.positions[code];
+  } else {
+    pos.qty -= closeQty;
+    pos.margin -= marginPart;
+    if (pos.qty < 1) delete player.positions[code];
+  }
   db.tradesThisTick = (db.tradesThisTick || 0) + 1;
   logTrade(db, {
     playerId: player.id,
@@ -176,7 +186,7 @@ export function closePosition(db, player, code, reason = 'manual') {
     name: st.name,
     action: 'close',
     side: pos.side,
-    qty: pos.qty,
+    qty: closeQty,
     price,
     leverage: pos.leverage,
     entry: pos.entry,
@@ -190,9 +200,9 @@ export function closePosition(db, player, code, reason = 'manual') {
   return {
     ok: true,
     code,
-    side: pos.side,
-    qty: pos.qty,
-    entry: pos.entry,
+    side: sideNow,
+    qty: closeQty,
+    entry,
     price,
     pnl,
     fee,

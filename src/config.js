@@ -44,8 +44,9 @@ export const DEFAULT_CONFIG = {
   orderTtlTicks: 720,       // 挂单多久没成交自动撤（720 轮 = 1 小时）
   maxPendingOrders: 5,      // 每人最多同时挂几笔
 
-  // ---- 每笔下单限制 ----
-  maxOrderQty: 1000,             // 单笔最多买多少股
+  // ---- 成交节奏 ----
+  // 挂单可以挂任意数量，但每轮最多成交这么多股（大单会被拆成多轮慢慢成交）
+  maxFillQtyPerTick: 1000,
 
   // ---- 收益曲线 ----
   equitySampleTicks: 12,    // 每多少轮记录一次资产快照（12 轮 ≈ 1 分钟）

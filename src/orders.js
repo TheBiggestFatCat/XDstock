@@ -57,11 +57,6 @@ export function placeLimitOrder(db, player, body) {
     return { ok: false, error: `最多同时挂 ${maxPending} 笔单，先撤掉一些` };
   }
 
-  // 同一只票同方向只留一笔，避免重复占用
-  if (player.orders.some((o) => o.code === code && o.action === action && o.side === side)) {
-    return { ok: false, error: '这只票同方向已经有挂单了' };
-  }
-
   const ttl = Math.max(1, num(cfg.orderTtlTicks, 720));
   const expireTick = db.tick + ttl;
 
@@ -91,10 +86,6 @@ export function placeLimitOrder(db, player, body) {
   // 开仓
   let qty = Math.floor(num(body.qty, 0));
   if (!(qty > 0)) return { ok: false, error: '数量必须是正整数' };
-  const qtyCap = Math.floor(num(cfg.maxOrderQty, 1000));
-  if (qtyCap > 0 && qty > qtyCap) {
-    return { ok: false, error: `单笔最多 ${qtyCap} 股，大单请分几轮挂` };
-  }
 
   const leverage = num(body.leverage, 1);
   if (leverage < num(cfg.minLeverage, 1) || leverage > num(cfg.maxLeverage, 20)) {
@@ -191,45 +182,78 @@ export function processOrders(db) {
       const hit = buy ? px <= order.limit : px >= order.limit;
       if (!hit) continue;
 
-      // 先把自己从队列里摘掉，再执行（执行里可能改持仓）
-      const idx = orders.indexOf(order);
-      if (idx >= 0) orders.splice(idx, 1);
+      // 每轮最多成交 fillCap 股，大单会被拆成多轮
+      const fillCap = Math.max(1, Math.floor(num(db.config.maxFillQtyPerTick, 1000)));
+      const remainQty = Math.max(0, Math.floor(order.qty));
+      if (remainQty < 1) {
+        const idx = orders.indexOf(order);
+        if (idx >= 0) orders.splice(idx, 1);
+        continue;
+      }
+      const fillQty = Math.min(fillCap, remainQty);
 
       if (order.action === 'open') {
-        // 押金先还回现金，再按当前价成交（不会比限价更贵）
-        player.cash = num(player.cash, 0) + (order.reserve || 0);
+        // 从押金里按比例解冻这一轮要用的部分
+        const perShareReserve = (order.reserve || 0) / remainQty;
+        const portion = perShareReserve * fillQty;
+        player.cash = num(player.cash, 0) + portion;
+
         const r = openPosition(db, player, {
           code: order.code,
           side: order.side,
-          qty: order.qty,
+          qty: fillQty,
           leverage: order.leverage,
           tp: order.tp,
           sl: order.sl
         });
+
         if (!r.ok) {
-          events.push({
-            playerId: player.id,
-            type: 'fail',
-            code: order.code,
-            name: order.name,
-            reason: r.error || '成交失败'
-          });
+          // 成交失败：押金退回去，单子留着下一轮再试
+          player.cash = num(player.cash, 0) - portion;
+          if (order.reserve > 0) {
+            events.push({
+              playerId: player.id,
+              type: 'fail',
+              code: order.code,
+              name: order.name,
+              reason: r.error || '成交失败'
+            });
+            // 失败一次就撤掉，避免死循环
+            const idx = orders.indexOf(order);
+            if (idx >= 0) orders.splice(idx, 1);
+            player.cash = num(player.cash, 0) + (order.reserve || 0);
+            order.reserve = 0;
+          }
           continue;
         }
-        order.reserve = 0;
+
+        order.qty -= fillQty;
+        order.reserve = Math.max(0, (order.reserve || 0) - portion);
+
+        if (order.qty < 1) {
+          // 全部成交：剩余押金（价格更优时的差价）退回
+          if (order.reserve > 0) player.cash = num(player.cash, 0) + order.reserve;
+          order.reserve = 0;
+          const idx = orders.indexOf(order);
+          if (idx >= 0) orders.splice(idx, 1);
+        }
+
         events.push({
           playerId: player.id,
           type: 'fill',
           code: order.code,
           name: order.name,
           side: order.side,
-          qty: order.qty,
-          price: r.price ?? st.price,
-          limit: order.limit
+          qty: fillQty,
+          price: r.position?.entry ?? st.price,
+          limit: order.limit,
+          rest: order.qty
         });
       } else {
         const pos = player.positions[order.code];
         if (!pos) {
+          const idx = orders.indexOf(order);
+          if (idx >= 0) orders.splice(idx, 1);
           events.push({
             playerId: player.id,
             type: 'cancel',
@@ -239,21 +263,33 @@ export function processOrders(db) {
           });
           continue;
         }
-        const r = closePosition(db, player, order.code, 'limit');
+
+        const closeQtyNow = Math.min(fillQty, pos.qty);
+        const r = closePosition(db, player, order.code, 'limit', closeQtyNow);
         if (!r.ok) {
           events.push({ playerId: player.id, type: 'fail', code: order.code, name: order.name, reason: r.error });
+          const idx = orders.indexOf(order);
+          if (idx >= 0) orders.splice(idx, 1);
           continue;
         }
+
+        order.qty -= closeQtyNow;
+        if (order.qty < 1 || !player.positions[order.code]) {
+          const idx = orders.indexOf(order);
+          if (idx >= 0) orders.splice(idx, 1);
+        }
+
         events.push({
           playerId: player.id,
           type: 'fill',
           code: order.code,
           name: order.name,
           side: order.side,
-          qty: order.qty,
-          price: r.price ?? st.price,
+          qty: r.qty ?? closeQtyNow,
+          price: st.price,
           limit: order.limit,
-          pnl: r.pnl
+          pnl: r.pnl,
+          rest: order.qty
         });
       }
     }
