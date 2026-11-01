@@ -42,7 +42,7 @@ export const DEFAULT_CONFIG = {
   // 冲击成本：下单的人要为自己制造的价格冲击付钱
   //   费率 = 成交额 / 参考额 × 推力系数 × 本系数（封顶 impactCostMax）
   //   默认 6 → 「买入 → 等涨 → 卖出」这种自洗来回的收益变成负数
-  impactCostCoef: 12,
+  impactCostCoef: 6,
   impactCostMax: 0.06,
 
   // ---- 挂单 ----
@@ -64,7 +64,7 @@ export const DEFAULT_CONFIG = {
   // 挂单可以挂任意数量，但每轮最多成交这么多「金额」
   // 用成交额而不是股数：杠杆只是少占用保证金，实际买卖的市场冲击按金额算，
   // 所以 1 倍和 20 倍杠杆在这一项上完全一样，不会出现「小资金大冲击」
-  maxFillNotionalPerTick: 150000,
+  maxFillNotionalPerTick: 300000,
 
   // ---- 收益曲线 ----
   equitySampleTicks: 12,    // 每多少轮记录一次资产快照（12 轮 ≈ 1 分钟）
