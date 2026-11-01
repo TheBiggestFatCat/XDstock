@@ -333,14 +333,19 @@ export async function handleApi(ctx) {
   }
 
   if (pathname === '/api/leaderboard' && method === 'GET') {
+    const viewer = auth(ctx)?.player;
     const rows = Object.values(db.players).map((p) => {
       const equity = playerEquity(db, p);
+      // 暗黑大手：别人看到的持仓方向也是随机的
+      const stealth = p.theme === 'dark' && (!viewer || viewer.id !== p.id);
       const positions = Object.entries(p.positions || {}).map(([code, pos]) => {
         const st = db.stocks[code];
         return {
           code,
           name: st?.name || code,
-          side: pos.side,
+          side: stealth && Math.random() < 0.5
+            ? (pos.side === 'long' ? 'short' : 'long')
+            : pos.side,
           qty: pos.qty,
           entry: pos.entry,
           price: st?.price ?? 0,
@@ -674,16 +679,14 @@ export async function handleApi(ctx) {
     const rows = all
       .slice(-limit)
       .reverse()
-      // 「暗黑大手」主题技能：别人的成交记录对其他人不可见（自己能看到自己的）
-      .filter((t) => {
-        const owner = db.players[t.playerId];
-        const stealth = owner && owner.theme === 'dark';
-        if (!stealth) return true;
-        return !!me && me.id === t.playerId;
-      })
       .map((t) => {
       const owner = db.players[t.playerId];
-      const buy = t.action === 'open' ? t.side === 'long' : t.side === 'short';
+      // 「暗黑大手」主题技能：别人看到的成交方向是随机的（自己看自己是真的）
+      const isStealth = owner && owner.theme === 'dark' && (!me || me.id !== t.playerId);
+      const shownSide = isStealth && Math.random() < 0.5
+        ? (t.side === 'long' ? 'short' : 'long')
+        : t.side;
+      const buy = t.action === 'open' ? shownSide === 'long' : shownSide === 'short';
       const notional = Number(t.qty) * Number(t.price);
       return {
         id: t.id,
@@ -692,7 +695,7 @@ export async function handleApi(ctx) {
         nickname: t.nickname,
         avatar: owner ? owner.avatar || null : null,
         action: t.action,
-        side: t.side,
+        side: shownSide,
         buy,
         leverage: Number(t.leverage) || 1,
         qty: t.qty,
