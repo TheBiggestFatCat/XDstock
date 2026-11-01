@@ -458,8 +458,8 @@ export async function handleApi(ctx) {
       'workReward', 'stealMin', 'stealMax', 'stealCapRatio', 'stealCooldownTicks',
       'equitySampleTicks', 'equityMaxPoints',
       'maxOrdersPerTick',
-      'brokerMidpoint', 'brokerSensitivity', 'brokerCap', 'brokerAlpha',
-      'adminPin', 'allowRegister', 'marketOpen', 'pinLength'
+      'brokerMidpoint', 'brokerMidFloor', 'brokerSensitivity', 'brokerCap', 'brokerAlpha',
+      'startingCash', 'adminPin', 'allowRegister', 'marketOpen', 'pinLength'
     ];
     for (const [k, v] of Object.entries(patch)) {
       if (!allowed.includes(k)) continue;

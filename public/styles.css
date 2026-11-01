@@ -906,3 +906,49 @@ input.tpsl-input {
   padding: 64px 0;
 }
 .equity-empty.hidden { display: none; }
+
+/* ---------- 参数分组 ---------- */
+#configForm { display: flex; flex-direction: column; gap: 20px; }
+
+.cfg-group {
+  padding: 14px 16px 16px;
+  border-radius: 14px;
+  background: #f8fbfa;
+  border: 1px solid #eaf2ef;
+}
+.cfg-group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.cfg-group-head h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: .5px;
+}
+.cfg-group-head h4::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  background: #14b8a6;
+  margin-right: 7px;
+  vertical-align: -1px;
+}
+.cfg-group-head span { font-size: 11px; color: var(--ink-3); }
+
+.cfg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px 12px;
+}
+.cfg-field span { font-size: 11px; }
+.cfg-field input { padding: 7px 10px; font-size: 12.5px; }
+
+@media (max-width: 760px) {
+  .cfg-grid { grid-template-columns: repeat(2, 1fr); }
+}

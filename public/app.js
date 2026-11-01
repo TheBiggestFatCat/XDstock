@@ -1461,25 +1461,106 @@ async function loadAdmin() {
     ? d.events.map((e) => `<div class="active-event">${e.text.slice(0, 40)}</div>`).join('')
     : '<div class="active-event">当前没有活跃新闻</div>';
 
-  // 参数
-  const cfgFields = [
-    ['tickMs', 'tick 间隔(ms)'], ['baseVolatility', '基础波动率'], ['meanReversion', '均值回归'],
-    ['feeRate', '手续费率'], ['stampDuty', '印花税率'], ['maxLeverage', '最大杠杆'],
-    ['maxOrdersPerTick', '每轮最多下单次数'],
-    ['eventChance', '新闻概率/tick'],
-    ['workReward', '每次打工工资'],
-    ['stealMin', '偷钱最少金额'], ['stealMax', '偷钱最多金额'],
-    ['stealCapRatio', '偷钱上限比例(0.001=0.1%)'],
-    ['stealCooldownTicks', '偷钱冷却(轮)'],
-    ['adminPin', '管理员口令', 'text'], ['allowRegister', '开放注册(1/0)']
+  // 参数（分组渲染）
+  const CFG_GROUPS = [
+    {
+      title: '行情节奏',
+      desc: '价格怎么动',
+      fields: [
+        ['tickMs', 'tick 间隔(ms)'],
+        ['baseVolatility', '基础波动率'],
+        ['meanReversion', '均值回归强度']
+      ]
+    },
+    {
+      title: '交易规则',
+      desc: '开仓平仓的代价',
+      fields: [
+        ['startingCash', '新开户资金'],
+        ['feeRate', '手续费率'],
+        ['stampDuty', '印花税率'],
+        ['minLeverage', '最小杠杆'],
+        ['maxLeverage', '最大杠杆'],
+        ['maxOrdersPerTick', '每轮最多下单']
+      ]
+    },
+    {
+      title: '新闻事件',
+      desc: '消息怎么影响价格',
+      fields: [
+        ['eventChance', '新闻概率/tick'],
+        ['eventImpactScale', '影响倍率(1=标准)'],
+        ['eventDurationMin', '最短持续(轮)'],
+        ['eventDurationMax', '最长持续(轮)']
+      ]
+    },
+    {
+      title: '打工',
+      desc: '点一下按钮的收入',
+      fields: [
+        ['workReward', '每次工资']
+      ]
+    },
+    {
+      title: '偷钱',
+      desc: '从别人口袋里拿',
+      fields: [
+        ['stealMin', '最少金额'],
+        ['stealMax', '最多金额'],
+        ['stealCapRatio', '上限比例(占对方总资产)'],
+        ['stealCooldownTicks', '冷却(轮)']
+      ]
+    },
+    {
+      title: '收益曲线',
+      desc: '快照记录频率',
+      fields: [
+        ['equitySampleTicks', '采样间隔(轮)'],
+        ['equityMaxPoints', '最多保留点数']
+      ]
+    },
+    {
+      title: '券商特质',
+      desc: '小灯证券的业绩效应',
+      fields: [
+        ['brokerSensitivity', '灵敏度'],
+        ['brokerCap', '单轮上限'],
+        ['brokerMidpoint', '成交中枢'],
+        ['brokerMidFloor', '中枢地板'],
+        ['brokerAlpha', '追踪速度']
+      ]
+    },
+    {
+      title: '管理与账号',
+      desc: '登录与注册',
+      fields: [
+        ['adminPin', '管理员口令', 'text'],
+        ['pinLength', 'PIN 位数'],
+        ['allowRegister', '开放注册(1/0)']
+      ]
+    }
   ];
-  $('#configForm').innerHTML = cfgFields.map(([k, label, type]) => {
-    let v = d.config[k];
-    if (typeof v === 'boolean') v = v ? 1 : 0;
-    return `<label class="field"><span>${label}</span>
-      <input type="${type || 'number'}" ${type === 'text' ? '' : 'step="0.0001"'} data-cfg="${k}" value="${v}" />
-    </label>`;
-  }).join('');
+
+  $('#configForm').innerHTML = CFG_GROUPS.map((g) => `
+    <section class="cfg-group">
+      <div class="cfg-group-head">
+        <h4>${g.title}</h4>
+        <span>${g.desc}</span>
+      </div>
+      <div class="cfg-grid">
+        ${g.fields.map(([k, label, type]) => {
+          let v = d.config[k];
+          if (typeof v === 'boolean') v = v ? 1 : 0;
+          if (v === undefined || v === null) v = '';
+          return `<label class="field cfg-field">
+            <span>${label}</span>
+            <input type="${type || 'number'}"
+                   ${type === 'text' ? '' : 'step="0.0001"'}
+                   data-cfg="${k}" value="${v}" />
+          </label>`;
+        }).join('')}
+      </div>
+    </section>`).join('');
 }
 
 async function saveConfig() {
@@ -1488,6 +1569,8 @@ async function saveConfig() {
     const k = inp.dataset.cfg;
     if (k === 'adminPin') patch[k] = String(inp.value);
     else if (k === 'allowRegister') patch[k] = Boolean(Number(inp.value));
+    else if (inp.type === 'text') patch[k] = String(inp.value);
+    else if (inp.value === '') return;
     else patch[k] = Number(inp.value);
   });
   try {
