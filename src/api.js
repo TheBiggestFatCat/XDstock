@@ -669,7 +669,17 @@ export async function handleApi(ctx) {
     const all = (db.trades || []).filter(
       (t) => t.code === code && (t.action === 'open' || t.action === 'close')
     );
-    const rows = all.slice(-limit).reverse().map((t) => {
+    const rows = all
+      .slice(-limit)
+      .reverse()
+      // 「暗黑大手」主题技能：别人的成交记录对其他人不可见（自己能看到自己的）
+      .filter((t) => {
+        const owner = db.players[t.playerId];
+        const stealth = owner && owner.theme === 'dark';
+        if (!stealth) return true;
+        return !!me && me.id === t.playerId;
+      })
+      .map((t) => {
       const owner = db.players[t.playerId];
       const buy = t.action === 'open' ? t.side === 'long' : t.side === 'short';
       const notional = Number(t.qty) * Number(t.price);
@@ -690,7 +700,7 @@ export async function handleApi(ctx) {
           : Number(t.returned ?? notional)
       };
     });
-    return json(res, 200, { total: all.length, rows });
+    return json(res, 200, { total: rows.length, rows });
   }
 
   if (pathname === '/api/equity-curve' && method === 'GET') {
