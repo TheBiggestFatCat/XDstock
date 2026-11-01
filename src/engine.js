@@ -34,9 +34,9 @@ function stepStock(st, cfg, events, brokerDrift) {
   // 新闻冲击
   let evImpact = 0;
   for (const ev of events) {
-    if (!ev.companies || !ev.companies.length) continue;
-    if (!ev.companies.includes(st.code)) continue;
-    evImpact += ev.trend;
+    // 不指定标的 = 全市场新闻
+    if (ev.companies && ev.companies.length && !ev.companies.includes(st.code)) continue;
+    evImpact += ev.trend || 0;
   }
   if (evImpact !== 0) {
     logRet += evImpact * (cfg.eventImpactScale ?? 1) * (t.eventMult ?? 1);

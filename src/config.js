@@ -44,6 +44,10 @@ export const DEFAULT_CONFIG = {
   orderTtlTicks: 720,       // 挂单多久没成交自动撤（720 轮 = 1 小时）
   maxPendingOrders: 5,      // 每人最多同时挂几笔
 
+  // ---- 商城 ----
+  shopFakeNewsPrice: 500000,   // 假新闻售价
+  shopFakeNewsChance: 0.2,     // 真的会影响市场的概率（其余只显示不生效）
+
   // ---- 成交节奏 ----
   // 挂单可以挂任意数量，但每轮最多成交这么多股（大单会被拆成多轮慢慢成交）
   maxFillQtyPerTick: 1000,

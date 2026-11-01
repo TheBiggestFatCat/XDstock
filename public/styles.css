@@ -1253,3 +1253,81 @@ input.tpsl-input {
   font-size: 10.5px;
 }
 .tpsl-input:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ---------- 商城 ---------- */
+.shop-hero { text-align: center; padding: 26px 0 20px; }
+.shop-hero h2 {
+  margin: 0 0 6px;
+  font-size: 26px;
+  letter-spacing: 10px;
+  color: var(--ink);
+  text-indent: 10px;
+}
+.shop-hero p { margin: 0; font-size: 13px; color: var(--ink-3); }
+
+.shop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+}
+.shop-card {
+  padding: 18px 20px 20px;
+  border-radius: 18px;
+  background: linear-gradient(165deg, #ffffff, #f7fcfb);
+  border: 1px solid #e8f3ef;
+  box-shadow: 0 8px 24px rgba(15, 42, 38, .05);
+}
+.shop-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.shop-icon { font-size: 30px; line-height: 1; }
+.shop-card-head h3 { margin: 0 0 3px; font-size: 15px; color: var(--ink); }
+.shop-sub { margin: 0; font-size: 11.5px; color: var(--ink-3); line-height: 1.6; }
+.shop-price {
+  margin-left: auto;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0d9488;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.shop-dir {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.dir-btn {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 18px;
+  border-radius: 9px;
+  border: 1.5px solid #e2eeea;
+  background: #fff;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: all .16s;
+}
+.dir-btn[data-dir="1"].active { background: #fee4e2; border-color: #fca5a5; color: #b42318; }
+.dir-btn[data-dir="-1"].active { background: #d1fadf; border-color: #86efac; color: #067647; }
+
+.shop-warn {
+  font-size: 11.5px;
+  line-height: 1.8;
+  color: var(--ink-2);
+  background: #fffbf2;
+  border: 1px solid #ffeccc;
+  border-radius: 10px;
+  padding: 9px 12px;
+  margin: 0 0 14px;
+}
+.shop-warn b { color: #b45309; }
+
+#fakeNewsText { resize: vertical; min-height: 52px; font-size: 12.5px; }

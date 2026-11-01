@@ -193,6 +193,8 @@ function marketPayload(db, me) {
       stampDuty: db.config.stampDuty,
       maxOrdersPerTick: db.config.maxOrdersPerTick,
       maxFillQtyPerTick: db.config.maxFillQtyPerTick ?? 1000,
+      shopFakeNewsPrice: db.config.shopFakeNewsPrice ?? 500000,
+      shopFakeNewsChance: db.config.shopFakeNewsChance ?? 0.2,
       limitOrderEnabled: db.config.limitOrderEnabled ?? 1,
       orderTtlTicks: db.config.orderTtlTicks ?? 720,
       maxPendingOrders: db.config.maxPendingOrders ?? 5,
@@ -514,6 +516,7 @@ export async function handleApi(ctx) {
       'eventChance', 'localEventChance', 'eventDurationMin', 'eventDurationMax',
       'workRatePerTick', 'workOnlineMultiplier', 'workBankTicks', 'stealMin', 'stealMax', 'stealCapRatio', 'stealCooldownTicks',
       'equitySampleTicks', 'equityMaxPoints',
+      'shopFakeNewsPrice', 'shopFakeNewsChance',
       'maxOrdersPerTick', 'maxFillQtyPerTick',
       'limitOrderEnabled', 'orderTtlTicks', 'maxPendingOrders',
       'playerImpactEnabled', 'playerImpactRef', 'playerImpactStrength',
@@ -696,6 +699,57 @@ export async function handleApi(ctx) {
     if (!r.ok) return json(res, 400, r);
     saveDb();
     return json(res, 200, { ok: true, player: publicPlayer(me, db) });
+  }
+
+  // ---------- 商城 ----------
+  if (pathname === '/api/shop/fake-news' && method === 'POST') {
+    const price = Number(db.config.shopFakeNewsPrice ?? 500000);
+    const chance = Math.max(0, Math.min(1, Number(db.config.shopFakeNewsChance ?? 0.2)));
+
+    const text = String(body.text || '').trim().slice(0, 120);
+    if (text.length < 4) return json(res, 400, { error: '内容至少 4 个字' });
+    const dir = Number(body.dir ?? 1) >= 0 ? 1 : -1;
+
+    if (me.cash < price) {
+      return json(res, 400, {
+        error: `现金不足，售价 $${price.toLocaleString()}，你只有 $${me.cash.toFixed(2)}`
+      });
+    }
+
+    // 花钱
+    me.cash -= price;
+    me.shopSpent = (me.shopSpent || 0) + price;
+
+    // 20% 概率真的有冲击，其余只是「挂个名」
+    const hit = Math.random() < chance;
+    const duration = 80 + Math.floor(Math.random() * 60);
+    const ev = {
+      id: 'ev_' + Math.random().toString(36).slice(2, 10),
+      kind: 'leak',
+      text,
+      companies: [],                        // 空 = 全市场
+      dir,
+      // 幅度压低：全市场新闻会持续 80~140 轮，每轮 0.03%~0.06% 累计约 3%~8%
+      trend: hit ? dir * (0.0003 + Math.random() * 0.0003) : 0,
+      leakTicks: 0,
+      leakLeft: 0,
+      duration,
+      remaining: duration,
+      createdAt: now(),
+      announced: true,                      // 立刻显示，不走偷跑
+      fake: true,
+      buyerId: me.id
+    };
+    db.events.push(ev);
+    saveDb();
+
+    return json(res, 200, {
+      ok: true,
+      hit,
+      price,
+      cash: me.cash,
+      event: { id: ev.id, text: ev.text, dir: ev.dir, createdAt: ev.createdAt }
+    });
   }
 
   if (pathname === '/api/tpsl' && method === 'POST') {

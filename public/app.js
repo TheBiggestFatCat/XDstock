@@ -35,6 +35,7 @@ const state = {
   listTab: 'quotes',
   limitAuto: true,
   orderMode: 'open',
+  shopDir: 1,
   tradeTab: 'order',
   stockTradesLoaded: false,
   stream: null
@@ -285,6 +286,60 @@ function renderSidePositions() {
   wrap.querySelectorAll('[data-pos]').forEach((el) => {
     el.addEventListener('click', () => selectStock(el.dataset.pos));
   });
+}
+
+// ---------------- 商城 ----------------
+function renderShop() {
+  const cfg = state.market?.config || {};
+  const price = Number(cfg.shopFakeNewsPrice ?? 500000);
+  const chance = Number(cfg.shopFakeNewsChance ?? 0.2);
+  const cash = state.market?.me?.cash || 0;
+
+  const pEl = $('#fakeNewsPrice');
+  if (pEl) pEl.textContent = money(price);
+
+  const cEl = $('#fakeNewsChance');
+  if (cEl) cEl.textContent = Math.round(chance * 100) + '%';
+
+  const btn = $('#fakeNewsBuy');
+  if (btn) {
+    const poor = cash < price;
+    btn.disabled = poor;
+    btn.textContent = poor ? `现金不足（差 ${money(price - cash)}）` : '购买并发布';
+  }
+
+  $$('.dir-btn').forEach((b) => {
+    b.classList.toggle('active', Number(b.dataset.dir) === state.shopDir);
+  });
+}
+
+async function buyFakeNews() {
+  const text = $('#fakeNewsText').value.trim();
+  if (text.length < 4) { toast('内容至少 4 个字', 'err'); return; }
+
+  const btn = $('#fakeNewsBuy');
+  btn.disabled = true;
+  btn.textContent = '发布中…';
+  try {
+    const r = await api('/api/shop/fake-news', {
+      method: 'POST',
+      body: JSON.stringify({ text, dir: state.shopDir })
+    });
+    $('#fakeNewsText').value = '';
+    toast(`📰 假新闻已发布（花费 ${money(r.price)}）`, 'ok');
+    if (state.market?.me) state.market.me.cash = r.cash;
+    refreshMarket();
+    loadNewsSoon();
+  } catch (e) {
+    toast(e.message, 'err');
+  } finally {
+    renderShop();
+  }
+}
+
+/** 新闻是 SSE 推的，买完立刻刷一下快照更跟手 */
+function loadNewsSoon() {
+  setTimeout(() => refreshMarket(), 800);
 }
 
 // ---------------- 限价挂单 ----------------
@@ -908,6 +963,7 @@ function onTick(d) {
   }
   if ($('#view-rank').classList.contains('active')) loadRank();
   if ($('#view-work').classList.contains('active')) renderWork();
+  if ($('#view-shop').classList.contains('active')) renderShop();
   if (state.tradeTab === 'log' && $('#logPane') && !$('#logPane').classList.contains('hidden')) {
     loadStockTrades();
   }
@@ -1791,6 +1847,14 @@ async function loadAdmin() {
       ]
     },
     {
+      title: '商城',
+      desc: '道具价格与效果',
+      fields: [
+        ['shopFakeNewsPrice', '假新闻售价'],
+        ['shopFakeNewsChance', '生效概率(0.2=20%)']
+      ]
+    },
+    {
       title: '偷钱',
       desc: '从别人口袋里拿',
       fields: [
@@ -1987,6 +2051,7 @@ function switchView(name) {
   if (name === 'portfolio') { renderPortfolio(); loadTrades(); }
   if (name === 'work') renderWork();
   if (name === 'rank') loadRank(true);
+  if (name === 'shop') renderShop();
   if (name === 'admin') {
     if (state.adminToken) loadAdmin();
     else {
@@ -2123,6 +2188,13 @@ function bind() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
   $('#configSaveBtn').addEventListener('click', saveConfig);
+  document.querySelectorAll('.dir-btn').forEach((b) => {
+    b.addEventListener('click', () => {
+      state.shopDir = Number(b.dataset.dir) || 1;
+      renderShop();
+    });
+  });
+  $('#fakeNewsBuy')?.addEventListener('click', buyFakeNews);
   $('#traitSaveBtn')?.addEventListener('click', saveTraits);
 
   // 定时刷新「我的」与「排行」，保证不靠 SSE 也准确

@@ -93,6 +93,7 @@
     <button class="tab active" data-view="market">行情</button>
     <button class="tab" data-view="portfolio">我的</button>
     <button class="tab" data-view="work">打工</button>
+    <button class="tab" data-view="shop">商城</button>
     <button class="tab" data-view="rank">排行榜</button>
     <button class="tab" data-view="admin">管理</button>
   </nav>
@@ -271,6 +272,46 @@
         <div class="work-stats">
           <div><span>累计取出</span><b id="workTotal">$0.00</b></div>
           <div><span>状态</span><b id="workRound">离线积累</b></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---------- 商城 ---------- -->
+    <div class="view" id="view-shop">
+      <div class="shop-hero">
+        <h2>商 城</h2>
+        <p>有些东西，钱能买到</p>
+      </div>
+
+      <div class="shop-grid">
+        <div class="shop-card" id="fakeNewsCard">
+          <div class="shop-card-head">
+            <span class="shop-icon">📰</span>
+            <div>
+              <h3>假新闻</h3>
+              <p class="shop-sub">编一条消息，让它像真新闻一样出现在快讯里</p>
+            </div>
+            <span class="shop-price" id="fakeNewsPrice">$500,000</span>
+          </div>
+
+          <label class="field">
+            <span>新闻内容</span>
+            <textarea id="fakeNewsText" rows="2" maxlength="120"
+              placeholder="例如：小灯证券宣布收购月球地产，估值飙升"></textarea>
+          </label>
+
+          <div class="shop-dir">
+            <span>方向</span>
+            <button class="dir-btn active" data-dir="1">利好</button>
+            <button class="dir-btn" data-dir="-1">利空</button>
+          </div>
+
+          <p class="shop-warn">
+            花钱买一条挂名新闻：<b>一定会显示在快讯里</b>，但只有
+            <b id="fakeNewsChance">20%</b> 的概率真的影响市场。
+          </p>
+
+          <button id="fakeNewsBuy" class="btn btn-primary btn-block">购买并发布</button>
         </div>
       </div>
     </div>
