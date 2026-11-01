@@ -1112,9 +1112,10 @@ function renderPortfolio() {
   const pos = Object.values(me.positions || {});
   const marginTotal = pos.reduce((s, p) => s + p.margin, 0);
   const pnlTotal = pos.reduce((s, p) => s + p.pnl, 0);
+  const frozenCash = Number(me.frozen) || 0;
   $('#statGrid').innerHTML = `
-    <div class="stat-card"><div class="stat-label">总资产</div><div class="stat-value">${money(me.equity)}</div><div class="stat-sub">现金 + 保证金 + 浮盈亏</div></div>
-    <div class="stat-card"><div class="stat-label">可用现金</div><div class="stat-value">${money(me.cash)}</div><div class="stat-sub">可用于开新仓</div></div>
+    <div class="stat-card"><div class="stat-label">总资产</div><div class="stat-value">${money(me.equity)}</div><div class="stat-sub">现金 + 保证金 + 浮盈亏${frozenCash > 0 ? ' + 冻结押金' : ''}</div></div>
+    <div class="stat-card"><div class="stat-label">可用现金</div><div class="stat-value">${money(me.cash)}</div><div class="stat-sub">${frozenCash > 0 ? `另有 ${money(frozenCash)} 冻结在挂单里` : '可用于开新仓'}</div></div>
     <div class="stat-card"><div class="stat-label">占用保证金</div><div class="stat-value">${money(marginTotal)}</div><div class="stat-sub">${pos.length} 个持仓</div></div>
     <div class="stat-card"><div class="stat-label">浮动盈亏</div><div class="stat-value ${cls(pnlTotal)}">${money(pnlTotal)}</div><div class="stat-sub">实时结算</div></div>`;
 

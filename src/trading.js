@@ -32,12 +32,25 @@ export function positionEquity(pos, price) {
 /** 玩家总权益 = 现金 + 所有仓位的保证金与浮盈亏 */
 export function playerEquity(db, player) {
   let equity = num(player.cash);
+
+  // 挂单冻结的押金还是你的钱，不能从总资产里抹掉
+  for (const o of player.orders || []) {
+    equity += Math.max(0, num(o.reserve));
+  }
+
   for (const [code, pos] of Object.entries(player.positions || {})) {
     const st = db.stocks[code];
     if (!st) continue;
     equity += positionEquity(pos, st.price);
   }
   return equity;
+}
+
+/** 当前挂单冻结了多少押金 */
+export function frozenCash(player) {
+  let sum = 0;
+  for (const o of player.orders || []) sum += Math.max(0, Number(o.reserve) || 0);
+  return sum;
 }
 
 /**
