@@ -193,6 +193,8 @@ function marketPayload(db, me) {
       .map((n) => ({ id: n.id, text: n.text, at: n.at, kind: n.kind || null })),
     me: me ? publicPlayer(me, db) : null,
     config: {
+      stPrice: db.config.stPrice ?? 3,
+      stDelistTicks: db.config.stDelistTicks ?? 100,
       minLeverage: db.config.minLeverage,
       maxLeverage: db.config.maxLeverage,
       feeRate: db.config.feeRate,
