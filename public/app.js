@@ -536,6 +536,49 @@ async function commitTpSl(target, price, pos) {
 }
 
 /** 屏幕 y 坐标 → 价格 */
+/** 鼠标指到某根 K 线时，显示它的开高低收和涨跌幅 */
+function bindHoverInfo() {
+  if (!state.chart || state.hoverBound) return;
+  state.hoverBound = true;
+
+  state.chart.subscribeCrosshairMove((param) => {
+    const box = $('#hoverInfo');
+    if (!box) return;
+
+    if (!param || !param.time || !param.point) {
+      box.innerHTML = '';
+      return;
+    }
+    const bar = param.seriesData && param.seriesData.get(state.candleSeries);
+    if (!bar) { box.innerHTML = ''; return; }
+
+    const list = state.candles || [];
+    let idx = -1;
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (list[i].time === param.time) { idx = i; break; }
+    }
+    const prevClose = idx > 0 ? list[idx - 1].close : bar.open;
+    const chg = prevClose ? ((bar.close - prevClose) / prevClose) * 100 : 0;
+    const amp = prevClose ? ((bar.high - bar.low) / prevClose) * 100 : 0;
+    const clsName = chg > 0 ? 'up' : chg < 0 ? 'down' : 'flat';
+
+    const d = new Date(param.time * 1000);
+    const sameDay = new Date().toDateString() === d.toDateString();
+    const when = sameDay
+      ? `${p2(d.getHours())}:${p2(d.getMinutes())}`
+      : `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+
+    box.innerHTML = `
+      <span class="hi-time">${when}</span>
+      <span>开 <b>${bar.open.toFixed(2)}</b></span>
+      <span>高 <b class="up">${bar.high.toFixed(2)}</b></span>
+      <span>低 <b class="down">${bar.low.toFixed(2)}</b></span>
+      <span>收 <b>${bar.close.toFixed(2)}</b></span>
+      <span class="hi-chg ${clsName}">${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</span>
+      <span class="hi-amp">振幅 ${amp.toFixed(2)}%</span>`;
+  });
+}
+
 function priceAtY(clientY) {
   const el = $('#chart');
   const series = state.candleSeries;
@@ -921,6 +964,7 @@ function buildChart() {
     wickDownColor: '#12b886'
   });
   state.chart = chart;
+  bindHoverInfo();
   state.candleSeries = candle;
 
   for (const period of [5, 10, 30]) {
