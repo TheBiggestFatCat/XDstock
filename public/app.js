@@ -34,6 +34,8 @@ const state = {
   eqTrading: null,
   listTab: 'quotes',
   limitAuto: true,
+  drawMode: false,
+  limitLine: null,
   orderMode: 'open',
   shopDir: 1,
   tradeTab: 'order',
@@ -342,15 +344,162 @@ function loadNewsSoon() {
   setTimeout(() => refreshMarket(), 800);
 }
 
+// ---------------- 挂单价参考线 + K线划线 ----------------
+/** 把挂单价画成一根横线 */
+function updateLimitLine(price) {
+  const series = state.candleSeries;
+  if (!series) return;
+  const p = Number(price);
+  const valid = Number.isFinite(p) && p > 0;
+
+  if (state.limitLine) {
+    try { series.removePriceLine(state.limitLine); } catch { /* ignore */ }
+    state.limitLine = null;
+  }
+  if (!valid) return;
+
+  const buy = isBuySide();
+  state.limitLine = series.createPriceLine({
+    price: p,
+    color: buy ? '#f97316' : '#0ea5e9',
+    lineWidth: 2,
+    lineStyle: 2,          // 虚线
+    axisLabelVisible: true,
+    title: buy ? '挂买' : '挂卖'
+  });
+}
+
+/** 画线模式：开启后可以按住鼠标在K线上拖出挂单价 */
+function toggleDrawMode(on) {
+  state.drawMode = on === undefined ? !state.drawMode : !!on;
+  const btn = $('#drawLineBtn');
+  if (btn) {
+    btn.classList.toggle('active', state.drawMode);
+    btn.textContent = state.drawMode ? '✅ 完成' : '✏️ 划线';
+  }
+  // 画线时禁掉图表的拖动/缩放，免得冲突
+  state.chart?.applyOptions({
+    handleScroll: !state.drawMode,
+    handleScale: !state.drawMode
+  });
+  const el = $('#chart');
+  if (el) el.style.cursor = state.drawMode ? 'crosshair' : '';
+}
+
+/** 屏幕 y 坐标 → 价格 */
+function priceAtY(clientY) {
+  const el = $('#chart');
+  const series = state.candleSeries;
+  if (!el || !series) return 0;
+  const rect = el.getBoundingClientRect();
+  const y = clientY - rect.top;
+  const p = series.coordinateToPrice(y);
+  if (!Number.isFinite(p) || p <= 0) return 0;
+  return Math.round(p * 100) / 100;
+}
+
+/** 把价格写进输入框（并标记为手动） */
+function setLimitPrice(price, { manual = true } = {}) {
+  const inp = $('#orderLimit');
+  if (!inp || !(price > 0)) return;
+  inp.value = Number(price).toFixed(2);
+  if (manual) state.limitAuto = false;
+  updateLimitLine(price);
+  updateOrderBtnLabel();
+}
+
+function bindChartDrawing() {
+  const el = $('#chart');
+  if (!el || el.dataset.drawBound === '1') return;
+  el.dataset.drawBound = '1';
+
+  let dragging = false;
+
+  const apply = (clientY) => {
+    const p = priceAtY(clientY);
+    if (p > 0) setLimitPrice(p);
+  };
+
+  // 用捕获阶段：图表库会拦掉冒泡的鼠标事件
+  el.addEventListener('mousedown', (e) => {
+    if (!state.drawMode) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragging = true;
+    apply(e.clientY);
+  }, true);
+
+  el.addEventListener('mousemove', (e) => {
+    if (!state.drawMode || !dragging) return;
+    e.preventDefault();
+    e.stopPropagation();
+    apply(e.clientY);
+  }, true);
+
+  const stop = () => { dragging = false; };
+  el.addEventListener('mouseup', (e) => {
+    if (state.drawMode) e.stopPropagation();
+    dragging = false;
+  }, true);
+  window.addEventListener('mouseup', stop);
+  el.addEventListener('mouseleave', stop);
+
+  // 触屏
+  el.addEventListener('touchstart', (e) => {
+    if (!state.drawMode || !e.touches[0]) return;
+    e.preventDefault();
+    dragging = true;
+    apply(e.touches[0].clientY);
+  }, { passive: false });
+  el.addEventListener('touchmove', (e) => {
+    if (!state.drawMode || !dragging || !e.touches[0]) return;
+    e.preventDefault();
+    apply(e.touches[0].clientY);
+  }, { passive: false });
+  el.addEventListener('touchend', stop);
+}
+
 // ---------------- 限价挂单 ----------------
-// 挂单价默认跟随现价，玩家手动改过就不再覆盖
+// 自动定价：在这个方向稍微让一点价，保证下一轮能成交
+//   买入/平空 → 限价挂在现价上方（愿意多付一点）
+//   卖出/平多 → 限价挂在现价下方（愿意少收一点）
+const AUTO_LIMIT_SLIP = 0.005;   // 让价 0.5%
+
+/** 当前真正要下的方向：开仓看 state.side，平仓看持仓方向 */
+function effectiveSide() {
+  if ((state.orderMode || 'open') === 'close') {
+    const pos = state.market?.me?.positions?.[state.code];
+    return pos ? pos.side : 'long';
+  }
+  return state.side;
+}
+
+/** 这一单是不是「买入」（决定挂单价的让利方向） */
+function isBuySide() {
+  const side = effectiveSide();
+  if ((state.orderMode || 'open') === 'close') return side === 'short'; // 平空 = 买回
+  return side === 'long';
+}
+
+function autoLimitPrice() {
+  const st = state.market?.stocks?.[state.code];
+  if (!st || !(st.price > 0)) return 0;
+  const p = isBuySide() ? st.price * (1 + AUTO_LIMIT_SLIP) : st.price * (1 - AUTO_LIMIT_SLIP);
+  return Math.round(p * 100) / 100;
+}
+
+// 挂单价默认跟随现价（让利后），玩家手动改过就不再覆盖
 function syncLimitPrice(force = false) {
   const inp = $('#orderLimit');
-  const st = state.market?.stocks?.[state.code];
-  if (!inp || !st) return;
+  if (!inp) return;
   if (force || state.limitAuto) {
-    inp.value = st.price.toFixed(2);
-    state.limitAuto = true;
+    const p = autoLimitPrice();
+    if (p > 0) {
+      inp.value = p.toFixed(2);
+      state.limitAuto = true;
+      updateLimitLine(p);
+    }
   }
 }
 
@@ -382,6 +531,7 @@ async function placeLimit() {
   try {
     await api('/api/order/limit', { method: 'POST', body: JSON.stringify(payload) });
     toast(`挂单已提交：${mode === 'close' ? '平仓' : '开仓'} @ ${limit.toFixed(2)}`, 'ok');
+    if (state.drawMode) toggleDrawMode(false);
     refreshMarket();
   } catch (e) {
     toast(e.message, 'err');
@@ -419,6 +569,7 @@ function switchOrderMode(mode) {
         : '这只票没有持仓';
     }
   }
+  if (state.limitAuto) syncLimitPrice(true);
   updateOrderBtnLabel();
 }
 
@@ -513,8 +664,10 @@ function selectStock(code) {
   ce.textContent = pct(chg0);
   ce.className = 'big-change ' + cls(chg0);
   updateCostPreview();
+  state.limitAuto = true;
   syncLimitPrice(true);
   switchOrderMode(state.orderMode || 'open');
+  updateLimitLine(Number($('#orderLimit')?.value));
   loadMyTrades();
   loadCandles();
   state.stockTradesLoaded = false;
@@ -703,6 +856,7 @@ async function loadCandles() {
     state.plSig = null;
     updatePriceLines();
     updateMarkers();
+    updateLimitLine(Number($('#orderLimit')?.value));
     // 只显示最近一段，K 线不至于挤成一条线
     const n = state.candles.length;
     if (n > 12) {
@@ -2139,6 +2293,8 @@ function bind() {
       if (state.orderMode === 'close') return;   // 平仓模式不切方向
       state.side = b.dataset.side;
       $$('#sideSwitch .side-btn').forEach((x) => x.classList.toggle('active', x === b));
+      // 方向变了，自动价的让利方向也要跟着变
+      if (state.limitAuto) syncLimitPrice(true);
       updateOrderBtnLabel();
       updateCostPreview();
     });
@@ -2158,7 +2314,12 @@ function bind() {
   ['#orderQty', '#orderLev'].forEach((sel) => {
     $(sel).addEventListener('input', updateCostPreview);
   });
-  $('#orderLimit')?.addEventListener('input', () => { state.limitAuto = false; });
+  $('#orderLimit')?.addEventListener('input', () => {
+    state.limitAuto = false;
+    updateLimitLine(Number($('#orderLimit').value));
+  });
+  $('#drawLineBtn')?.addEventListener('click', () => toggleDrawMode());
+  bindChartDrawing();
   $('#orderBtn').addEventListener('click', placeLimit);
 
   $('#avatarBtn').addEventListener('click', () => $('#avatarInput').click());
@@ -2202,6 +2363,9 @@ function bind() {
     if ($('#view-work').classList.contains('active')) renderWork();
   }, 1000);
 }
+
+// 调试用：把 state 挂到 window，方便排查问题（不含任何服务端秘密）
+try { window.__xd = { state, priceAtY, updateLimitLine, autoLimitPrice, setLimitPrice }; window.__xdState = state; } catch { /* ignore */ }
 
 // ---------------- 启动 ----------------
 async function boot() {

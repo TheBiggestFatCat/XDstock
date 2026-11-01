@@ -1331,3 +1331,33 @@ input.tpsl-input {
 .shop-warn b { color: #b45309; }
 
 #fakeNewsText { resize: vertical; min-height: 52px; font-size: 12.5px; }
+
+/* ---------- 挂单价划线 ---------- */
+.limit-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.limit-row input { flex: 1; min-width: 0; }
+
+.draw-btn {
+  flex: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1.5px solid #d9e8e4;
+  background: #fff;
+  color: var(--ink-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .16s;
+}
+.draw-btn:hover { border-color: #14b8a6; color: #0d9488; }
+.draw-btn.active {
+  background: #14b8a6;
+  border-color: #14b8a6;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(20, 184, 166, .3);
+}

@@ -197,8 +197,11 @@
           <p id="closeHint" class="close-hint hidden"></p>
 
           <label class="field">
-            <span>挂单价 <i class="field-hint">所有下单都是挂单，下一轮开始撮合</i></span>
-            <input id="orderLimit" type="number" step="0.01" placeholder="填价格" />
+            <span>挂单价 <i class="field-hint" id="limitHint">默认价已让利，保证下一轮能成交</i></span>
+            <div class="limit-row">
+              <input id="orderLimit" type="number" step="0.01" placeholder="填价格" />
+              <button id="drawLineBtn" class="draw-btn" type="button" title="在 K 线上拖动设置挂单价">✏️ 划线</button>
+            </div>
           </label>
 
           <button id="orderBtn" class="btn btn-primary btn-block">挂单开多</button>
