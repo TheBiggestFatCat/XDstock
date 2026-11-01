@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
-import { candlesFromSeries, changesFor } from './engine.js';
+import { candlesFromSeries, changesFor, timeOfTick } from './engine.js';
 import { TIMEFRAMES } from './config.js';
 import { getBuild } from './build.js';
 import { playerEquity, positionPnl } from './trading.js';
@@ -304,7 +304,8 @@ export async function handleApi(ctx) {
     if (!src) return json(res, 404, { error: '标的不存在' });
     const candles = candlesFromSeries(
       src.series, group, db.config.tickMs ?? 5000,
-      Math.max(0, db.tick - src.series.length), 400, db.startedAt || 0
+      Math.max(0, db.tick - src.series.length), 400, db.startedAt || 0,
+      (absTick) => timeOfTick(db, absTick)
     );
     return json(res, 200, { code, tf, candles });
   }
@@ -662,7 +663,7 @@ export async function handleApi(ctx) {
     const points = (me.eq || []).map((p) => ({
       // [tick, 总资产, 累计外部收入]
       tick: p[0],
-      time: Math.floor((db.startedAt + p[0] * (db.config.tickMs || 5000)) / 1000),
+      time: Math.floor(timeOfTick(db, p[0]) / 1000),
       equity: p[1],
       income: p[2],
       trading: p[1] - p[2]

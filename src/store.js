@@ -167,6 +167,11 @@ function migrate(d) {
   const ap = String(merged.config.adminPin ?? '000000');
   if (ap.length < 6) merged.config.adminPin = ap.padEnd(6, '0');
   if (merged.closedAt === undefined) merged.closedAt = 0;
+  // 老存档没有逐轮时间表：先给个空表，之后每轮往里记
+  if (!Array.isArray(merged.tickTimes) || !merged.tickTimes.length) {
+    merged.tickTimes = [];
+    merged.tickTimesStart = merged.tick + 1;
+  }
   return merged;
 }
 

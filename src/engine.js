@@ -232,11 +232,38 @@ export function stepMarket(db) {
   }
 
   db.tick += 1;
+
+  // 记下这一轮的真实时间（休市不算），K 线坐标就用它，不再靠 tick 推算
+  if (!Array.isArray(db.tickTimes)) {
+    db.tickTimes = [];
+    db.tickTimesStart = db.tick;
+  }
+  db.tickTimes.push(db._simNow ?? Date.now());
+  const timeCap = Math.max(600, Number(cfg.historyTicks ?? 3600) + 600);
+  if (db.tickTimes.length > timeCap) {
+    const drop = db.tickTimes.length - timeCap;
+    db.tickTimes.splice(0, drop);
+    db.tickTimesStart = (db.tickTimesStart || 0) + drop;
+  }
   return brokerDrift;
 }
 
 /** 从 tick 序列聚合出 K 线（按绝对 tick 编号分桶，保证前后端一致） */
-export function candlesFromSeries(series, group, tickMs, tickStart, maxCandles = 400, baseMs = 0) {
+/**
+ * 某个绝对 tick 对应的真实毫秒。
+ * 有记录就用记录，老存档没记录时退回「起始时间 + tick × 间隔」。
+ */
+export function timeOfTick(db, absTick) {
+  const times = db.tickTimes;
+  const start = db.tickTimesStart || 0;
+  if (Array.isArray(times) && times.length) {
+    const idx = absTick - start;
+    if (idx >= 0 && idx < times.length) return times[idx];
+  }
+  return (db.startedAt || 0) + absTick * (db.config.tickMs || 5000);
+}
+
+export function candlesFromSeries(series, group, tickMs, tickStart, maxCandles = 400, baseMs = 0, timeOf = null) {
   const out = [];
   if (!series || !series.length) return out;
 
@@ -249,8 +276,9 @@ export function candlesFromSeries(series, group, tickMs, tickStart, maxCandles =
     if (bucket !== curBucket) {
       if (cur) out.push(cur);
       curBucket = bucket;
+      const ms = timeOf ? timeOf(absTick) : (baseMs + bucket * group * tickMs);
       cur = {
-        time: Math.floor((baseMs + bucket * group * tickMs) / 1000),
+        time: Math.floor(ms / 1000),
         open: v,
         high: v,
         low: v,
@@ -280,11 +308,15 @@ export function candlesFromSeries(series, group, tickMs, tickStart, maxCandles =
  */
 export function seedHistory(db, ticks = 2400) {
   const realChance = db.config.eventChance;
+  const stepMs = db.config.tickMs || 5000;
+  const baseMs = Date.now() - ticks * stepMs;
   db.config.eventChance = 0;          // 历史里不生成新闻
   for (let i = 0; i < ticks; i++) {
+    db._simNow = baseMs + i * stepMs;  // 铺历史用合成时间，保证坐标均匀
     stepMarket(db);
     db.events = [];
   }
+  delete db._simNow;
   db.config.eventChance = realChance;
   db.tradesThisTick = 0;
   db.startedAt = Date.now() - db.tick * (db.config.tickMs || 5000);

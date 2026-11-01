@@ -2,6 +2,14 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
+// lightweight-charts 默认按 UTC 显示，这里强制用本地时间
+const p2 = (n) => String(n).padStart(2, '0');
+function fmtLocalTime(sec, withDate = false) {
+  const d = new Date(sec * 1000);
+  const hm = `${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  return withDate ? `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${hm}` : hm;
+}
+
 const TF_SECONDS = { '1m': 12, '5m': 60, '15m': 180, '1h': 720, '4h': 2880 };
 
 const state = {
@@ -488,6 +496,9 @@ function escapeHtml(s) {
 function buildChart() {
   const el = $('#chart');
   const chart = LightweightCharts.createChart(el, {
+    localization: {
+      timeFormatter: (t) => fmtLocalTime(t, true)
+    },
     layout: {
       background: { type: 'solid', color: 'transparent' },
       textColor: '#5b7671',
@@ -498,7 +509,12 @@ function buildChart() {
       horzLines: { color: 'rgba(230,240,237,.7)' }
     },
     rightPriceScale: { borderColor: 'rgba(230,240,237,.9)' },
-    timeScale: { borderColor: 'rgba(230,240,237,.9)', timeVisible: true, secondsVisible: false },
+    timeScale: {
+      borderColor: 'rgba(230,240,237,.9)',
+      timeVisible: true,
+      secondsVisible: false,
+      tickMarkFormatter: (t) => fmtLocalTime(t, false)
+    },
     crosshair: {
       mode: LightweightCharts.CrosshairMode.Normal,
       vertLine: { color: 'rgba(20,184,166,.4)', labelBackgroundColor: '#14b8a6' },
@@ -1239,6 +1255,9 @@ function ensureEquityChart() {
   if (!box || typeof LightweightCharts === 'undefined') return null;
 
   const chart = LightweightCharts.createChart(box, {
+    localization: {
+      timeFormatter: (t) => fmtLocalTime(t, true)
+    },
     layout: {
       background: { color: 'transparent' },
       textColor: '#8aa39c',
@@ -1251,7 +1270,12 @@ function ensureEquityChart() {
     },
     rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.15, bottom: 0.12 } },
     leftPriceScale: { visible: true, borderVisible: false, scaleMargins: { top: 0.15, bottom: 0.12 } },
-    timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },
+    timeScale: {
+      borderVisible: false,
+      timeVisible: true,
+      secondsVisible: false,
+      tickMarkFormatter: (t) => fmtLocalTime(t, false)
+    },
     crosshair: {
       mode: LightweightCharts.CrosshairMode.Normal,
       vertLine: { color: 'rgba(13,148,136,.4)', width: 1, style: 2, labelBackgroundColor: '#0d9488' },
