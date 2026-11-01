@@ -1009,3 +1009,27 @@ input.tpsl-input {
   .work-collect .work-main { font-size: 20px; }
   .work-bank-amount { font-size: 30px; }
 }
+
+/* ---------- 版本更新提示 ---------- */
+.update-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 20px;
+  border-radius: 30px;
+  background: rgba(13, 148, 136, .96);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 12px 32px rgba(13, 148, 136, .3);
+  animation: updateIn .3s cubic-bezier(.2, .9, .3, 1.2);
+}
+@keyframes updateIn {
+  from { opacity: 0; transform: translate(-50%, 14px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}

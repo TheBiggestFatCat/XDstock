@@ -20,6 +20,7 @@ const state = {
   adminSelected: new Set(),
   prevPrices: {},
   myTrades: [],
+  build: null,
   eqChart: null,
   eqTotal: null,
   eqTrading: null,
@@ -638,6 +639,7 @@ function onTick(d) {
   if (m.index.series.length > 600) m.index.series.shift();
   m.events = d.events || [];
 
+  checkBuild(d.build);
   if (d.closed !== undefined) m.marketOpen = !d.closed;
   // 后台改了参数（杠杆上限等），下一轮就同步过来
   if (d.config) m.config = { ...(m.config || {}), ...d.config };
@@ -1184,6 +1186,26 @@ async function loadEquityCurve() {
       empty.textContent = e.message;
     }
   }
+}
+
+// ---------------- 版本自动更新 ----------------
+let buildReloading = false;
+
+function checkBuild(build) {
+  if (!build || buildReloading) return;
+  if (!state.build) {
+    state.build = build;
+    return;
+  }
+  if (build === state.build) return;
+
+  // 服务器换了新前端文件，本地还是旧的 —— 自动重新加载
+  buildReloading = true;
+  const bar = document.createElement('div');
+  bar.className = 'update-bar';
+  bar.innerHTML = '<span>发现新版本，正在更新…</span>';
+  document.body.appendChild(bar);
+  setTimeout(() => location.reload(), 1200);
 }
 
 // ---------------- 打工（自动积累） ----------------
@@ -1805,6 +1827,7 @@ async function boot() {
       if (!d.me) throw new Error('未登录');
       state.market = d;
       state.me = d.me;
+      if (d.build) state.build = d.build;
       await enterGame();
       return;
     } catch {

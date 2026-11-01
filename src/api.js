@@ -3,6 +3,7 @@ import path from 'node:path';
 import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
 import { candlesFromSeries, changesFor } from './engine.js';
 import { TIMEFRAMES } from './config.js';
+import { getBuild } from './build.js';
 import { playerEquity, openPosition, closePosition, positionPnl } from './trading.js';
 
 const TOKEN_TTL = 30 * 24 * 3600 * 1000;
@@ -143,6 +144,7 @@ function marketPayload(db, me) {
     };
   }
   return {
+    build: getBuild(),
     tick: db.tick,
     tickMs: db.config.tickMs,
     marketOpen: db.config.marketOpen !== false,

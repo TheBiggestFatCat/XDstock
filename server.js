@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getDb, saveDb, now, backupDb } from './src/store.js';
+import { getBuild } from './src/build.js';
 import { stepMarket, seedHistory, changesFor } from './src/engine.js';
 import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, positionPnl, logTrade } from './src/trading.js';
@@ -231,6 +232,7 @@ function tickPayload(forPlayerId) {
   }
   return {
     type: 'tick',
+    build: getBuild(),
     tick: d.tick,
     closed: d.config.marketOpen === false,
     index: d.index.value,
