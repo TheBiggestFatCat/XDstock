@@ -230,21 +230,33 @@ export function checkPositions(db) {
 
       const price = st.price;
       const equity = positionEquity(pos, price);
+      // 每轮最多成交这么多股，止盈止损也受同样限制
+      const fillCap = Math.max(1, Math.floor(Number(db.config.maxFillQtyPerTick ?? 1000)));
 
-      // 强平
+      // 已经进入分批平仓流程：每轮继续平一批
+      if (pos.closing) {
+        const qty = Math.min(fillCap, pos.qty);
+        const r = closePosition(db, player, code, pos.closing, qty);
+        results.push({ playerId: player.id, ...r });
+        continue;
+      }
+
+      // 强平：保证金已经亏光，必须一次平掉，不分批
       if (equity <= (db.config.liquidationBuffer ?? 0)) {
         const r = closePosition(db, player, code, 'liquidated');
         results.push({ playerId: player.id, ...r });
         continue;
       }
 
-      // 止盈止损
+      // 止盈止损：触发后标记，之后每轮平掉一批，直到清仓
       const dir = pos.side === 'long' ? 1 : -1;
       let hit = null;
       if (pos.tp && (price - pos.tp) * dir >= 0) hit = 'tp';
       if (pos.sl && (price - pos.sl) * dir <= 0) hit = 'sl';
       if (hit) {
-        const r = closePosition(db, player, code, hit);
+        pos.closing = hit;
+        const qty = Math.min(fillCap, pos.qty);
+        const r = closePosition(db, player, code, hit, qty);
         results.push({ playerId: player.id, ...r });
       }
     }

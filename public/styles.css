@@ -1244,3 +1244,12 @@ input.tpsl-input {
 
 /* 平仓按钮移除后的说明文字 */
 .op-hint { font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+
+/* 分批平仓中的标记 */
+.pill.warn {
+  background: #fff4e6;
+  color: #b45309;
+  margin-left: 4px;
+  font-size: 10.5px;
+}
+.tpsl-input:disabled { opacity: .45; cursor: not-allowed; }

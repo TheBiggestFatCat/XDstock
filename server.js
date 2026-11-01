@@ -216,7 +216,9 @@ function tickPayload(forPlayerId) {
         margin: pos.margin,
         leverage: pos.leverage,
         tp: pos.tp,
-        sl: pos.sl
+        sl: pos.sl,
+        // 分批平仓中的状态，前端要显示「止损中」
+        closing: pos.closing || null
       };
     }
     me = {

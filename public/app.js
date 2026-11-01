@@ -1017,7 +1017,7 @@ function updateCostPreview() {
 
 function positionSignature(pos) {
   return pos
-    .map((p) => `${p.code}:${p.qty}:${p.side}:${(p.leverage || 1).toFixed(1)}`)
+    .map((p) => `${p.code}:${p.qty}:${p.side}:${(p.leverage || 1).toFixed(1)}:${p.closing || ''}`)
     .sort()
     .join('|');
 }
@@ -1074,7 +1074,10 @@ function renderPositions(force = false) {
           const icon = state.market.stocks[p.code]?.icon || '';
           return `<tr data-pos="${p.code}">
             <td><img class="stock-icon-sm" src="${icon}" alt="" />${escapeHtml(name)} <span class="stock-code">${p.code}</span></td>
-            <td><span class="pill ${p.side}">${p.side === 'long' ? '多' : '空'}</span></td>
+            <td>
+              <span class="pill ${p.side}">${p.side === 'long' ? '多' : '空'}</span>
+              ${p.closing ? `<span class="pill warn">${p.closing === 'tp' ? '止盈中' : '止损中'}</span>` : ''}
+            </td>
             <td data-cell="qty">${p.qty}</td>
             <td>${lev.toFixed(1)}x</td>
             <td>${p.entry.toFixed(2)}</td>
@@ -1083,8 +1086,8 @@ function renderPositions(force = false) {
             <td data-cell="margin">${money(p.margin)}</td>
             <td class="down">${liq > 0 ? liq.toFixed(2) : '—'}</td>
             <td>
-              <input class="tpsl-input" data-code="${p.code}" data-field="tp" type="number" step="0.01" value="${p.tp ?? ''}" placeholder="止盈" />
-              <input class="tpsl-input" data-code="${p.code}" data-field="sl" type="number" step="0.01" value="${p.sl ?? ''}" placeholder="止损" />
+              <input class="tpsl-input" data-code="${p.code}" data-field="tp" type="number" step="0.01" value="${p.tp ?? ''}" placeholder="止盈" ${p.closing ? 'disabled' : ''} />
+              <input class="tpsl-input" data-code="${p.code}" data-field="sl" type="number" step="0.01" value="${p.sl ?? ''}" placeholder="止损" ${p.closing ? 'disabled' : ''} />
             </td>
             <td class="op-hint">用右上「平仓」挂单</td>
           </tr>`;
