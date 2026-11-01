@@ -8,7 +8,7 @@ const state = {
   token: localStorage.getItem('xd_token') || '',
   market: null,
   me: null,
-  code: 'TGW',
+  code: 'DENG',
   tf: '1m',
   side: 'long',
   chart: null,
@@ -24,6 +24,7 @@ const state = {
   eqChart: null,
   eqTotal: null,
   eqTrading: null,
+  listTab: 'quotes',
   tradeTab: 'order',
   stockTradesLoaded: false,
   stream: null
@@ -161,6 +162,7 @@ async function refreshMarket() {
   renderNews();
   renderStockList();
   renderPositions();
+  if (state.listTab === 'positions') renderSidePositions();
   syncLeverageLimits();
   if (d.config) $('#startingCashHint').textContent = money(d.config.startingCash || 100000);
 }
@@ -226,6 +228,52 @@ function renderStockList() {
     div.addEventListener('click', () => selectStock(st.code));
     wrap.appendChild(div);
   }
+}
+
+// ---------------- 左侧卡片：实时行情 / 我的持仓 切换 ----------------
+function switchListTab(name) {
+  state.listTab = name;
+  $$('.list-tab').forEach((b) => b.classList.toggle('active', b.dataset.ltab === name));
+  $('#stockList')?.classList.toggle('hidden', name !== 'quotes');
+  $('#sidePositions')?.classList.toggle('hidden', name !== 'positions');
+  if (name === 'positions') renderSidePositions();
+}
+
+function renderSidePositions() {
+  const wrap = $('#sidePositions');
+  if (!wrap) return;
+  const pos = Object.values(state.market?.me?.positions || {});
+  const cnt = $('#posCount');
+  if (cnt) cnt.textContent = pos.length ? String(pos.length) : '';
+
+  if (!pos.length) {
+    wrap.innerHTML = '<div class="side-empty">还没有持仓<br />在右边下单试试</div>';
+    return;
+  }
+
+  wrap.innerHTML = pos.map((p) => {
+    const st = state.market.stocks[p.code] || {};
+    const icon = st.icon || '';
+    const name = st.name || p.code;
+    return `<div class="stock-item side-pos" data-pos="${p.code}">
+      <img class="stock-icon-sm" src="${icon}" alt="" />
+      <div class="stock-main">
+        <div class="stock-name">${name} <span class="stock-code">${p.code}</span></div>
+        <div class="side-pos-sub">
+          <span class="pill ${p.side}">${p.side === 'long' ? '多' : '空'}</span>
+          ${p.qty} 股 · ${(p.leverage || 1).toFixed(0)}x
+        </div>
+      </div>
+      <div class="stock-price-box">
+        <div class="stock-price ${cls(p.pnl)}">${p.pnl >= 0 ? '+' : ''}${money(p.pnl)}</div>
+        <div class="stock-chg ${cls(p.pnl)}">${pct(p.margin > 0 ? (p.pnl / p.margin) * 100 : 0)}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  wrap.querySelectorAll('[data-pos]').forEach((el) => {
+    el.addEventListener('click', () => selectStock(el.dataset.pos));
+  });
 }
 
 function selectStock(code) {
@@ -673,6 +721,7 @@ function onTick(d) {
   updateCostPreview();
   updatePriceLines();
   renderPositions();
+  if (state.listTab === 'positions') renderSidePositions();
   if ($('#view-portfolio').classList.contains('active')) {
     renderPortfolio();
     loadEquityCurve();
@@ -819,6 +868,7 @@ async function placeOrder() {
     renderTopbar();
     updatePriceLines();
     if ($('#view-portfolio').classList.contains('active')) loadTrades();
+    if (state.listTab === 'positions') renderSidePositions();
     loadMyTrades();
     toast(`${state.side === 'long' ? '开多' : '开空'} ${qty} 股 ${st.name}`, 'ok');
   } catch (e) {
@@ -836,6 +886,7 @@ async function closePos(code) {
     renderTopbar();
     updatePriceLines();
     if ($('#view-portfolio').classList.contains('active')) loadTrades();
+    if (state.listTab === 'positions') renderSidePositions();
     loadMyTrades();
     const pnl = r.result.pnl;
     toast(`平仓 ${r.result.code}，${pnl >= 0 ? '盈利' : '亏损'} ${money(Math.abs(pnl))}`, pnl >= 0 ? 'ok' : 'err');
@@ -1809,6 +1860,14 @@ function bind() {
   $('#workBtn')?.addEventListener('click', collectWork);
   document.querySelectorAll('.trade-tab').forEach((b) => {
     b.addEventListener('click', () => switchTradeTab(b.dataset.ttab));
+  });
+  document.querySelectorAll('.list-tab').forEach((b) => {
+    b.addEventListener('click', () => switchListTab(b.dataset.ltab));
+  });
+  $('#indexBox')?.addEventListener('click', () => {
+    switchView('market');
+    selectStock('DENG');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   });
   $('#configSaveBtn').addEventListener('click', saveConfig);
 

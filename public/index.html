@@ -63,7 +63,7 @@
   <header class="topbar">
     <div class="topbar-left">
       <div class="logo-mini"><img src="/assets/logo.png" alt="" /></div>
-      <div class="index-box">
+      <div class="index-box" id="indexBox" title="查看灯证指数详情">
         <span class="index-label">灯证指数</span>
         <span id="indexValue" class="index-value">1000.00</span>
         <span id="indexChange" class="index-change">+0.00%</span>
@@ -110,11 +110,13 @@
 
       <div class="market-grid">
         <aside class="panel stock-list-panel">
-          <div class="panel-title">
-            <span>实时行情</span>
-            <span class="panel-sub" id="tickInfo">—</span>
+          <div class="list-tabs">
+            <button class="list-tab active" data-ltab="quotes">实时行情</button>
+            <button class="list-tab" data-ltab="positions">我的持仓 <b id="posCount"></b></button>
           </div>
           <div id="stockList" class="stock-list"></div>
+          <div id="sidePositions" class="stock-list hidden"></div>
+          <div class="panel-sub list-foot" id="tickInfo">—</div>
         </aside>
 
         <section class="panel chart-panel">

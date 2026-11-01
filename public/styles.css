@@ -1033,3 +1033,79 @@ input.tpsl-input {
   from { opacity: 0; transform: translate(-50%, 14px); }
   to { opacity: 1; transform: translate(-50%, 0); }
 }
+
+/* ---------- 左侧卡片切换 ---------- */
+.list-tabs {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: #f1f7f5;
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+.list-tab {
+  flex: 1;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 0;
+  cursor: pointer;
+  transition: all .16s;
+  white-space: nowrap;
+}
+.list-tab:hover { color: var(--ink); }
+.list-tab.active {
+  background: #fff;
+  color: #0d9488;
+  box-shadow: 0 1px 4px rgba(15, 42, 38, .1);
+}
+.list-tab b {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 4px;
+  margin-left: 2px;
+  border-radius: 7px;
+  background: #14b8a6;
+  color: #fff;
+  font-size: 10px;
+  line-height: 15px;
+}
+.list-tab b:empty { display: none; }
+
+.list-foot {
+  padding: 8px 2px 2px;
+  border-top: 1px solid #eef5f2;
+  margin-top: 6px;
+}
+
+.side-pos-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 3px;
+}
+.side-pos-sub .pill { font-size: 10px; padding: 1px 6px; }
+.side-empty {
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.9;
+  color: var(--ink-3);
+  padding: 34px 0;
+}
+
+/* 顶栏指数可点 */
+.index-box {
+  cursor: pointer;
+  border-radius: 10px;
+  padding: 4px 8px;
+  margin-left: -8px;
+  transition: background .16s;
+}
+.index-box:hover { background: rgba(20, 184, 166, .09); }
+.index-box:active { transform: scale(.985); }
