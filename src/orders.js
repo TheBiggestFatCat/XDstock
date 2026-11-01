@@ -197,8 +197,10 @@ export function processOrders(db) {
         ) / 100;
       }
 
-      // 每轮最多成交 fillCap 股，大单会被拆成多轮
-      const fillCap = Math.max(1, Math.floor(num(db.config.maxFillQtyPerTick, 1000)));
+      // 每轮最多成交这么多「金额」，换算成股数（大单会被拆成多轮）
+      // 与杠杆无关：杠杆只影响占用多少保证金，不影响这张单在市场里吃掉的筹码
+      const notionalCap = Math.max(1, num(db.config.maxFillNotionalPerTick, 150000));
+      const fillCap = Math.max(1, Math.floor(notionalCap / Math.max(px, 0.01)));
       const remainQty = Math.max(0, Math.floor(order.qty));
       if (remainQty < 1) {
         const idx = orders.indexOf(order);

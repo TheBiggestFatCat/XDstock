@@ -758,9 +758,10 @@ function switchOrderMode(mode) {
   if (hint) {
     hint.classList.toggle('hidden', !isClose);
     if (isClose) {
-      const perTick = Number(state.market?.config?.maxFillQtyPerTick ?? 1000);
+      const perTick = Number(state.market?.config?.maxFillNotionalPerTick ?? 150000);
+      const estQty = pos ? Math.max(1, Math.floor(perTick / Math.max(pos.price || pos.entry, 0.01))) : 0;
       hint.textContent = pos
-        ? `当前持仓：${pos.side === 'long' ? '多' : '空'} ${pos.qty} 股 · ${(pos.leverage || 1).toFixed(0)}x · 成本 ${pos.entry.toFixed(2)}；每轮最多成交 ${perTick} 股`
+        ? `当前持仓：${pos.side === 'long' ? '多' : '空'} ${pos.qty} 股 · ${(pos.leverage || 1).toFixed(0)}x · 成本 ${pos.entry.toFixed(2)}；每轮最多成交约 ${estQty} 股（${money(perTick)}）`
         : '这只票没有持仓';
     }
   }
@@ -2149,7 +2150,7 @@ async function loadAdmin() {
         ['minLeverage', '最小杠杆'],
         ['maxLeverage', '最大杠杆'],
         ['maxOrdersPerTick', '每轮最多下单'],
-        ['maxFillQtyPerTick', '每轮最多成交(股)']
+        ['maxFillNotionalPerTick', '每轮最多成交(金额)']
       ]
     },
     {
