@@ -298,6 +298,7 @@ export function processOrders(db) {
         events.push({
           playerId: player.id,
           type: 'fill',
+          bonus: r.bonus || 0,
           code: order.code,
           name: order.name,
           side: order.side,

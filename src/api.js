@@ -210,6 +210,8 @@ function marketPayload(db, me) {
       shopBodyguardPrice: db.config.shopBodyguardPrice ?? 50000,
       shopBodyguardTicks: db.config.shopBodyguardTicks ?? 720,
       shopThemePrice: db.config.shopThemePrice ?? 2000000,
+      redBonusRate: db.config.redBonusRate ?? 0.01,
+      redBonusMinTicks: db.config.redBonusMinTicks ?? 12,
       limitOrderEnabled: db.config.limitOrderEnabled ?? 1,
       orderTtlTicks: db.config.orderTtlTicks ?? 720,
       maxPendingOrders: db.config.maxPendingOrders ?? 5,

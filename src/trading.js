@@ -80,6 +80,22 @@ export function impactCostRate(db, notional) {
   return Math.min(maxRate, rate);
 }
 
+/** 指数是否处于上升趋势：现价 > MA5 > MA10 > MA30 */
+export function indexUptrend(db) {
+  const series = db.index?.series || [];
+  if (series.length < 31) return false;
+  const tail = series.slice(-31);
+  const last = tail[tail.length - 1];
+  const ma = (n) => {
+    const part = tail.slice(-n);
+    return part.reduce((a, b) => a + b, 0) / part.length;
+  };
+  const ma5 = ma(5);
+  const ma10 = ma(10);
+  const ma30 = ma(30);
+  return last > ma5 && ma5 > ma10 && ma10 > ma30;
+}
+
 export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) {
   const cfg = db.config;
   const st = db.stocks[code];
@@ -145,7 +161,8 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
       leverage,
       tp: tp ? num(tp) : null,
       sl: sl ? num(sl) : null,
-      openedAt: now()
+      openedAt: now(),
+      openedTick: db.tick
     };
   } else {
     const totalQty = exist.qty + qty;
@@ -187,7 +204,26 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
   const impactCost = reason === 'liquidated' || reason === 'delisted'
     ? 0
     : notional * impactCostRate(db, notional);
-  const back = Math.max(0, equity - fee - stamp - impactCost);
+  let back = Math.max(0, equity - fee - stamp - impactCost);
+
+  // 「红红的牛」技能：牛市里平仓，额外返 1% 成交额（每个持仓只算一次）
+  let bonus = 0;
+  const redRate = Number(cfg.redBonusRate ?? 0.01);
+  if (
+    player.theme === 'red' &&
+    redRate > 0 &&
+    !pos.redBonusGiven &&
+    reason !== 'liquidated' &&
+    reason !== 'delisted'
+  ) {
+    const minTicks = Math.max(0, Number(cfg.redBonusMinTicks ?? 12));
+    const held = db.tick - Number(pos.openedTick ?? db.tick);
+    if (held >= minTicks && indexUptrend(db)) {
+      bonus = notional * redRate;
+      back += bonus;
+      pos.redBonusGiven = true;
+    }
+  }
 
   player.cash += back;
   // 平多 = 卖出压低；平空 = 买回推高
@@ -216,6 +252,7 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
     fee,
     stamp,
     impact: impactCost,
+    bonus,
     returned: back,
     reason
   });
@@ -231,6 +268,7 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
     fee,
     stamp,
     impact: impactCost,
+    bonus,
     returned: back,
     reason
   };

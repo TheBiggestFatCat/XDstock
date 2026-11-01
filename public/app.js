@@ -1550,6 +1550,9 @@ function handleAlerts(list) {
 
 function handleCloses(list) {
   for (const c of list) {
+    if (c && c.bonus > 0) {
+      toast(`🐂 牛市加成 +${money(c.bonus)}`, 'ok');
+    }
     if (c && c.autoOrder && !c.qty) {
       toast(
         `${c.code} ${c.autoOrder === 'tp' ? '止盈' : '止损'}触发，已自动挂出平仓单`,
@@ -1803,6 +1806,7 @@ async function loadTrades() {
             // 手续费 = 交易手续费 + 印花税（做空开仓、平多卖出时才有印花税）
             const feeTotal = (Number(t.fee) || 0) + (Number(t.stamp) || 0);
             const impactFee = Number(t.impact) || 0;
+            const bonusFee = Number(t.bonus) || 0;
             const feeTitle = `手续费 ${money(t.fee)} + 印花税 ${money(t.stamp)}`
               + (impactFee > 0 ? ` + 冲击成本 ${money(impactFee)}` : '');
             const feeCell = (feeTotal > 0 || impactFee > 0)
@@ -1821,7 +1825,7 @@ async function loadTrades() {
               <td>${isSteal ? '—' : t.qty}</td>
               <td>${isSteal ? '—' : Number(t.price).toFixed(2)}</td>
               <td>${isSteal ? '—' : (t.leverage || 1).toFixed(1) + 'x'}</td>
-              <td>${isSteal ? money(t.amount || 0) : amountCell}</td>
+              <td>${isSteal ? money(t.amount || 0) : amountCell}${bonusFee > 0 ? `<i class="fee-bonus">🐂 +${money(bonusFee)}</i>` : ''}</td>
               <td>${isSteal ? '<span class="stock-code">—</span>' : feeCell}</td>
               <td>${pnlCell}</td>
               <td><span class="${klass}">${label}</span></td>

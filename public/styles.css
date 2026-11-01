@@ -1712,3 +1712,13 @@ body[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #2b3340; border-
   color: #b45309;
 }
 body[data-theme="dark"] .perk { color: var(--accent); }
+
+.fee-bonus {
+  display: block;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  color: #16a34a;
+  margin-top: 1px;
+}
+body[data-theme="dark"] .fee-bonus { color: var(--down); }
