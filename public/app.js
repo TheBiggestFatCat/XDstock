@@ -35,6 +35,8 @@ const state = {
   listTab: 'quotes',
   limitAuto: true,
   drawMode: false,
+  drawTarget: 'limit',
+  previewLine: null,
   limitLine: null,
   orderMode: 'open',
   shopDir: 1,
@@ -377,6 +379,8 @@ function toggleDrawMode(on) {
     btn.classList.toggle('active', state.drawMode);
     btn.textContent = state.drawMode ? '✅ 完成' : '✏️ 划线';
   }
+  $('#drawTargets')?.classList.toggle('hidden', !state.drawMode);
+  if (!state.drawMode) clearPreviewLine();
   // 画线时禁掉图表的拖动/缩放，免得冲突
   state.chart?.applyOptions({
     handleScroll: !state.drawMode,
@@ -384,6 +388,89 @@ function toggleDrawMode(on) {
   });
   const el = $('#chart');
   if (el) el.style.cursor = state.drawMode ? 'crosshair' : '';
+}
+
+/** 拖动过程中的临时预览线（止盈/止损用） */
+function clearPreviewLine() {
+  const series = state.candleSeries;
+  if (state.previewLine && series) {
+    try { series.removePriceLine(state.previewLine); } catch { /* ignore */ }
+  }
+  state.previewLine = null;
+}
+
+function showPreviewLine(price, target) {
+  const series = state.candleSeries;
+  if (!series) return;
+  clearPreviewLine();
+  const colors = { tp: '#22c55e', sl: '#ef4444', limit: '#f97316' };
+  const names = { tp: '止盈', sl: '止损', limit: '挂单' };
+  state.previewLine = series.createPriceLine({
+    price,
+    color: colors[target] || '#f97316',
+    lineWidth: 2,
+    lineStyle: 2,
+    axisLabelVisible: true,
+    title: `${names[target] || ''} ${price.toFixed(2)}`
+  });
+}
+
+/** 当前持仓（画止盈止损时用） */
+function currentPosition() {
+  return state.market?.me?.positions?.[state.code] || null;
+}
+
+/** 把拖出来的价格应用到对应目标 */
+function applyDrawPrice(price, { commit = false } = {}) {
+  const target = state.drawTarget || 'limit';
+  if (target === 'limit') {
+    setLimitPrice(price);
+    return;
+  }
+
+  const pos = currentPosition();
+  if (!pos) {
+    showPreviewLine(price, target);
+    if (commit) toast('这只票没有持仓，止盈止损无处可设', 'err');
+    return;
+  }
+
+  // 方向校验：多头止盈在上、止损在下；空头相反
+  const dir = pos.side === 'long' ? 1 : -1;
+  const price0 = pos.price || state.market?.stocks?.[state.code]?.price || 0;
+  const bad = target === 'tp'
+    ? (price - price0) * dir <= 0
+    : (price - price0) * dir >= 0;
+
+  showPreviewLine(price, target);
+
+  if (commit) {
+    if (bad) {
+      toast(
+        target === 'tp'
+          ? `止盈价必须${dir > 0 ? '高于' : '低于'}现价 ${price0.toFixed(2)}`
+          : `止损价必须${dir > 0 ? '低于' : '高于'}现价 ${price0.toFixed(2)}`,
+        'err'
+      );
+      return;
+    }
+    commitTpSl(target, price, pos);
+  }
+}
+
+/** 真正写入止盈/止损 */
+async function commitTpSl(target, price, pos) {
+  const body = { code: state.code };
+  body.tp = target === 'tp' ? price : (pos.tp ?? null);
+  body.sl = target === 'sl' ? price : (pos.sl ?? null);
+  try {
+    await api('/api/tpsl', { method: 'POST', body: JSON.stringify(body) });
+    toast(`${target === 'tp' ? '止盈' : '止损'}已设为 ${price.toFixed(2)}`, 'ok');
+    clearPreviewLine();
+    refreshMarket();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
 }
 
 /** 屏幕 y 坐标 → 价格 */
@@ -415,9 +502,9 @@ function bindChartDrawing() {
 
   let dragging = false;
 
-  const apply = (clientY) => {
+  const apply = (clientY, commit = false) => {
     const p = priceAtY(clientY);
-    if (p > 0) setLimitPrice(p);
+    if (p > 0) applyDrawPrice(p, { commit });
   };
 
   // 用捕获阶段：图表库会拦掉冒泡的鼠标事件
@@ -427,7 +514,7 @@ function bindChartDrawing() {
     e.preventDefault();
     e.stopPropagation();
     dragging = true;
-    apply(e.clientY);
+    apply(e.clientY, false);
   }, true);
 
   el.addEventListener('mousemove', (e) => {
@@ -439,7 +526,10 @@ function bindChartDrawing() {
 
   const stop = () => { dragging = false; };
   el.addEventListener('mouseup', (e) => {
-    if (state.drawMode) e.stopPropagation();
+    if (state.drawMode) {
+      e.stopPropagation();
+      if (dragging) apply(e.clientY, true);   // 松手才真正提交
+    }
     dragging = false;
   }, true);
   window.addEventListener('mouseup', stop);
@@ -1315,7 +1405,7 @@ function renderPositions(force = false) {
     <table>
       <thead><tr>
         <th>标的</th><th>方向</th><th>数量</th><th>杠杆</th><th>成本</th>
-        <th>现价</th><th>浮动盈亏</th><th>保证金</th><th>爆仓价</th><th>止盈/止损</th><th>操作</th>
+        <th>现价</th><th>浮动盈亏</th><th>保证金</th><th>爆仓价</th><th>操作</th>
       </tr></thead>
       <tbody>
         ${pos.map((p) => {
@@ -1336,37 +1426,12 @@ function renderPositions(force = false) {
             <td data-cell="pnl"><span class="${cls(p.pnl)}">${money(p.pnl)} <small>(${pct(p.margin > 0 ? (p.pnl / p.margin) * 100 : 0)})</small></span></td>
             <td data-cell="margin">${money(p.margin)}</td>
             <td class="down">${liq > 0 ? liq.toFixed(2) : '—'}</td>
-            <td>
-              <input class="tpsl-input" data-code="${p.code}" data-field="tp" type="number" step="0.01" value="${p.tp ?? ''}" placeholder="止盈" ${p.closing ? 'disabled' : ''} />
-              <input class="tpsl-input" data-code="${p.code}" data-field="sl" type="number" step="0.01" value="${p.sl ?? ''}" placeholder="止损" ${p.closing ? 'disabled' : ''} />
-            </td>
             <td class="op-hint">用右上「平仓」挂单</td>
           </tr>`;
         }).join('')}
       </tbody>
     </table>`;
 
-  wrap.querySelectorAll('.tpsl-input').forEach((inp) => {
-    inp.addEventListener('change', async () => {
-      const code = inp.dataset.code;
-      const tpEl = wrap.querySelector(`.tpsl-input[data-code="${code}"][data-field="tp"]`);
-      const slEl = wrap.querySelector(`.tpsl-input[data-code="${code}"][data-field="sl"]`);
-      try {
-        await api('/api/tpsl', {
-          method: 'POST',
-          body: JSON.stringify({
-            code,
-            tp: tpEl.value ? Number(tpEl.value) : null,
-            sl: slEl.value ? Number(slEl.value) : null
-          })
-        });
-        updatePriceLines();
-        toast('止盈止损已更新', 'ok');
-      } catch (e) {
-        toast(e.message, 'err');
-      }
-    });
-  });
 }
 
 // ---------------- 我的 ----------------
@@ -2319,6 +2384,13 @@ function bind() {
     updateLimitLine(Number($('#orderLimit').value));
   });
   $('#drawLineBtn')?.addEventListener('click', () => toggleDrawMode());
+  document.querySelectorAll('.dt-btn').forEach((b) => {
+    b.addEventListener('click', () => {
+      state.drawTarget = b.dataset.target;
+      document.querySelectorAll('.dt-btn').forEach((x) => x.classList.toggle('active', x === b));
+      clearPreviewLine();
+    });
+  });
   bindChartDrawing();
   $('#orderBtn').addEventListener('click', placeLimit);
 
