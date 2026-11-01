@@ -59,6 +59,7 @@ export function frozenCash(player) {
  */
 function addFlow(st, cfg, signedNotional) {
   if (Number(cfg.playerImpactEnabled ?? 1) === 0) return;
+  if (st.isIndex) return;   // 指数价格是算出来的，记了也没用
   const ref = Math.max(1, Number(cfg.playerImpactRef ?? 30000));
   const maxFlow = Math.max(1, Number(cfg.playerImpactFlowMax ?? 40));
   const before = Number(st.flow) || 0;
@@ -119,7 +120,8 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
   const stamp = side === 'short' ? notional * (cfg.stampDuty ?? 0) : 0;
 
   // 冲击成本：这笔单自己会推动价格，成本由下单人承担
-  const impactCost = notional * impactCostRate(db, notional);
+  // 指数是由成分股算出来的，买卖它不会推动它自己，所以不收冲击成本
+  const impactCost = st.isIndex ? 0 : notional * impactCostRate(db, notional);
   const cost = margin + fee + stamp + impactCost;
   if (player.cash < cost) {
     return { ok: false, error: `现金不足，需要 $${cost.toFixed(2)}，你只有 $${player.cash.toFixed(2)}` };
@@ -201,7 +203,7 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
   let equity = marginPart + pnl;
   if (equity < 0) equity = 0; // 亏损不会超过这部分保证金
   // 冲击成本：平仓同样要为自己造成的冲击付钱（强平/退市除外）
-  const impactCost = reason === 'liquidated' || reason === 'delisted'
+  const impactCost = reason === 'liquidated' || reason === 'delisted' || st.isIndex
     ? 0
     : notional * impactCostRate(db, notional);
   let back = Math.max(0, equity - fee - stamp - impactCost);
