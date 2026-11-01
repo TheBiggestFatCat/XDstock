@@ -700,9 +700,9 @@ export async function handleApi(ctx) {
         leverage: Number(t.leverage) || 1,
         qty: t.qty,
         price: t.price,
-        amount: t.action === 'open'
-          ? notional
-          : Number(t.returned ?? notional)
+        // 统一显示成交额（股数 × 价格），平仓不要显示返还现金，
+        // 否则带杠杆的平仓看起来像「只成交了一点点」
+        amount: notional
       };
     });
     return json(res, 200, { total: rows.length, rows });
