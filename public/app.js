@@ -302,7 +302,8 @@ function syncLimitPrice(force = false) {
 async function placeLimit() {
   const st = state.market?.stocks?.[state.code];
   if (!st) return;
-  const limit = Number($('#orderLimit').value);
+  // 价格保留两位小数，避免出现 194.02499999999998 这种值
+  const limit = Math.round(Number($('#orderLimit').value) * 100) / 100;
   if (!(limit > 0)) { toast('先填挂单价', 'err'); return; }
 
   const mode = state.orderMode || 'open';
@@ -338,6 +339,9 @@ function switchOrderMode(mode) {
   $$('.mode-btn').forEach((b) => b.classList.toggle('active', b.dataset.mode === mode));
 
   const isClose = mode === 'close';
+  // 平仓方向由持仓决定，做多/做空切换没意义
+  $('#sideSwitch')?.classList.toggle('hidden', isClose);
+
   // 平仓不需要数量/杠杆/止盈止损
   ['#orderQty', '#orderLev'].forEach((sel) => {
     const el = $(sel);
@@ -366,13 +370,37 @@ function switchOrderMode(mode) {
 function updateOrderBtnLabel() {
   const btn = $('#orderBtn');
   if (!btn) return;
-  const mode = state.orderMode || 'open';
-  if (mode === 'close') {
-    const pos = state.market?.me?.positions?.[state.code];
-    btn.textContent = pos ? (pos.side === 'long' ? '挂单平多' : '挂单平空') : '没有持仓';
-    btn.disabled = !pos;
+
+  // 休市优先
+  if (state.market?.marketOpen === false) {
+    btn.textContent = '休市中，暂停交易';
+    btn.disabled = true;
     return;
   }
+
+  const mode = state.orderMode || 'open';
+  const me = state.market?.me || {};
+  const pos = me.positions?.[state.code];
+
+  if (mode === 'close') {
+    if (!pos) {
+      btn.textContent = '没有持仓可平';
+      btn.disabled = true;
+      return;
+    }
+    const pending = (me.orders || []).some(
+      (o) => o.code === state.code && o.action === 'close'
+    );
+    if (pending) {
+      btn.textContent = '这只票已有平仓单';
+      btn.disabled = true;
+      return;
+    }
+    btn.textContent = pos.side === 'long' ? '挂单平多' : '挂单平空';
+    btn.disabled = false;
+    return;
+  }
+
   btn.textContent = state.side === 'long' ? '挂单开多' : '挂单开空';
   btn.disabled = false;
 }
@@ -1020,13 +1048,10 @@ function updateCostPreview() {
     $('#costLiq').textContent = liqPx.toFixed(2) + `（跌/涨 ${(100 / lev).toFixed(1)}% 就爆）`;
     $('#costLiq').className = 'down';
   }
-  const btn = $('#orderBtn');
   const closed = state.market?.marketOpen === false;
-  btn.disabled = closed;
-  btn.textContent = closed
-    ? '休市中，暂停交易'
-    : (state.side === 'long' ? '挂单开多' : '挂单开空');
   $('.trade-panel')?.classList.toggle('is-closed', closed);
+  // 按钮文案统一由 updateOrderBtnLabel 决定（要看开仓/平仓模式）
+  updateOrderBtnLabel();
 }
 
 
@@ -2046,8 +2071,10 @@ function bind() {
 
   $$('#sideSwitch .side-btn').forEach((b) => {
     b.addEventListener('click', () => {
+      if (state.orderMode === 'close') return;   // 平仓模式不切方向
       state.side = b.dataset.side;
       $$('#sideSwitch .side-btn').forEach((x) => x.classList.toggle('active', x === b));
+      updateOrderBtnLabel();
       updateCostPreview();
     });
   });
