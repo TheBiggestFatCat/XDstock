@@ -75,6 +75,7 @@ function publicPlayer(p, db) {
     stealQueued: p.stealQueued || null,
     stealEarned: p.stealEarned || 0,
     stealReadyAt: p.stealReadyAt || 0,
+    guardUntil: p.guardUntil || 0,
     frozen: Math.round((p.orders || []).reduce((a, o) => a + (Number(o.reserve) || 0), 0) * 100) / 100,
     orders: (p.orders || []).map((o) => ({
       id: o.id,
@@ -196,6 +197,8 @@ function marketPayload(db, me) {
       maxFillQtyPerTick: db.config.maxFillQtyPerTick ?? 1000,
       shopFakeNewsPrice: db.config.shopFakeNewsPrice ?? 500000,
       shopFakeNewsChance: db.config.shopFakeNewsChance ?? 0.2,
+      shopBodyguardPrice: db.config.shopBodyguardPrice ?? 50000,
+      shopBodyguardTicks: db.config.shopBodyguardTicks ?? 720,
       limitOrderEnabled: db.config.limitOrderEnabled ?? 1,
       orderTtlTicks: db.config.orderTtlTicks ?? 720,
       maxPendingOrders: db.config.maxPendingOrders ?? 5,
@@ -279,6 +282,7 @@ export async function handleApi(ctx) {
         stealQueued: null,
         stealEarned: 0,
         stealReadyAt: 0,
+        guardUntil: 0,
         orders: [],
         eq: [],
         createdAt: now()
@@ -335,6 +339,7 @@ export async function handleApi(ctx) {
         avatar: p.avatar || null,
         cash: p.cash,
         equity,
+        guardUntil: p.guardUntil || 0,
         positions
       };
     });
@@ -518,6 +523,7 @@ export async function handleApi(ctx) {
       'workRatePerTick', 'workOnlineMultiplier', 'workBankTicks', 'stealMin', 'stealMax', 'stealCapRatio', 'stealCooldownTicks',
       'equitySampleTicks', 'equityMaxPoints',
       'shopFakeNewsPrice', 'shopFakeNewsChance',
+      'shopBodyguardPrice', 'shopBodyguardTicks',
       'maxOrdersPerTick', 'maxFillQtyPerTick',
       'limitOrderEnabled', 'orderTtlTicks', 'maxPendingOrders',
       'playerImpactEnabled', 'playerImpactRef', 'playerImpactStrength',
@@ -610,6 +616,13 @@ export async function handleApi(ctx) {
     const victim = db.players[targetId];
     if (!victim) return json(res, 404, { error: '没这个人' });
     if (victim.id === me.id) return json(res, 400, { error: '偷自己不算本事' });
+
+    const guardLeft = Number(victim.guardUntil || 0) - db.tick;
+    if (guardLeft > 0) {
+      return json(res, 400, {
+        error: `${victim.nickname} 身边有保镖，还剩 ${guardLeft} 轮（约 ${Math.ceil(guardLeft * 5 / 60)} 分钟）`
+      });
+    }
 
     // 冷却中直接拦下来
     const cdUntil = Number(me.stealReadyAt) || 0;
@@ -750,6 +763,32 @@ export async function handleApi(ctx) {
       price,
       cash: me.cash,
       event: { id: ev.id, text: ev.text, dir: ev.dir, createdAt: ev.createdAt }
+    });
+  }
+
+  if (pathname === '/api/shop/bodyguard' && method === 'POST') {
+    const price = Number(db.config.shopBodyguardPrice ?? 50000);
+    const ticks = Math.max(1, Math.round(Number(db.config.shopBodyguardTicks ?? 720)));
+
+    if (me.cash < price) {
+      return json(res, 400, {
+        error: `现金不足，售价 $${price.toLocaleString()}，你只有 $${me.cash.toFixed(2)}`
+      });
+    }
+
+    me.cash -= price;
+    me.shopSpent = (me.shopSpent || 0) + price;
+    // 还在保护期内再买一次就叠加时长
+    const base = Math.max(Number(me.guardUntil || 0), db.tick);
+    me.guardUntil = base + ticks;
+    saveDb();
+
+    return json(res, 200, {
+      ok: true,
+      price,
+      guardUntil: me.guardUntil,
+      leftTicks: me.guardUntil - db.tick,
+      cash: me.cash
     });
   }
 

@@ -312,9 +312,62 @@ function renderShop() {
     btn.textContent = poor ? `现金不足（差 ${money(price - cash)}）` : '购买并发布';
   }
 
+  // ---- 保镖 ----
+  const bgPrice = Number(cfg.shopBodyguardPrice ?? 50000);
+  const bgTicks = Number(cfg.shopBodyguardTicks ?? 720);
+  const bgPriceEl = $('#bodyguardPrice');
+  if (bgPriceEl) bgPriceEl.textContent = money(bgPrice);
+  const bgTicksEl = $('#guardTicks');
+  if (bgTicksEl) bgTicksEl.textContent = String(bgTicks);
+
+  const tickNow = state.market?.tick || 0;
+  const guardLeft = Math.max(0, Number(state.market?.me?.guardUntil || 0) - tickNow);
+  const gs = $('#guardStatus');
+  if (gs) {
+    if (guardLeft > 0) {
+      const mins = Math.ceil((guardLeft * (state.market?.config?.tickMs || 5000)) / 60000);
+      gs.textContent = `🛡️ 保护中 · 还剩 ${guardLeft} 轮（约 ${mins} 分钟）`;
+      gs.classList.add('on');
+    } else {
+      gs.textContent = '当前没有保护';
+      gs.classList.remove('on');
+    }
+  }
+
+  const bgBtn = $('#bodyguardBuy');
+  if (bgBtn) {
+    const poor = cash < bgPrice;
+    bgBtn.disabled = poor;
+    bgBtn.textContent = poor
+      ? `现金不足（差 ${money(bgPrice - cash)}）`
+      : (guardLeft > 0 ? '再续一小时' : '购买保镖');
+  }
+
   $$('.dir-btn').forEach((b) => {
     b.classList.toggle('active', Number(b.dataset.dir) === state.shopDir);
   });
+}
+
+async function buyBodyguard() {
+  const btn = $('#bodyguardBuy');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  const old = btn.textContent;
+  btn.textContent = '雇佣中…';
+  try {
+    const r = await api('/api/shop/bodyguard', { method: 'POST' });
+    if (state.market?.me) {
+      state.market.me.guardUntil = r.guardUntil;
+      state.market.me.cash = r.cash;
+    }
+    toast(`🛡️ 保镖已就位，保护 ${r.leftTicks} 轮`, 'ok');
+    refreshMarket();
+  } catch (e) {
+    toast(e.message, 'err');
+    btn.textContent = old;
+  } finally {
+    renderShop();
+  }
 }
 
 async function buyFakeNews() {
@@ -1272,7 +1325,8 @@ function handleAlerts(list) {
   for (const a of list) {
     if (a.type !== 'steal') continue;
     if (!a.ok) {
-      toast(`小偷空手而归：${a.target} 身上没现金`, 'err');
+      if (a.guarded) toast(`🛡️ ${a.target} 身边有保镖，小偷被赶走了`, 'err');
+      else toast(`小偷空手而归：${a.target} 身上没现金`, 'err');
       continue;
     }
     if (a.mine) {
@@ -2090,7 +2144,9 @@ async function loadAdmin() {
       desc: '道具价格与效果',
       fields: [
         ['shopFakeNewsPrice', '假新闻售价'],
-        ['shopFakeNewsChance', '生效概率(0.2=20%)']
+        ['shopFakeNewsChance', '生效概率(0.2=20%)'],
+        ['shopBodyguardPrice', '保镖售价'],
+        ['shopBodyguardTicks', '保镖时长(轮)']
       ]
     },
     {
@@ -2448,6 +2504,7 @@ function bind() {
     });
   });
   $('#fakeNewsBuy')?.addEventListener('click', buyFakeNews);
+  $('#bodyguardBuy')?.addEventListener('click', buyBodyguard);
   $('#traitSaveBtn')?.addEventListener('click', saveTraits);
 
   // 定时刷新「我的」与「排行」，保证不靠 SSE 也准确

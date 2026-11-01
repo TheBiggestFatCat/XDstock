@@ -231,6 +231,7 @@ function tickPayload(forPlayerId) {
       stealQueued: p.stealQueued || null,
       stealEarned: p.stealEarned || 0,
       stealReadyAt: p.stealReadyAt || 0,
+      guardUntil: p.guardUntil || 0,
       frozen: Math.round((p.orders || []).reduce((a, o) => a + (Number(o.reserve) || 0), 0) * 100) / 100,
       orders: (p.orders || []).map((o) => ({
         id: o.id,
@@ -379,6 +380,19 @@ function loop() {
     if (!victim || victim.id === p.id) continue;
 
     // 边界一：对方现金必须 > 0，否则没得偷
+    // 派出小偷之后对方才买的保镖也算数
+    const victimGuard = Number(victim.guardUntil || 0) - d.tick;
+    if (victimGuard > 0) {
+      pushAlert(p.id, {
+        type: 'steal',
+        ok: false,
+        guarded: true,
+        target: victim.nickname,
+        amount: 0
+      });
+      continue;
+    }
+
     const victimCash = Math.max(0, Number(victim.cash) || 0);
     if (victimCash < 1) {
       pushAlert(p.id, { type: 'steal', ok: false, target: victim.nickname, amount: 0 });

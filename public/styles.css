@@ -1397,3 +1397,21 @@ input.tpsl-input {
   background: #fff3e6;
   color: #b45309;
 }
+
+/* ---------- 保镖 ---------- */
+.guard-status {
+  font-size: 12px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: #f4f6f8;
+  color: var(--ink-3);
+  margin: 12px 0;
+  text-align: center;
+  border: 1px solid #e9eef2;
+}
+.guard-status.on {
+  background: #eef6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+  font-weight: 600;
+}

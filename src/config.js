@@ -47,6 +47,8 @@ export const DEFAULT_CONFIG = {
   // ---- 商城 ----
   shopFakeNewsPrice: 500000,   // 假新闻售价
   shopFakeNewsChance: 0.2,     // 真的会影响市场的概率（其余只显示不生效）
+  shopBodyguardPrice: 50000,   // 保镖售价
+  shopBodyguardTicks: 720,     // 保护时长（720 轮 = 1 小时）
 
   // ---- 成交节奏 ----
   // 挂单可以挂任意数量，但每轮最多成交这么多股（大单会被拆成多轮慢慢成交）
