@@ -762,6 +762,110 @@ export async function handleApi(ctx) {
     const price = st.price;
     const dir = pos.side === 'long' ? 1 : -1;
 
+    const has = (k) => Object.prototype.hasOwnProperty.call(body, k);
+    const parse = (v) => {
+      if (v === null || v === undefined || v === '') return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : NaN;
+    };
+
+    // 只改请求里出现的字段，没传的保持原样（避免并发编辑互相覆盖）
+    let tp = pos.tp ?? null;
+    let sl = pos.sl ?? null;
+
+    if (has('tp')) {
+      const v = parse(body.tp);
+      if (v !== null) {
+        if (!Number.isFinite(v) || v <= 0) return json(res, 400, { error: '止盈价必须是正数' });
+        if ((v - price) * dir <= 0) {
+          return json(res, 400, {
+            error: `止盈价必须${dir > 0 ? '高于' : '低于'}现价 ${price.toFixed(2)}，否则会立刻成交`
+          });
+        }
+      }
+      tp = v;
+    }
+
+    if (has('sl')) {
+      const v = parse(body.sl);
+      if (v !== null) {
+        if (!Number.isFinite(v) || v <= 0) return json(res, 400, { error: '止损价必须是正数' });
+        if ((v - price) * dir >= 0) {
+          return json(res, 400, {
+            error: `止损价必须${dir > 0 ? '低于' : '高于'}现价 ${price.toFixed(2)}，否则会立刻成交`
+          });
+        }
+      }
+      sl = v;
+    }
+
+    pos.tp = tp;
+    pos.sl = sl;
+    saveDb();
+    return json(res, 200, { ok: true, position: pos });
+  }
+
+  // ---------- 商城 ----------
+  if (pathname === '/api/shop/fake-news' && method === 'POST') {
+    const price = Number(db.config.shopFakeNewsPrice ?? 500000);
+    const chance = Math.max(0, Math.min(1, Number(db.config.shopFakeNewsChance ?? 0.2)));
+
+    const text = String(body.text || '').trim().slice(0, 120);
+    if (text.length < 4) return json(res, 400, { error: '内容至少 4 个字' });
+    const dir = Number(body.dir ?? 1) >= 0 ? 1 : -1;
+
+    if (me.cash < price) {
+      return json(res, 400, {
+        error: `现金不足，售价 $${price.toLocaleString()}，你只有 $${me.cash.toFixed(2)}`
+      });
+    }
+
+    // 花钱
+    me.cash -= price;
+    me.shopSpent = (me.shopSpent || 0) + price;
+
+    // 20% 概率真的有冲击，其余只是「挂个名」
+    const hit = Math.random() < chance;
+    const duration = 80 + Math.floor(Math.random() * 60);
+    const ev = {
+      id: 'ev_' + Math.random().toString(36).slice(2, 10),
+      kind: 'leak',
+      text,
+      companies: [],                        // 空 = 全市场
+      dir,
+      // 幅度压低：全市场新闻会持续 80~140 轮，每轮 0.03%~0.06% 累计约 3%~8%
+      trend: hit ? dir * (0.0003 + Math.random() * 0.0003) : 0,
+      leakTicks: 0,
+      leakLeft: 0,
+      duration,
+      remaining: duration,
+      createdAt: now(),
+      announced: true,                      // 立刻显示，不走偷跑
+      fake: true,
+      buyerId: me.id
+    };
+    db.events.push(ev);
+    saveDb();
+
+    return json(res, 200, {
+      ok: true,
+      hit,
+      price,
+      cash: me.cash,
+      event: { id: ev.id, text: ev.text, dir: ev.dir, createdAt: ev.createdAt }
+    });
+  }
+
+  if (pathname === '/api/tpsl' && method === 'POST') {
+    const code = String(body.code || '').toUpperCase();
+    const pos = me.positions[code];
+    if (!pos) return json(res, 400, { error: '没有这只票的持仓' });
+
+    const st = db.stocks[code];
+    if (!st) return json(res, 400, { error: '标的不存在' });
+    const price = st.price;
+    const dir = pos.side === 'long' ? 1 : -1;
+
     const parse = (v) => {
       if (v === null || v === undefined || v === '') return null;
       const n = Number(v);

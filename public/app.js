@@ -458,17 +458,26 @@ function applyDrawPrice(price, { commit = false } = {}) {
   }
 }
 
-/** 真正写入止盈/止损 */
+/** 真正写入止盈/止损（只提交被改的那一项，另一项由服务端保留） */
 async function commitTpSl(target, price, pos) {
   const body = { code: state.code };
-  body.tp = target === 'tp' ? price : (pos.tp ?? null);
-  body.sl = target === 'sl' ? price : (pos.sl ?? null);
+  body[target === 'tp' ? 'tp' : 'sl'] = price;
   try {
-    await api('/api/tpsl', { method: 'POST', body: JSON.stringify(body) });
+    const r = await api('/api/tpsl', { method: 'POST', body: JSON.stringify(body) });
+    // 用服务端返回的最新值更新本地，避免下一次编辑基于旧数据
+    if (r?.position && state.market?.me?.positions) {
+      const local = state.market.me.positions[state.code];
+      if (local) {
+        local.tp = r.position.tp ?? null;
+        local.sl = r.position.sl ?? null;
+      }
+    }
     toast(`${target === 'tp' ? '止盈' : '止损'}已设为 ${price.toFixed(2)}`, 'ok');
     clearPreviewLine();
+    updatePriceLines();
     refreshMarket();
   } catch (e) {
+    clearPreviewLine();
     toast(e.message, 'err');
   }
 }
