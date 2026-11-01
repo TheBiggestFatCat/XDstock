@@ -1109,3 +1109,36 @@ input.tpsl-input {
 }
 .index-box:hover { background: rgba(20, 184, 166, .09); }
 .index-box:active { transform: scale(.985); }
+
+/* ---------- 个股设置 ---------- */
+.trait-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.trait-card {
+  padding: 13px 15px 15px;
+  border-radius: 14px;
+  background: #f8fbfa;
+  border: 1px solid #eaf2ef;
+}
+.trait-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+.trait-head b { font-weight: 700; color: var(--ink); }
+.trait-tag {
+  margin-left: auto;
+  font-size: 11px;
+  color: #0d9488;
+  background: #e6f7f4;
+  border-radius: 8px;
+  padding: 2px 9px;
+}
+.trait-card .cfg-grid { grid-template-columns: repeat(2, 1fr); gap: 8px 10px; }
+.trait-card .cfg-field input { padding: 6px 9px; font-size: 12px; }
+.trait-empty { font-size: 12px; color: var(--ink-3); padding: 8px 0; }

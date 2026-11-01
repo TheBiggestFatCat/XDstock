@@ -1565,6 +1565,9 @@ async function loadAdmin() {
     ? d.events.map((e) => `<div class="active-event">${e.text.slice(0, 40)}</div>`).join('')
     : '<div class="active-event">当前没有活跃新闻</div>';
 
+  // 个股设置
+  renderTraitForm(d.stocks);
+
   // 参数（分组渲染）
   const CFG_GROUPS = [
     {
@@ -1667,6 +1670,81 @@ async function loadAdmin() {
         }).join('')}
       </div>
     </section>`).join('');
+}
+
+// ---------------- 个股特质 ----------------
+const TRAIT_LABELS = {
+  volMult: ['波动倍数', '越大越疯'],
+  revMult: ['回归倍数', '越大越容易被拉回'],
+  eventMult: ['新闻反应倍数', '有消息时放大几倍'],
+  drift: ['每轮漂移', '正数慢慢涨，负数慢慢跌'],
+  streak: ['连击阈值(轮)', '连涨/连跌多少轮触发反弹'],
+  bounceLo: ['反弹下限', '如 0.04 = 4%'],
+  bounceHi: ['反弹上限', '如 0.08 = 8%'],
+  lotteryChance: ['彩票概率/轮', '如 0.00025'],
+  lotteryLo: ['彩票涨幅下限', '如 0.25 = 25%'],
+  lotteryHi: ['彩票涨幅上限', '如 0.6 = 60%'],
+  floorRatio: ['护盘触发比例', '跌到初始价的几成开始托'],
+  floorBoost: ['护盘加成', '每轮往上托多少']
+};
+
+function renderTraitForm(stocks) {
+  const box = $('#traitForm');
+  if (!box) return;
+  const list = (stocks || []).filter((st) => !st.isIndex);
+  if (!list.length) {
+    box.innerHTML = '<div class="trait-empty">没有可配置的标的</div>';
+    return;
+  }
+
+  box.innerHTML = list.map((st) => {
+    const trait = st.trait || {};
+    const keys = Object.keys(TRAIT_LABELS).filter((k) => typeof trait[k] === 'number');
+    const fields = keys.map((k) => {
+      const [label, hint] = TRAIT_LABELS[k];
+      return `<label class="field cfg-field" title="${hint}">
+        <span>${label}</span>
+        <input type="number" step="0.00001"
+               data-trait-code="${st.code}" data-trait-key="${k}"
+               value="${trait[k]}" />
+      </label>`;
+    }).join('');
+
+    return `<section class="trait-card">
+      <div class="trait-head">
+        <img class="stock-icon-sm" src="/assets/stocks/${st.code}.png" alt="" />
+        <b>${st.name}</b>
+        <span class="stock-code">${st.code}</span>
+        <span class="trait-tag">${st.traitName || '—'}</span>
+      </div>
+      ${fields ? `<div class="cfg-grid">${fields}</div>` : '<div class="trait-empty">这只票没有可调参数</div>'}
+    </section>`;
+  }).join('');
+}
+
+async function saveTraits() {
+  const byCode = new Map();
+  $$('#traitForm [data-trait-code]').forEach((inp) => {
+    const code = inp.dataset.traitCode;
+    if (!byCode.has(code)) byCode.set(code, {});
+    const v = inp.value.trim();
+    if (v === '') return;
+    const num = Number(v);
+    if (Number.isFinite(num)) byCode.get(code)[inp.dataset.traitKey] = num;
+  });
+
+  try {
+    let n = 0;
+    for (const [code, patch] of byCode) {
+      if (!Object.keys(patch).length) continue;
+      await adminApi('/api/admin/stock-trait', { code, patch });
+      n += 1;
+    }
+    toast(`个股设置已保存（${n} 只）`, 'ok');
+    refreshMarket();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
 }
 
 async function saveConfig() {
@@ -1870,6 +1948,7 @@ function bind() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
   $('#configSaveBtn').addEventListener('click', saveConfig);
+  $('#traitSaveBtn')?.addEventListener('click', saveTraits);
 
   // 定时刷新「我的」与「排行」，保证不靠 SSE 也准确
   setInterval(() => {

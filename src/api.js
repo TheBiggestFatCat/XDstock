@@ -339,7 +339,9 @@ export async function handleApi(ctx) {
         price: s.price,
         status: s.status,
         statusUntil: s.statusUntil,
-        traitName: s.trait?.name
+        isIndex: !!s.isIndex,
+        traitName: s.trait?.name,
+        trait: s.trait || {}
       })),
       events: db.events,
       players: Object.values(db.players).map((p) => ({
@@ -350,6 +352,30 @@ export async function handleApi(ctx) {
       })),
       marketOpen: db.config.marketOpen !== false
     });
+  }
+
+  if (pathname === '/api/admin/stock-trait' && method === 'POST') {
+    const code = String(body.code || '').toUpperCase();
+    const st = db.stocks[code];
+    if (!st) return json(res, 404, { error: '没有这个标的' });
+    if (!st.trait) st.trait = {};
+
+    const allowed = [
+      'volMult', 'revMult', 'eventMult', 'drift',
+      'streak', 'bounceLo', 'bounceHi',
+      'lotteryChance', 'lotteryLo', 'lotteryHi',
+      'floorRatio', 'floorBoost'
+    ];
+    const changed = {};
+    for (const [k, v] of Object.entries(body.patch || {})) {
+      if (!allowed.includes(k)) continue;
+      const num = Number(v);
+      if (!Number.isFinite(num)) continue;
+      st.trait[k] = num;
+      changed[k] = num;
+    }
+    saveDb();
+    return json(res, 200, { ok: true, code, trait: st.trait, changed });
   }
 
   if (pathname === '/api/admin/stock' && method === 'POST') {
