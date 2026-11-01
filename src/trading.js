@@ -65,6 +65,21 @@ function addFlow(st, cfg, signedNotional) {
   st.flow = Math.max(-maxFlow, Math.min(maxFlow, before + signedNotional / ref));
 }
 
+/**
+ * 冲击成本费率：单子越大，吃掉的市场深度越多，付的钱越多
+ * 和 playerImpact 用同一套参考额，避免两套口径
+ */
+export function impactCostRate(db, notional) {
+  const cfg = db.config || {};
+  const coef = Math.max(0, Number(cfg.impactCostCoef ?? 6));
+  if (coef <= 0) return 0;
+  const ref = Math.max(1, Number(cfg.playerImpactRef ?? 30000));
+  const strength = Math.max(0, Number(cfg.playerImpactStrength ?? 0.0009));
+  const maxRate = Math.max(0, Number(cfg.impactCostMax ?? 0.06));
+  const rate = (Math.abs(notional) / ref) * strength * coef;
+  return Math.min(maxRate, rate);
+}
+
 export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) {
   const cfg = db.config;
   const st = db.stocks[code];
@@ -87,7 +102,9 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
   const fee = notional * (cfg.feeRate ?? 0);
   const stamp = side === 'short' ? notional * (cfg.stampDuty ?? 0) : 0;
 
-  const cost = margin + fee + stamp;
+  // 冲击成本：这笔单自己会推动价格，成本由下单人承担
+  const impactCost = notional * impactCostRate(db, notional);
+  const cost = margin + fee + stamp + impactCost;
   if (player.cash < cost) {
     return { ok: false, error: `现金不足，需要 $${cost.toFixed(2)}，你只有 $${player.cash.toFixed(2)}` };
   }
@@ -114,6 +131,7 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
     fee,
     stamp,
     margin,
+    impact: impactCost,
     reason: 'manual'
   });
 
@@ -165,7 +183,11 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
   const marginPart = pos.margin * ratio;
   let equity = marginPart + pnl;
   if (equity < 0) equity = 0; // 亏损不会超过这部分保证金
-  const back = Math.max(0, equity - fee - stamp);
+  // 冲击成本：平仓同样要为自己造成的冲击付钱（强平/退市除外）
+  const impactCost = reason === 'liquidated' || reason === 'delisted'
+    ? 0
+    : notional * impactCostRate(db, notional);
+  const back = Math.max(0, equity - fee - stamp - impactCost);
 
   player.cash += back;
   // 平多 = 卖出压低；平空 = 买回推高
@@ -193,6 +215,7 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
     pnl,
     fee,
     stamp,
+    impact: impactCost,
     returned: back,
     reason
   });
@@ -207,6 +230,7 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
     pnl,
     fee,
     stamp,
+    impact: impactCost,
     returned: back,
     reason
   };

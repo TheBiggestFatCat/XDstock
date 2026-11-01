@@ -195,6 +195,8 @@ function marketPayload(db, me) {
     config: {
       stPrice: db.config.stPrice ?? 3,
       stDelistTicks: db.config.stDelistTicks ?? 100,
+      impactCostCoef: db.config.impactCostCoef ?? 6,
+      impactCostMax: db.config.impactCostMax ?? 0.06,
       minLeverage: db.config.minLeverage,
       maxLeverage: db.config.maxLeverage,
       feeRate: db.config.feeRate,
@@ -533,6 +535,7 @@ export async function handleApi(ctx) {
       'shopFakeNewsPrice', 'shopFakeNewsChance',
       'shopBodyguardPrice', 'shopBodyguardTicks',
       'stPrice', 'stDelistTicks',
+      'impactCostCoef', 'impactCostMax',
       'maxOrdersPerTick', 'maxFillNotionalPerTick',
       'limitOrderEnabled', 'orderTtlTicks', 'maxPendingOrders',
       'playerImpactEnabled', 'playerImpactRef', 'playerImpactStrength',

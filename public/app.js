@@ -1683,8 +1683,13 @@ async function loadTrades() {
               : '<span class="stock-code">—</span>';
             // 手续费 = 交易手续费 + 印花税（做空开仓、平多卖出时才有印花税）
             const feeTotal = (Number(t.fee) || 0) + (Number(t.stamp) || 0);
-            const feeCell = feeTotal > 0
-              ? `<span class="fee-cell" title="手续费 ${money(t.fee)} + 印花税 ${money(t.stamp)}">${money(feeTotal)}</span>`
+            const impactFee = Number(t.impact) || 0;
+            const feeTitle = `手续费 ${money(t.fee)} + 印花税 ${money(t.stamp)}`
+              + (impactFee > 0 ? ` + 冲击成本 ${money(impactFee)}` : '');
+            const feeCell = (feeTotal > 0 || impactFee > 0)
+              ? `<span class="fee-cell" title="${feeTitle}">${money(feeTotal + impactFee)}`
+                + (impactFee > 0 ? `<i class="fee-impact">冲击 ${money(impactFee)}</i>` : '')
+                + `</span>`
               : '<span class="stock-code">—</span>';
             const amountCell = t.action === 'close'
               ? money(t.returned ?? 0)
@@ -2209,7 +2214,9 @@ async function loadAdmin() {
         ['playerImpactStrength', '推力系数'],
         ['playerImpactDecay', '每轮衰减'],
         ['playerImpactMax', '单轮最大影响'],
-        ['playerImpactFlowMax', '压力上限']
+        ['playerImpactFlowMax', '压力上限'],
+        ['impactCostCoef', '冲击成本系数(0=不收)'],
+        ['impactCostMax', '冲击成本封顶(0.06=6%)']
       ]
     },
     {

@@ -37,7 +37,13 @@ export const DEFAULT_CONFIG = {
   playerImpactStrength: 0.0009,  // 每单位压力推动多少价格（0.0009 = 0.09%）
   playerImpactDecay: 0.88,       // 压力每轮衰减系数
   playerImpactMax: 0.008,        // 单轮最多推动 0.8%
-  playerImpactFlowMax: 40,       // 压力上限（防止堆到离谱）
+  playerImpactFlowMax: 12,       // 压力上限（防止堆到离谱；也限制大单的极限涨幅）
+
+  // 冲击成本：下单的人要为自己制造的价格冲击付钱
+  //   费率 = 成交额 / 参考额 × 推力系数 × 本系数（封顶 impactCostMax）
+  //   默认 6 → 「买入 → 等涨 → 卖出」这种自洗来回的收益变成负数
+  impactCostCoef: 12,
+  impactCostMax: 0.06,
 
   // ---- 挂单 ----
   limitOrderEnabled: 1,     // 1=允许限价挂单
