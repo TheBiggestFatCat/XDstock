@@ -70,8 +70,8 @@ function cls(v) {
 // 按当前 K 线周期取涨跌幅（后端已经算好 5 个周期）
 function stockChange(st) {
   if (!st) return 0;
-  if (st.changes && st.changes[state.tf] !== undefined) return st.changes[state.tf];
-  return st.changePct || 0;
+  if (st.changes && Number.isFinite(st.changes[state.tf])) return st.changes[state.tf];
+  return Number.isFinite(st.changePct) ? st.changePct : 0;
 }
 
 function toast(msg, type = '') {
@@ -1431,6 +1431,8 @@ function onTick(d) {
   if (!m) return;
   m.tick = d.tick;
   m.index.value = d.index;
+  // 指数的各周期涨跌幅也要跟着更新，否则顶部读数会一直停在进页面时那一刻
+  if (d.indexChanges) m.index.changes = d.indexChanges;
   m.index.series.push(d.index);
   if (m.index.series.length > 600) m.index.series.shift();
   m.events = d.events || [];
@@ -1446,6 +1448,10 @@ function onTick(d) {
     m.stocks[code].price = s.price;
     m.stocks[code].changePct = s.changePct;
     m.stocks[code].status = s.status;
+    // 各周期的涨跌幅也要跟着刷新，否则界面上一直显示进游戏那一刻的值
+    if (s.changes) m.stocks[code].changes = s.changes;
+    if (s.st !== undefined) m.stocks[code].st = s.st;
+    if (s.stTicks !== undefined) m.stocks[code].stTicks = s.stTicks;
   }
   if (d.me) {
     m.me = { ...m.me, ...d.me };
