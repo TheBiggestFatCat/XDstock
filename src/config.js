@@ -26,8 +26,10 @@ export const DEFAULT_CONFIG = {
   eventDurationMin: 80,
   eventDurationMax: 200,
 
-  // ---- 打工 ----
-  workReward: 1000,         // 每按一次按钮，下一轮结算的工资
+  // ---- 打工（自动积累）----
+  workRatePerTick: 50,      // 每轮自动往钱袋里攒多少
+  workOnlineMultiplier: 2,  // 在线时攒的速度翻倍
+  workBankTicks: 1440,      // 钱袋上限按多少轮算（1440 轮 = 2 小时）
 
   // ---- 收益曲线 ----
   equitySampleTicks: 12,    // 每多少轮记录一次资产快照（12 轮 ≈ 1 分钟）

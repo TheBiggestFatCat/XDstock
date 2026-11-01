@@ -1186,52 +1186,83 @@ async function loadEquityCurve() {
   }
 }
 
-// ---------------- 打工 ----------------
+// ---------------- 打工（自动积累） ----------------
 function renderWork() {
   const me = state.market?.me;
   const cfg = state.market?.config || {};
-  const reward = cfg.workReward ?? 1000;
+  const rate = Number(cfg.workRatePerTick ?? 50);
+  const mult = Number(cfg.workOnlineMultiplier ?? 2);
+  const capTicks = Number(cfg.workBankTicks ?? 1440);
+  const cap = rate * capTicks;
+
+  const bank = Number(me?.workBank || 0);
+  const full = cap > 0 && bank >= cap - 0.01;
+  const online = !!me?.workOnline;
+
+  const amount = $('#workAmount');
+  if (amount) amount.textContent = money(bank);
+
+  const rateLine = $('#workRateLine');
+  if (rateLine) {
+    rateLine.textContent = online
+      ? `在线加成 · 每轮 +${money(rate * mult)}`
+      : `离线积累 · 每轮 +${money(rate)}`;
+    rateLine.classList.toggle('is-online', online);
+    rateLine.classList.toggle('is-full', full);
+  }
+
+  const bar = $('#workBar');
+  if (bar) {
+    const p = cap > 0 ? Math.min(100, (bank / cap) * 100) : 0;
+    bar.style.width = p.toFixed(1) + '%';
+    bar.classList.toggle('is-full', full);
+  }
 
   const btn = $('#workBtn');
+  if (btn) {
+    btn.disabled = bank < 1;
+    btn.classList.toggle('is-empty', bank < 1);
+  }
+
   const hint = $('#workHint');
-  if (!btn) return;
-
-  const queued = !!me?.workQueued;
-  btn.classList.toggle('is-queued', queued);
-  btn.disabled = queued;
-
   if (hint) {
-    hint.textContent = queued ? '已打卡 · 等这一轮结算' : '点一下开始搬砖';
-    hint.classList.toggle('is-queued', queued);
+    hint.textContent = full
+      ? '钱袋满了，再不取就白攒了'
+      : bank < 1
+        ? '钱袋还是空的，等下一轮'
+        : `还能再攒 ${money(cap - bank)}`;
+    hint.classList.toggle('is-full', full);
   }
 
   const total = $('#workTotal');
   if (total) total.textContent = money(me?.workEarned || 0);
 
-  const round = $('#workRound');
-  if (round) {
-    round.textContent = queued ? '已打卡' : '待打卡';
-    round.className = queued ? 'down' : '';
+  const status = $('#workRound');
+  if (status) {
+    status.textContent = full ? '已满' : online ? '在线 2 倍' : '离线积累';
+    status.className = full ? 'up' : '';
   }
-
-  const sub = btn.querySelector('.work-sub');
-  if (sub) sub.textContent = `+${money(reward)} / 轮`;
 }
 
-async function pressWork() {
+async function collectWork() {
   const btn = $('#workBtn');
   if (!btn || btn.disabled) return;
   btn.classList.remove('pop');
   void btn.offsetWidth;
   btn.classList.add('pop');
   try {
-    const r = await api('/api/work/press', { method: 'POST' });
-    if (state.market?.me) state.market.me.workQueued = true;
-    if (state.market?.config && r.reward) state.market.config.workReward = r.reward;
+    const r = await api('/api/work/collect', { method: 'POST' });
+    if (state.market?.me) {
+      state.market.me.workBank = 0;
+      state.market.me.cash = r.cash;
+      state.market.me.workEarned = r.workEarned;
+      state.market.me.equity = (state.market.me.equity || 0);
+    }
+    toast(`💰 取出 ${money(r.amount)}`, 'ok');
     renderWork();
+    refreshMarket();
   } catch (e) {
     toast(e.message, 'err');
-    if (state.market?.me) state.market.me.workQueued = true;
     renderWork();
   }
 }
@@ -1496,9 +1527,11 @@ async function loadAdmin() {
     },
     {
       title: '打工',
-      desc: '点一下按钮的收入',
+      desc: '自动积累的钱袋',
       fields: [
-        ['workReward', '每次工资']
+        ['workRatePerTick', '每轮积累'],
+        ['workOnlineMultiplier', '在线倍率(2=双倍)'],
+        ['workBankTicks', '钱袋上限(轮)']
       ]
     },
     {
@@ -1751,7 +1784,7 @@ function bind() {
   $('#adminLoginBtn').addEventListener('click', adminLogin);
   $('#newsBtn').addEventListener('click', publishNews);
   $('#noticeBtn')?.addEventListener('click', publishNotice);
-  $('#workBtn')?.addEventListener('click', pressWork);
+  $('#workBtn')?.addEventListener('click', collectWork);
   document.querySelectorAll('.trade-tab').forEach((b) => {
     b.addEventListener('click', () => switchTradeTab(b.dataset.ttab));
   });

@@ -68,7 +68,7 @@ function publicPlayer(p, db) {
     cash: p.cash,
     positions,
     equity: playerEquity(db, p),
-    workQueued: !!p.workQueued,
+    workBank: Math.round((p.workBank || 0) * 100) / 100,
     workEarned: p.workEarned || 0,
     stealQueued: p.stealQueued || null,
     stealEarned: p.stealEarned || 0,
@@ -175,7 +175,9 @@ function marketPayload(db, me) {
       feeRate: db.config.feeRate,
       stampDuty: db.config.stampDuty,
       maxOrdersPerTick: db.config.maxOrdersPerTick,
-      workReward: db.config.workReward ?? 1000,
+      workRatePerTick: db.config.workRatePerTick ?? 50,
+      workOnlineMultiplier: db.config.workOnlineMultiplier ?? 2,
+      workBankTicks: db.config.workBankTicks ?? 1440,
       stealMin: db.config.stealMin ?? 100,
       stealMax: db.config.stealMax ?? 10000,
       stealCapRatio: db.config.stealCapRatio ?? 0.001,
@@ -242,7 +244,7 @@ export async function handleApi(ctx) {
         avatar: null,
         cash: db.config.startingCash ?? 100000,
         positions: {},
-        workQueued: false,
+        workBank: 0,
         workEarned: 0,
         stealQueued: null,
         stealEarned: 0,
@@ -455,7 +457,7 @@ export async function handleApi(ctx) {
       'tickMs', 'baseVolatility', 'meanReversion', 'eventImpactScale',
       'feeRate', 'stampDuty', 'minLeverage', 'maxLeverage',
       'eventChance', 'localEventChance', 'eventDurationMin', 'eventDurationMax',
-      'workReward', 'stealMin', 'stealMax', 'stealCapRatio', 'stealCooldownTicks',
+      'workRatePerTick', 'workOnlineMultiplier', 'workBankTicks', 'stealMin', 'stealMax', 'stealCapRatio', 'stealCooldownTicks',
       'equitySampleTicks', 'equityMaxPoints',
       'maxOrdersPerTick',
       'brokerMidpoint', 'brokerMidFloor', 'brokerSensitivity', 'brokerCap', 'brokerAlpha',
@@ -553,13 +555,21 @@ export async function handleApi(ctx) {
     return json(res, 200, { ok: true, result: r, player: publicPlayer(me, db) });
   }
 
-  if (pathname === '/api/work/press' && method === 'POST') {
-    if (me.workQueued) {
-      return json(res, 429, { error: '这一轮已经打过卡了，等下一轮结算' });
+  if (pathname === '/api/work/collect' && method === 'POST') {
+    const bank = Math.max(0, Number(me.workBank) || 0);
+    if (bank < 1) {
+      return json(res, 400, { error: '钱袋还是空的，再等等' });
     }
-    me.workQueued = true;
+    me.cash = (Number(me.cash) || 0) + bank;
+    me.workEarned = (me.workEarned || 0) + bank;
+    me.workBank = 0;
     saveDb();
-    return json(res, 200, { ok: true, queued: true, reward: db.config.workReward ?? 1000 });
+    return json(res, 200, {
+      ok: true,
+      amount: Math.round(bank * 100) / 100,
+      cash: me.cash,
+      workEarned: me.workEarned
+    });
   }
 
   if (pathname === '/api/steal' && method === 'POST') {

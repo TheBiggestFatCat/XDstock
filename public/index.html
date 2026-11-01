@@ -244,21 +244,28 @@
       <div class="work-wrap">
         <div class="work-title">打 工</div>
         <p class="work-desc">
-          每按一次，下一轮结算 <b>$1,000</b><br />
-          一轮只算一次，手快没用 —— 得守着按
+          收益自动积累，<b>在线速度翻倍</b><br />
+          攒够了点一下全部取出，然后重新开始攒
         </p>
 
-        <button id="workBtn" class="work-btn">
-          <span class="work-emoji">💼</span>
-          <span class="work-main">上班</span>
-          <span class="work-sub">+$1,000 / 轮</span>
+        <div class="work-bank">
+          <div class="work-bank-label">钱袋</div>
+          <div id="workAmount" class="work-bank-amount">$0.00</div>
+          <div id="workRateLine" class="work-bank-rate">每轮 +$50</div>
+          <div class="work-bank-bar"><i id="workBar"></i></div>
+        </div>
+
+        <button id="workBtn" class="work-btn work-collect">
+          <span class="work-emoji">💰</span>
+          <span class="work-main">全部取出</span>
+          <span class="work-sub">取出后重新积累</span>
         </button>
 
-        <p id="workHint" class="work-hint">点一下开始搬砖</p>
+        <p id="workHint" class="work-hint">钱袋还在攒，别急</p>
 
         <div class="work-stats">
-          <div><span>已赚</span><b id="workTotal">$0</b></div>
-          <div><span>本轮</span><b id="workRound">待打卡</b></div>
+          <div><span>累计取出</span><b id="workTotal">$0.00</b></div>
+          <div><span>状态</span><b id="workRound">离线积累</b></div>
         </div>
       </div>
     </div>

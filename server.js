@@ -34,6 +34,7 @@ if (db.tick === 0 && Object.values(db.stocks).every((s) => s.series.length <= 1)
 
 // ---------------- SSE ----------------
 const clients = new Set();
+let onlineIds = new Set();   // 本轮有 SSE 连接的玩家
 
 function broadcast(payload, targetPlayerId = null) {
   const data = `data: ${JSON.stringify(payload)}\n\n`;
@@ -220,8 +221,9 @@ function tickPayload(forPlayerId) {
       cash: p.cash,
       equity: playerEquity(d, p),
       positions,
-      workQueued: !!p.workQueued,
+      workBank: Math.round((p.workBank || 0) * 100) / 100,
       workEarned: p.workEarned || 0,
+      workOnline: onlineIds.has(p.id),
       stealQueued: p.stealQueued || null,
       stealEarned: p.stealEarned || 0,
       stealReadyAt: p.stealReadyAt || 0
@@ -240,7 +242,9 @@ function tickPayload(forPlayerId) {
       feeRate: d.config.feeRate,
       stampDuty: d.config.stampDuty,
       maxOrdersPerTick: d.config.maxOrdersPerTick,
-      workReward: d.config.workReward ?? 1000
+      workRatePerTick: d.config.workRatePerTick ?? 50,
+      workOnlineMultiplier: d.config.workOnlineMultiplier ?? 2,
+      workBankTicks: d.config.workBankTicks ?? 1440
     },
     notices: (d.notices || [])
       .filter((n) => now() - n.at < 24 * 3600 * 1000)
@@ -293,14 +297,26 @@ function loop() {
 
   const closes = checkPositions(d);
 
-  // 打工结算：上一轮按过按钮的，这一轮发工资
-  const reward = Number(d.config.workReward ?? 1000);
-  for (const p of Object.values(d.players)) {
-    if (!p.workQueued) continue;
-    p.cash += reward;
-    p.workEarned = (p.workEarned || 0) + reward;
-    p.workQueued = false;
-    p.workPaidTick = d.tick;
+  // 打工：自动往钱袋里攒，在线翻倍，攒满就不再涨
+  const workRate = Math.max(0, Number(d.config.workRatePerTick ?? 50));
+  const workMult = Math.max(1, Number(d.config.workOnlineMultiplier ?? 2));
+  const workCapTicks = Math.max(1, Number(d.config.workBankTicks ?? 1440));
+  const bankCap = workRate * workCapTicks;
+
+  const onlineNow = new Set();
+  for (const c of clients) {
+    if (c.playerId) onlineNow.add(c.playerId);
+  }
+  onlineIds = onlineNow;
+
+  if (workRate > 0) {
+    for (const p of Object.values(d.players)) {
+      const isOnline = onlineNow.has(p.id);
+      const gain = workRate * (isOnline ? workMult : 1);
+      const cur = Math.max(0, Number(p.workBank) || 0);
+      p.workBank = Math.min(bankCap, cur + gain);
+      p.workOnline = isOnline;
+    }
   }
 
   // 收益曲线快照：每 N 轮记一次 [tick, 总资产, 累计打工+偷钱收入]
