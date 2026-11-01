@@ -81,6 +81,7 @@ export function placeLimitOrder(db, player, body) {
       leverage: pos.leverage || 1,
       reserve: 0,
       createdAt: Date.now(),
+      createdTick: db.tick,
       expireTick
     };
     player.orders.push(order);
@@ -130,6 +131,7 @@ export function placeLimitOrder(db, player, body) {
     sl: body.sl ? num(body.sl) : null,
     reserve,
     createdAt: Date.now(),
+    createdTick: db.tick,
     expireTick
   };
   player.orders.push(order);
@@ -179,6 +181,9 @@ export function processOrders(db) {
 
       // 停牌不撮合
       if (st.status !== 'normal') continue;
+
+      // 下单当轮不成交，从下一轮开始排队
+      if (db.tick <= (order.createdTick ?? 0)) continue;
 
       const px = st.price;
       const buy = isBuyOrder(order);

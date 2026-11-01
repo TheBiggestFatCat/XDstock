@@ -25,6 +25,7 @@ const state = {
   eqTotal: null,
   eqTrading: null,
   listTab: 'quotes',
+  limitAuto: true,
   tradeTab: 'order',
   stockTradesLoaded: false,
   stream: null
@@ -279,6 +280,17 @@ function renderSidePositions() {
 }
 
 // ---------------- 限价挂单 ----------------
+// 挂单价默认跟随现价，玩家手动改过就不再覆盖
+function syncLimitPrice(force = false) {
+  const inp = $('#orderLimit');
+  const st = state.market?.stocks?.[state.code];
+  if (!inp || !st) return;
+  if (force || state.limitAuto) {
+    inp.value = st.price.toFixed(2);
+    state.limitAuto = true;
+  }
+}
+
 async function placeLimit() {
   const st = state.market?.stocks?.[state.code];
   if (!st) return;
@@ -368,6 +380,7 @@ function selectStock(code) {
   ce.textContent = pct(chg0);
   ce.className = 'big-change ' + cls(chg0);
   updateCostPreview();
+  syncLimitPrice(true);
   loadMyTrades();
   loadCandles();
   state.stockTradesLoaded = false;
@@ -796,6 +809,7 @@ function onTick(d) {
     if (d.closed !== true) applyTickToChart(st.price);
   }
   updateCostPreview();
+  syncLimitPrice();
   updatePriceLines();
   renderPositions();
   if (state.listTab === 'positions') renderSidePositions();
@@ -933,7 +947,7 @@ function updateCostPreview() {
   btn.disabled = closed;
   btn.textContent = closed
     ? '休市中，暂停交易'
-    : (state.side === 'long' ? '买入开多' : '卖出开空');
+    : (state.side === 'long' ? '挂单开多' : '挂单开空');
   $('.trade-panel')?.classList.toggle('is-closed', closed);
 }
 
@@ -2029,8 +2043,8 @@ function bind() {
   ['#orderQty', '#orderLev', '#orderTp', '#orderSl'].forEach((sel) => {
     $(sel).addEventListener('input', updateCostPreview);
   });
-  $('#orderBtn').addEventListener('click', placeOrder);
-  $('#orderLimitBtn')?.addEventListener('click', placeLimit);
+  $('#orderLimit')?.addEventListener('input', () => { state.limitAuto = false; });
+  $('#orderBtn').addEventListener('click', placeLimit);
 
   $('#avatarBtn').addEventListener('click', () => $('#avatarInput').click());
   $('#avatarInput').addEventListener('change', (e) => {
