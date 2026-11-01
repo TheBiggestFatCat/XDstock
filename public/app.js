@@ -724,9 +724,12 @@ function renderMyOrders() {
       const buy = (o.action === 'open' && o.side === 'long') || (o.action === 'close' && o.side === 'short');
       const left = Math.max(0, (o.expireTick || 0) - tickNow);
       const label = o.action === 'close' ? '平' : '开';
+      const autoTag = o.auto
+        ? `<span class="mo-auto">${o.auto === 'tp' ? '止盈单' : '止损单'}</span>`
+        : '';
       return `<div class="mo-row">
         <span class="mo-side ${buy ? 'buy' : 'sell'}">${label}${buy ? '买' : '卖'}</span>
-        <span class="mo-name">${o.name}</span>
+        <span class="mo-name">${o.name}${autoTag}</span>
         <span class="mo-qty">${o.qty}股</span>
         <span class="mo-price">@${Number(o.limit).toFixed(2)}</span>
         <span class="mo-left">${left}轮</span>
@@ -1281,6 +1284,14 @@ function handleAlerts(list) {
 }
 
 function handleCloses(list) {
+  for (const c of list) {
+    if (c && c.autoOrder && !c.qty) {
+      toast(
+        `${c.code} ${c.autoOrder === 'tp' ? '止盈' : '止损'}触发，已自动挂出平仓单`,
+        'ok'
+      );
+    }
+  }
   for (const c of list) {
     const name = state.market.stocks[c.code]?.name || c.code;
     const reasonMap = {

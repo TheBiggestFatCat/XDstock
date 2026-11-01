@@ -87,7 +87,8 @@ function publicPlayer(p, db) {
       leverage: o.leverage,
       reserve: Math.round((o.reserve || 0) * 100) / 100,
       expireTick: o.expireTick,
-      createdAt: o.createdAt
+      createdAt: o.createdAt,
+      auto: o.auto || null
     })),
     income: (p.workEarned || 0) + (p.stealEarned || 0),
     createdAt: p.createdAt

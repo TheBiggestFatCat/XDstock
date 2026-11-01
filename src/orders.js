@@ -137,6 +137,11 @@ export function cancelOrder(db, player, orderId, reason = '手动撤单') {
   if (order.reserve > 0) {
     player.cash = num(player.cash, 0) + order.reserve;
   }
+  // 自动止盈止损单被撤掉后，持仓不再是「平仓中」
+  if (order.auto) {
+    const pos = player.positions?.[order.code];
+    if (pos) pos.closing = null;
+  }
   return { ok: true, order, reason };
 }
 
@@ -161,8 +166,11 @@ export function processOrders(db) {
         continue;
       }
 
-      // 超时撤单
-      if (db.tick > (order.expireTick || 0)) {
+      // 超时撤单（自动单给两倍时间）
+      const ttlCap = order.auto
+        ? (order.createdTick || 0) + Math.max(1, num(db.config.orderTtlTicks, 720)) * 2
+        : (order.expireTick || 0);
+      if (db.tick > ttlCap) {
         cancelOrder(db, player, order.id, '挂单超时');
         events.push({ playerId: player.id, type: 'cancel', code: order.code, name: order.name, reason: '超时自动撤单' });
         continue;
@@ -179,6 +187,15 @@ export function processOrders(db) {
       // 买单：价格跌到限价以下才成交；卖单：涨到限价以上才成交
       const hit = buy ? px <= order.limit : px >= order.limit;
       if (!hit) continue;
+
+      // 止盈止损自动单：每轮重新按现价定一次可成交价，保证追得上行情
+      if (order.auto) {
+        const buyNow = isBuyOrder(order);
+        const slipN = 0.004;
+        order.limit = Math.round(
+          (buyNow ? px * (1 + slipN) : px * (1 - slipN)) * 100
+        ) / 100;
+      }
 
       // 每轮最多成交 fillCap 股，大单会被拆成多轮
       const fillCap = Math.max(1, Math.floor(num(db.config.maxFillQtyPerTick, 1000)));
@@ -261,7 +278,8 @@ export function processOrders(db) {
         }
 
         const closeQtyNow = Math.min(fillQty, pos.qty);
-        const r = closePosition(db, player, order.code, 'limit', closeQtyNow);
+        // 自动单在流水里标成止盈/止损，方便回看
+        const r = closePosition(db, player, order.code, order.auto || 'limit', closeQtyNow);
         if (!r.ok) {
           events.push({ playerId: player.id, type: 'fail', code: order.code, name: order.name, reason: r.error });
           const idx = orders.indexOf(order);

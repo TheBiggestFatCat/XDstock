@@ -243,7 +243,8 @@ function tickPayload(forPlayerId) {
         leverage: o.leverage,
         reserve: Math.round((o.reserve || 0) * 100) / 100,
         expireTick: o.expireTick,
-        createdAt: o.createdAt
+        createdAt: o.createdAt,
+        auto: o.auto || null
       }))
     };
   }

@@ -230,35 +230,61 @@ export function checkPositions(db) {
 
       const price = st.price;
       const equity = positionEquity(pos, price);
-      // 每轮最多成交这么多股，止盈止损也受同样限制
-      const fillCap = Math.max(1, Math.floor(Number(db.config.maxFillQtyPerTick ?? 1000)));
 
-      // 已经进入分批平仓流程：每轮继续平一批
-      if (pos.closing) {
-        const qty = Math.min(fillCap, pos.qty);
-        const r = closePosition(db, player, code, pos.closing, qty);
-        results.push({ playerId: player.id, ...r });
-        continue;
-      }
-
-      // 强平：保证金已经亏光，必须一次平掉，不分批
+      // 强平：保证金已经亏光，必须一次平掉，不走挂单
       if (equity <= (db.config.liquidationBuffer ?? 0)) {
         const r = closePosition(db, player, code, 'liquidated');
         results.push({ playerId: player.id, ...r });
         continue;
       }
 
-      // 止盈止损：触发后标记，之后每轮平掉一批，直到清仓
+      // 止盈止损：到线不直接成交，而是自动挂一张平仓单，
+      // 交给撮合流程按「每轮成交量上限」慢慢平
       const dir = pos.side === 'long' ? 1 : -1;
       let hit = null;
       if (pos.tp && (price - pos.tp) * dir >= 0) hit = 'tp';
       if (pos.sl && (price - pos.sl) * dir <= 0) hit = 'sl';
-      if (hit) {
-        pos.closing = hit;
-        const qty = Math.min(fillCap, pos.qty);
-        const r = closePosition(db, player, code, hit, qty);
-        results.push({ playerId: player.id, ...r });
-      }
+      if (!hit) continue;
+
+      const already = (player.orders || []).some(
+        (o) => o.code === code && o.action === 'close'
+      );
+      if (already) continue;
+
+      if (!Array.isArray(player.orders)) player.orders = [];
+      const ttl = Math.max(1, Number(db.config.orderTtlTicks ?? 720));
+      const slip = 0.004;
+      const buy = pos.side === 'short';           // 平空 = 买回
+      const limit = Math.round((buy ? price * (1 + slip) : price * (1 - slip)) * 100) / 100;
+
+      player.orders.push({
+        id: 'o_' + Math.random().toString(36).slice(2, 10),
+        code,
+        name: st.name,
+        action: 'close',
+        side: pos.side,
+        qty: pos.qty,
+        limit,
+        reserve: 0,
+        createdAt: Date.now(),
+        createdTick: db.tick,
+        expireTick: db.tick + ttl,
+        auto: hit            // tp / sl，撮合时每轮重新定价追价
+      });
+
+      // 止盈止损已转化成挂单，持仓上的条件清掉，避免重复触发
+      pos.tp = null;
+      pos.sl = null;
+      pos.closing = hit;
+      results.push({
+        playerId: player.id,
+        ok: true,
+        code,
+        side: pos.side,
+        qty: 0,
+        autoOrder: hit,
+        price
+      });
     }
   }
   return results;
