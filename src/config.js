@@ -29,6 +29,10 @@ export const DEFAULT_CONFIG = {
   // ---- 打工 ----
   workReward: 1000,         // 每按一次按钮，下一轮结算的工资
 
+  // ---- 收益曲线 ----
+  equitySampleTicks: 12,    // 每多少轮记录一次资产快照（12 轮 ≈ 1 分钟）
+  equityMaxPoints: 400,     // 每人最多留多少个点（≈ 6.7 小时）
+
   // ---- 偷钱 ----
   stealMin: 100,            // 单次最少偷多少
   stealMax: 10000,          // 单次最多偷多少

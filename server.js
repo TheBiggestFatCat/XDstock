@@ -303,6 +303,18 @@ function loop() {
     p.workPaidTick = d.tick;
   }
 
+  // 收益曲线快照：每 N 轮记一次 [tick, 总资产, 累计打工+偷钱收入]
+  const sampleTicks = Math.max(1, Number(d.config.equitySampleTicks ?? 12));
+  const maxPoints = Math.max(20, Number(d.config.equityMaxPoints ?? 400));
+  if (d.tick % sampleTicks === 0) {
+    for (const p of Object.values(d.players)) {
+      if (!Array.isArray(p.eq)) p.eq = [];
+      const income = (p.workEarned || 0) + (p.stealEarned || 0);
+      p.eq.push([d.tick, Math.round(playerEquity(d, p) * 100) / 100, Math.round(income * 100) / 100]);
+      if (p.eq.length > maxPoints) p.eq.splice(0, p.eq.length - maxPoints);
+    }
+  }
+
   // 偷钱结算：上一轮派出去的，这一轮动手
   const stealMin = Number(d.config.stealMin ?? 100);
   const stealMax = Number(d.config.stealMax ?? 10000);

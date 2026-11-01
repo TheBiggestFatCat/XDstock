@@ -73,6 +73,7 @@ function publicPlayer(p, db) {
     stealQueued: p.stealQueued || null,
     stealEarned: p.stealEarned || 0,
     stealReadyAt: p.stealReadyAt || 0,
+    income: (p.workEarned || 0) + (p.stealEarned || 0),
     createdAt: p.createdAt
   };
 }
@@ -246,6 +247,7 @@ export async function handleApi(ctx) {
         stealQueued: null,
         stealEarned: 0,
         stealReadyAt: 0,
+        eq: [],
         createdAt: now()
       };
       db.players[id] = player;
@@ -454,6 +456,7 @@ export async function handleApi(ctx) {
       'feeRate', 'stampDuty', 'minLeverage', 'maxLeverage',
       'eventChance', 'localEventChance', 'eventDurationMin', 'eventDurationMax',
       'workReward', 'stealMin', 'stealMax', 'stealCapRatio', 'stealCooldownTicks',
+      'equitySampleTicks', 'equityMaxPoints',
       'maxOrdersPerTick',
       'brokerMidpoint', 'brokerSensitivity', 'brokerCap', 'brokerAlpha',
       'adminPin', 'allowRegister', 'marketOpen', 'pinLength'
@@ -615,6 +618,22 @@ export async function handleApi(ctx) {
       };
     });
     return json(res, 200, { total: all.length, rows });
+  }
+
+  if (pathname === '/api/equity-curve' && method === 'GET') {
+    const points = (me.eq || []).map((p) => ({
+      // [tick, 总资产, 累计外部收入]
+      tick: p[0],
+      time: Math.floor((db.startedAt + p[0] * (db.config.tickMs || 5000)) / 1000),
+      equity: p[1],
+      income: p[2],
+      trading: p[1] - p[2]
+    }));
+    return json(res, 200, {
+      points,
+      sampleTicks: db.config.equitySampleTicks || 12,
+      tick: db.tick
+    });
   }
 
   if (pathname === '/api/trades' && method === 'GET') {

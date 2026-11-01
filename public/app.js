@@ -20,6 +20,9 @@ const state = {
   adminSelected: new Set(),
   prevPrices: {},
   myTrades: [],
+  eqChart: null,
+  eqTotal: null,
+  eqTrading: null,
   tradeTab: 'order',
   stockTradesLoaded: false,
   stream: null
@@ -668,7 +671,10 @@ function onTick(d) {
   updateCostPreview();
   updatePriceLines();
   renderPositions();
-  if ($('#view-portfolio').classList.contains('active')) renderPortfolio();
+  if ($('#view-portfolio').classList.contains('active')) {
+    renderPortfolio();
+    loadEquityCurve();
+  }
   if ($('#view-rank').classList.contains('active')) loadRank();
   if ($('#view-work').classList.contains('active')) renderWork();
   if (state.tradeTab === 'log' && $('#logPane') && !$('#logPane').classList.contains('hidden')) {
@@ -1052,6 +1058,131 @@ async function loadTrades() {
       </p>`;
   } catch (e) {
     wrap.innerHTML = `<table><tbody><tr class="empty-row"><td>${e.message}</td></tr></tbody></table>`;
+  }
+}
+
+// ---------------- 收益曲线 ----------------
+function ensureEquityChart() {
+  if (state.eqChart) return state.eqChart;
+  const box = $('#equityChart');
+  if (!box || typeof LightweightCharts === 'undefined') return null;
+
+  const chart = LightweightCharts.createChart(box, {
+    layout: {
+      background: { color: 'transparent' },
+      textColor: '#8aa39c',
+      fontFamily: 'inherit',
+      fontSize: 10
+    },
+    grid: {
+      vertLines: { color: 'rgba(15, 42, 38, .045)' },
+      horzLines: { color: 'rgba(15, 42, 38, .045)' }
+    },
+    rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.15, bottom: 0.12 } },
+    leftPriceScale: { visible: true, borderVisible: false, scaleMargins: { top: 0.15, bottom: 0.12 } },
+    timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+      vertLine: { color: 'rgba(13,148,136,.4)', width: 1, style: 2, labelBackgroundColor: '#0d9488' },
+      horzLine: { color: 'rgba(13,148,136,.4)', labelBackgroundColor: '#0d9488' }
+    },
+    handleScale: { axisPressedMouseMove: false }
+  });
+
+  const total = chart.addLineSeries({
+    color: '#0d9488',
+    lineWidth: 2,
+    priceScaleId: 'right',
+    priceLineVisible: false,
+    lastValueVisible: true,
+    crosshairMarkerVisible: true
+  });
+  // 纯投资收益量级小得多，单独用左轴，否则会被压成一条直线
+  const trading = chart.addLineSeries({
+    color: '#f59e0b',
+    lineWidth: 2,
+    priceScaleId: 'left',
+    priceLineVisible: false,
+    lastValueVisible: true,
+    crosshairMarkerVisible: true
+  });
+
+  state.eqChart = chart;
+  state.eqTotal = total;
+  state.eqTrading = trading;
+
+  const ro = new ResizeObserver(() => {
+    if ($('#equityChart')) chart.applyOptions({ width: box.clientWidth, height: box.clientHeight || 240 });
+  });
+  ro.observe(box);
+  chart.applyOptions({ width: box.clientWidth, height: 240 });
+  return chart;
+}
+
+async function loadEquityCurve() {
+  const box = $('#equityChart');
+  const empty = $('#equityEmpty');
+  if (!box) return;
+  try {
+    const d = await api('/api/equity-curve');
+    const pts = d.points || [];
+    const chart = ensureEquityChart();
+    if (!chart) return;
+
+    if (empty) empty.classList.toggle('hidden', pts.length > 1);
+    box.style.opacity = pts.length > 1 ? '1' : '0';
+    if (pts.length <= 1) {
+      const hint = $('#equityHint');
+      if (hint) hint.textContent = '数据积累中';
+      return;
+    }
+
+    // 同一秒只留最后一个点，时间必须严格递增否则图表会报错
+    const totalData = [];
+    const tradingData = [];
+    const seen = new Map();
+    for (const p of pts) {
+      if (seen.has(p.time)) {
+        const i = seen.get(p.time);
+        totalData[i].value = p.equity;
+        tradingData[i].value = p.trading;
+        continue;
+      }
+      seen.set(p.time, totalData.length);
+      totalData.push({ time: p.time, value: p.equity });
+      tradingData.push({ time: p.time, value: p.trading });
+    }
+    state.eqTotal.setData(totalData);
+    state.eqTrading.setData(tradingData);
+    chart.timeScale().fitContent();
+
+    const last = pts[pts.length - 1];
+    const first = pts[0];
+    const cls = (v) => (v > 0 ? 'up' : v < 0 ? 'down' : '');
+    const legend = $('#equityLegend');
+    if (legend) {
+      const dTotal = last.equity - first.equity;
+      const dTrade = last.trading - first.trading;
+      legend.innerHTML = `
+        <span><i class="eq-dot" style="background:#0d9488"></i>总资产
+          <b class="${cls(dTotal)}">${money(last.equity)}</b>
+          <small class="${cls(dTotal)}">${dTotal >= 0 ? '+' : ''}${money(dTotal).replace('-', '')}</small>
+        </span>
+        <span><i class="eq-dot" style="background:#f59e0b"></i>纯投资收益
+          <b class="${cls(last.trading)}">${money(last.trading)}</b>
+          <small class="${cls(dTrade)}">${dTrade >= 0 ? '+' : ''}${money(dTrade).replace('-', '')}</small>
+        </span>`;
+    }
+    const hint = $('#equityHint');
+    if (hint) {
+      const mins = Math.round((pts.length * (d.sampleTicks || 12) * (state.market?.tickMs || 5000)) / 60000);
+      hint.textContent = `${pts.length} 个点 · 约 ${mins >= 60 ? (mins / 60).toFixed(1) + ' 小时' : mins + ' 分钟'}`;
+    }
+  } catch (e) {
+    if (empty) {
+      empty.classList.remove('hidden');
+      empty.textContent = e.message;
+    }
   }
 }
 
