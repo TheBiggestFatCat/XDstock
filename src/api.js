@@ -585,6 +585,38 @@ export async function handleApi(ctx) {
     return json(res, 200, { ok: true, target: victim.nickname });
   }
 
+  if (pathname === '/api/stock-trades' && method === 'GET') {
+    const code = String(query.code || '').toUpperCase();
+    if (!db.stocks[code]) return json(res, 404, { error: '没有这个标的' });
+    const limit = Math.min(120, Math.max(1, Number(query.limit) || 40));
+
+    const all = (db.trades || []).filter(
+      (t) => t.code === code && (t.action === 'open' || t.action === 'close')
+    );
+    const rows = all.slice(-limit).reverse().map((t) => {
+      const owner = db.players[t.playerId];
+      const buy = t.action === 'open' ? t.side === 'long' : t.side === 'short';
+      const notional = Number(t.qty) * Number(t.price);
+      return {
+        id: t.id,
+        at: t.at,
+        playerId: t.playerId,
+        nickname: t.nickname,
+        avatar: owner ? owner.avatar || null : null,
+        action: t.action,
+        side: t.side,
+        buy,
+        leverage: Number(t.leverage) || 1,
+        qty: t.qty,
+        price: t.price,
+        amount: t.action === 'open'
+          ? notional
+          : Number(t.returned ?? notional)
+      };
+    });
+    return json(res, 200, { total: all.length, rows });
+  }
+
   if (pathname === '/api/trades' && method === 'GET') {
     const limit = Math.min(500, Math.max(1, Number(query.limit) || 50));
     const code = query.code ? String(query.code).toUpperCase() : '';

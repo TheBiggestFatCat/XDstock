@@ -151,7 +151,12 @@
         </section>
 
         <aside class="panel trade-panel">
-          <div class="panel-title">下单</div>
+          <div class="trade-tabs">
+            <button class="trade-tab active" data-ttab="order">下单</button>
+            <button class="trade-tab" data-ttab="log">成交记录</button>
+          </div>
+
+          <div id="orderPane" class="trade-pane">
           <div class="side-switch" id="sideSwitch">
             <button class="side-btn active" data-side="long">做多</button>
             <button class="side-btn" data-side="short">做空</button>
@@ -194,6 +199,12 @@
 
           <button id="orderBtn" class="btn btn-primary btn-block">买入开多</button>
           <p id="orderMsg" class="order-msg"></p>
+          </div>
+
+          <div id="logPane" class="trade-pane hidden">
+            <p class="st-hint">全服玩家在这只票上的成交</p>
+            <div id="stockTradeList" class="stock-trade-list"></div>
+          </div>
         </aside>
       </div>
 

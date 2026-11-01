@@ -20,6 +20,8 @@ const state = {
   adminSelected: new Set(),
   prevPrices: {},
   myTrades: [],
+  tradeTab: 'order',
+  stockTradesLoaded: false,
   stream: null
 };
 
@@ -239,6 +241,8 @@ function selectStock(code) {
   updateCostPreview();
   loadMyTrades();
   loadCandles();
+  state.stockTradesLoaded = false;
+  if (state.tradeTab === 'log') loadStockTrades();
 }
 
 // ---------------- 市场快讯 ----------------
@@ -343,6 +347,41 @@ function buildChart() {
   });
   ro.observe(el);
   chart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
+}
+
+// ---------------- 下单卡片：下单 / 成交记录 切换 ----------------
+function switchTradeTab(name) {
+  state.tradeTab = name;
+  document.querySelectorAll('.trade-tab').forEach((b) => {
+    b.classList.toggle('active', b.dataset.ttab === name);
+  });
+  $('#orderPane')?.classList.toggle('hidden', name !== 'order');
+  $('#logPane')?.classList.toggle('hidden', name !== 'log');
+  if (name === 'log') loadStockTrades();
+}
+
+async function loadStockTrades() {
+  const box = $('#stockTradeList');
+  if (!box) return;
+  if (!state.stockTradesLoaded) box.innerHTML = '<div class="st-empty">加载中…</div>';
+  try {
+    const d = await api(`/api/stock-trades?code=${encodeURIComponent(state.code)}&limit=50`);
+    const rows = d.rows || [];
+    state.stockTradesLoaded = true;
+    if (!rows.length) {
+      box.innerHTML = '<div class="st-empty">这只票还没有人成交</div>';
+      return;
+    }
+    box.innerHTML = rows.map((r) => `
+      <div class="st-row">
+        ${rankAvatar(r)}
+        <span class="st-side ${r.buy ? 'buy' : 'sell'}">${r.buy ? '买' : '卖'}</span>
+        <span class="st-lev">${(Number(r.leverage) || 1).toFixed(0)}x</span>
+        <span class="st-amt">${money(r.amount)}</span>
+      </div>`).join('');
+  } catch (e) {
+    box.innerHTML = `<div class="st-empty">${e.message}</div>`;
+  }
 }
 
 async function loadMyTrades() {
@@ -618,6 +657,9 @@ function onTick(d) {
   if ($('#view-portfolio').classList.contains('active')) renderPortfolio();
   if ($('#view-rank').classList.contains('active')) loadRank();
   if ($('#view-work').classList.contains('active')) renderWork();
+  if (state.tradeTab === 'log' && $('#logPane') && !$('#logPane').classList.contains('hidden')) {
+    loadStockTrades();
+  }
   if (d.closes && d.closes.length) handleCloses(d.closes);
   if (d.alerts && d.alerts.length) handleAlerts(d.alerts);
 }
@@ -1482,6 +1524,9 @@ function bind() {
   $('#newsBtn').addEventListener('click', publishNews);
   $('#noticeBtn')?.addEventListener('click', publishNotice);
   $('#workBtn')?.addEventListener('click', pressWork);
+  document.querySelectorAll('.trade-tab').forEach((b) => {
+    b.addEventListener('click', () => switchTradeTab(b.dataset.ttab));
+  });
   $('#configSaveBtn').addEventListener('click', saveConfig);
 
   // 定时刷新「我的」与「排行」，保证不靠 SSE 也准确

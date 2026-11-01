@@ -778,3 +778,88 @@ input.tpsl-input {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* ---------- 下单卡片切换 ---------- */
+.trade-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: #f1f7f5;
+  border-radius: 11px;
+  margin-bottom: 14px;
+}
+.trade-tab {
+  flex: 1;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 7px 0;
+  cursor: pointer;
+  transition: all .16s;
+}
+.trade-tab:hover { color: var(--ink); }
+.trade-tab.active {
+  background: #fff;
+  color: #0d9488;
+  box-shadow: 0 1px 4px rgba(15, 42, 38, .1);
+}
+
+.trade-pane.hidden { display: none; }
+
+.st-hint {
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin: 0 0 10px;
+}
+.stock-trade-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 560px;
+  overflow-y: auto;
+  margin: 0 -4px;
+}
+.st-row {
+  display: grid;
+  grid-template-columns: 30px 30px 42px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 4px;
+  border-bottom: 1px solid #f2f7f5;
+}
+.st-row:last-child { border-bottom: none; }
+.st-row .rank-avatar { width: 26px; height: 26px; }
+.st-row .rank-avatar-letter { font-size: 11px; }
+
+.st-side {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-align: center;
+  border-radius: 7px;
+  padding: 3px 0;
+}
+.st-side.buy { color: #d92d20; background: #fee4e2; }
+.st-side.sell { color: #079455; background: #d1fadf; }
+
+.st-lev {
+  font-size: 11.5px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.st-amt {
+  font-size: 12px;
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.st-empty {
+  font-size: 12px;
+  color: var(--ink-3);
+  text-align: center;
+  padding: 28px 0;
+}
