@@ -360,6 +360,19 @@ function switchTradeTab(name) {
   if (name === 'log') loadStockTrades();
 }
 
+// 当天只显示时分秒，跨天带上月日
+function tradeTime(at) {
+  const d = new Date(Number(at) || 0);
+  if (!Number(at)) return '—';
+  const p2 = (n) => String(n).padStart(2, '0');
+  const hm = `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
+  const now = new Date();
+  const sameDay = d.getFullYear() === now.getFullYear()
+    && d.getMonth() === now.getMonth()
+    && d.getDate() === now.getDate();
+  return sameDay ? hm : `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${hm.slice(0, 5)}`;
+}
+
 async function loadStockTrades() {
   const box = $('#stockTradeList');
   if (!box) return;
@@ -378,6 +391,7 @@ async function loadStockTrades() {
         <span class="st-side ${r.buy ? 'buy' : 'sell'}">${r.buy ? '买' : '卖'}</span>
         <span class="st-lev">${(Number(r.leverage) || 1).toFixed(0)}x</span>
         <span class="st-amt">${money(r.amount)}</span>
+        <span class="st-time">${tradeTime(r.at)}</span>
       </div>`).join('');
   } catch (e) {
     box.innerHTML = `<div class="st-empty">${e.message}</div>`;
@@ -1156,10 +1170,7 @@ async function loadRank(force = false) {
 
 // 排行榜头像：有图用图，没图用昵称首字 + 稳定色
 function rankAvatar(r) {
-  if (r.avatar) {
-    return `<span class="rank-avatar"><img src="${r.avatar}" alt="" loading="lazy" /></span>`;
-  }
-  // 用「黄金角」散列，保证不同玩家的占位色拉得开
+  // 首字永远垫在底下，图片加载失败就自动露出来
   const key = String(r.id || r.nickname || '');
   let h = 2166136261;
   for (let i = 0; i < key.length; i++) {
@@ -1168,7 +1179,10 @@ function rankAvatar(r) {
   }
   const hue = Math.round(((h % 1000) / 1000 * 137.508 * 2) % 360);
   const ch = (r.nickname || '?').trim().charAt(0) || '?';
-  return `<span class="rank-avatar rank-avatar-letter" style="--h:${hue}">${ch}</span>`;
+  const img = r.avatar
+    ? `<img src="${r.avatar}" alt="" loading="lazy" onerror="this.remove()" />`
+    : '';
+  return `<span class="rank-avatar rank-avatar-letter" style="--h:${hue}">${img}<span class="ra-ch">${ch}</span></span>`;
 }
 
 async function stealFrom(targetId, name) {
