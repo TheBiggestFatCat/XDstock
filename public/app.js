@@ -164,7 +164,6 @@ async function refreshMarket() {
   renderStockList();
   renderPositions();
   renderMyOrders();
-  renderMyOrders();
   if (state.listTab === 'positions') renderSidePositions();
   syncLeverageLimits();
   if (d.config) $('#startingCashHint').textContent = money(d.config.startingCash || 100000);
@@ -358,6 +357,7 @@ function renderMyOrders() {
         refreshMarket();
       } catch (e) {
         toast(e.message, 'err');
+        refreshMarket();
       }
     });
   });
@@ -812,6 +812,7 @@ function onTick(d) {
   syncLimitPrice();
   updatePriceLines();
   renderPositions();
+  renderMyOrders();
   if (state.listTab === 'positions') renderSidePositions();
   if ($('#view-portfolio').classList.contains('active')) {
     renderPortfolio();
@@ -854,6 +855,7 @@ function updatePriceCells() {
 }
 
 function handleOrderEvents(list) {
+  refreshMarket();
   for (const e of list) {
     if (e.type === 'fill') {
       const side = e.side === 'long' ? '多' : '空';
