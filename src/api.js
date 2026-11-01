@@ -76,6 +76,8 @@ function publicPlayer(p, db) {
     stealEarned: p.stealEarned || 0,
     stealReadyAt: p.stealReadyAt || 0,
     guardUntil: p.guardUntil || 0,
+    theme: p.theme || 'default',
+    themes: Array.isArray(p.themes) ? p.themes : [],
     frozen: Math.round((p.orders || []).reduce((a, o) => a + (Number(o.reserve) || 0), 0) * 100) / 100,
     orders: (p.orders || []).map((o) => ({
       id: o.id,
@@ -207,6 +209,7 @@ function marketPayload(db, me) {
       shopFakeNewsChance: db.config.shopFakeNewsChance ?? 0.2,
       shopBodyguardPrice: db.config.shopBodyguardPrice ?? 50000,
       shopBodyguardTicks: db.config.shopBodyguardTicks ?? 720,
+      shopThemePrice: db.config.shopThemePrice ?? 2000000,
       limitOrderEnabled: db.config.limitOrderEnabled ?? 1,
       orderTtlTicks: db.config.orderTtlTicks ?? 720,
       maxPendingOrders: db.config.maxPendingOrders ?? 5,
@@ -291,6 +294,8 @@ export async function handleApi(ctx) {
         stealEarned: 0,
         stealReadyAt: 0,
         guardUntil: 0,
+        theme: 'default',
+        themes: [],
         orders: [],
         eq: [],
         createdAt: now()
@@ -533,7 +538,7 @@ export async function handleApi(ctx) {
       'workRatePerTick', 'workOnlineMultiplier', 'workBankTicks', 'stealMin', 'stealMax', 'stealCapRatio', 'stealCooldownTicks',
       'equitySampleTicks', 'equityMaxPoints',
       'shopFakeNewsPrice', 'shopFakeNewsChance',
-      'shopBodyguardPrice', 'shopBodyguardTicks',
+      'shopBodyguardPrice', 'shopBodyguardTicks', 'shopThemePrice',
       'stPrice', 'stDelistTicks',
       'impactCostCoef', 'impactCostMax',
       'maxOrdersPerTick', 'maxFillNotionalPerTick',
@@ -776,6 +781,42 @@ export async function handleApi(ctx) {
       cash: me.cash,
       event: { id: ev.id, text: ev.text, dir: ev.dir, createdAt: ev.createdAt }
     });
+  }
+
+  // ---------- 主题配色 ----------
+  const THEMES = ['red', 'dark'];
+
+  if (pathname === '/api/shop/theme' && method === 'POST') {
+    const code = String(body.theme || '').trim();
+    if (!THEMES.includes(code)) return json(res, 400, { error: '没有这个主题' });
+
+    const price = Number(db.config.shopThemePrice ?? 2000000);
+    if (!Array.isArray(me.themes)) me.themes = [];
+    if (!me.themes.includes(code)) {
+      if (me.cash < price) {
+        return json(res, 400, {
+          error: `现金不足，售价 $${price.toLocaleString()}，你只有 $${me.cash.toFixed(2)}`
+        });
+      }
+      me.cash -= price;
+      me.shopSpent = (me.shopSpent || 0) + price;
+      me.themes.push(code);
+    }
+    me.theme = code;
+    saveDb();
+    return json(res, 200, {
+      ok: true, theme: code, themes: me.themes, price, cash: me.cash
+    });
+  }
+
+  if (pathname === '/api/shop/theme/select' && method === 'POST') {
+    const code = String(body.theme || 'default').trim();
+    if (code !== 'default' && !(Array.isArray(me.themes) && me.themes.includes(code))) {
+      return json(res, 400, { error: '还没买这个主题' });
+    }
+    me.theme = code;
+    saveDb();
+    return json(res, 200, { ok: true, theme: code });
   }
 
   if (pathname === '/api/shop/bodyguard' && method === 'POST') {

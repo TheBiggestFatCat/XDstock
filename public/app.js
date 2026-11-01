@@ -172,6 +172,7 @@ async function refreshMarket() {
   const d = await api('/api/market');
   state.market = d;
   state.me = d.me;
+  syncThemeFromServer();
   renderTopbar();
   renderClosed();
   renderNews();
@@ -332,6 +333,100 @@ function renderSidePositions() {
 }
 
 // ---------------- 商城 ----------------
+// ---------------- 主题配色 ----------------
+const THEME_CHART = {
+  default: {
+    text: '#5b7671', grid: 'rgba(230,240,237,.7)', border: 'rgba(230,240,237,.9)',
+    cross: 'rgba(20,184,166,.4)', crossLabel: '#14b8a6'
+  },
+  red: {
+    text: '#8d4f4a', grid: 'rgba(247,221,216,.8)', border: 'rgba(247,221,216,.95)',
+    cross: 'rgba(220,38,38,.35)', crossLabel: '#dc2626'
+  },
+  dark: {
+    text: '#9aa6b9', grid: 'rgba(38,45,58,.9)', border: 'rgba(45,54,70,.95)',
+    cross: 'rgba(240,192,74,.35)', crossLabel: '#d9a52f'
+  }
+};
+
+/** 把主题套到 body 上，并同步图表配色 */
+function applyTheme(theme) {
+  const t = THEME_CHART[theme] ? theme : 'default';
+  state.theme = t;
+  document.body.dataset.theme = t === 'default' ? '' : t;
+  if (t === 'default') delete document.body.dataset.theme;
+  try { localStorage.setItem('xd_theme', t); } catch { /* ignore */ }
+
+  const c = THEME_CHART[t];
+  if (state.chart) {
+    state.chart.applyOptions({
+      layout: { background: { type: 'solid', color: 'transparent' }, textColor: c.text },
+      grid: {
+        vertLines: { color: c.grid },
+        horzLines: { color: c.grid }
+      },
+      rightPriceScale: { borderColor: c.border },
+      timeScale: { borderColor: c.border },
+      crosshair: {
+        vertLine: { color: c.cross, labelBackgroundColor: c.crossLabel },
+        horzLine: { color: c.cross, labelBackgroundColor: c.crossLabel }
+      }
+    });
+  }
+  renderShop();
+}
+
+/** 让页面一打开就是上次用的主题，避免闪一下 */
+function applyCachedTheme() {
+  let t = 'default';
+  try { t = localStorage.getItem('xd_theme') || 'default'; } catch { /* ignore */ }
+  applyTheme(t);
+}
+
+/** 服务端记录的主题优先（换设备也跟着走） */
+function syncThemeFromServer() {
+  const t = state.market?.me?.theme;
+  if (!t) return;
+  if (t !== state.theme) applyTheme(t);
+}
+
+async function chooseTheme(code) {
+  if (code === 'default') {
+    try {
+      await api('/api/shop/theme/select', { method: 'POST', body: JSON.stringify({ theme: 'default' }) });
+      applyTheme('default');
+      toast('已切回经典配色', 'ok');
+    } catch (e) { toast(e.message, 'err'); }
+    return;
+  }
+
+  const owned = (state.market?.me?.themes || []).includes(code);
+  const btn = document.querySelector(`.theme-btn[data-theme-code="${code}"]`);
+  if (btn) btn.disabled = true;
+
+  try {
+    if (owned) {
+      await api('/api/shop/theme/select', { method: 'POST', body: JSON.stringify({ theme: code }) });
+      applyTheme(code);
+      toast('主题已切换', 'ok');
+    } else {
+      const r = await api('/api/shop/theme', { method: 'POST', body: JSON.stringify({ theme: code }) });
+      if (state.market?.me) {
+        state.market.me.cash = r.cash;
+        state.market.me.themes = r.themes;
+      }
+      applyTheme(code);
+      toast(`主题已启用（花费 ${money(r.price)}）`, 'ok');
+      refreshMarket();
+    }
+  } catch (e) {
+    toast(e.message, 'err');
+  } finally {
+    if (btn) btn.disabled = false;
+    renderShop();
+  }
+}
+
 function renderShop() {
   const cfg = state.market?.config || {};
   const price = Number(cfg.shopFakeNewsPrice ?? 500000);
@@ -381,6 +476,30 @@ function renderShop() {
       ? `现金不足（差 ${money(bgPrice - cash)}）`
       : (guardLeft > 0 ? '再续一小时' : '购买保镖');
   }
+
+  // ---- 主题 ----
+  const ownedThemes = state.market?.me?.themes || [];
+  const curTheme = state.theme || state.market?.me?.theme || 'default';
+  const themePrice = Number(cfg.shopThemePrice ?? 2000000);
+  document.querySelectorAll('.shop-card .shop-price').forEach(() => {});
+  document.querySelectorAll('.theme-btn').forEach((b) => {
+    const code = b.dataset.themeCode;
+    const has = ownedThemes.includes(code);
+    const isCur = curTheme === code || (code === 'default' && curTheme === 'default');
+    if (code === 'default') {
+      b.textContent = isCur ? '正在使用' : '使用经典配色';
+      b.disabled = isCur;
+      return;
+    }
+    if (isCur) { b.textContent = '正在使用'; b.disabled = true; return; }
+    if (has) { b.textContent = '切换到这套'; b.disabled = false; return; }
+    const poor = cash < themePrice;
+    b.textContent = poor ? `现金不足（差 ${money(themePrice - cash)}）` : '购买';
+    b.disabled = poor;
+  });
+  document.querySelectorAll('.theme-owned').forEach((el) => {
+    el.classList.toggle('hidden', !ownedThemes.includes(el.dataset.owned));
+  });
 
   $$('.dir-btn').forEach((b) => {
     b.classList.toggle('active', Number(b.dataset.dir) === state.shopDir);
@@ -2604,6 +2723,9 @@ function bind() {
   });
   $('#fakeNewsBuy')?.addEventListener('click', buyFakeNews);
   $('#bodyguardBuy')?.addEventListener('click', buyBodyguard);
+  document.querySelectorAll('.theme-btn').forEach((b) => {
+    b.addEventListener('click', () => chooseTheme(b.dataset.themeCode));
+  });
   $('#traitSaveBtn')?.addEventListener('click', saveTraits);
 
   // 定时刷新「我的」与「排行」，保证不靠 SSE 也准确
@@ -2617,6 +2739,7 @@ try { window.__xd = { state, priceAtY, updateLimitLine, autoLimitPrice, setLimit
 
 // ---------------- 启动 ----------------
 async function boot() {
+  applyCachedTheme();
   bind();
   if (state.token) {
     try {
@@ -2626,8 +2749,10 @@ async function boot() {
       state.me = d.me;
       if (d.build) state.build = d.build;
       await enterGame();
+      syncThemeFromServer();
       return;
-    } catch {
+    } catch (e) {
+      console.error('[boot] 恢复登录失败:', e && (e.message || e));
       localStorage.removeItem('xd_token');
       state.token = '';
     }

@@ -59,6 +59,7 @@ export const DEFAULT_CONFIG = {
   shopFakeNewsChance: 0.2,     // 真的会影响市场的概率（其余只显示不生效）
   shopBodyguardPrice: 50000,   // 保镖售价
   shopBodyguardTicks: 720,     // 保护时长（720 轮 = 1 小时）
+  shopThemePrice: 2000000,     // 主题配色售价
 
   // ---- 成交节奏 ----
   // 挂单可以挂任意数量，但每轮最多成交这么多「金额」
