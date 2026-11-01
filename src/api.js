@@ -4,7 +4,7 @@ import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
 import { candlesFromSeries, changesFor } from './engine.js';
 import { TIMEFRAMES } from './config.js';
 import { getBuild } from './build.js';
-import { playerEquity, openPosition, closePosition, positionPnl } from './trading.js';
+import { playerEquity, positionPnl } from './trading.js';
 import { placeLimitOrder, cancelOrder } from './orders.js';
 
 const TOKEN_TTL = 30 * 24 * 3600 * 1000;
@@ -577,35 +577,6 @@ export async function handleApi(ctx) {
     me.orderTick = db.tick;
     me.orderCount = Math.min(prev + 1, 1e6);
   };
-
-  if (pathname === '/api/order' && method === 'POST') {
-    if (db.config.marketOpen === false) return json(res, 423, { error: '休市中，暂停交易' });
-    if (me.bankrupt) return json(res, 403, { error: '你已破产，只能看不能玩' });
-    if (orderBlocked) return json(res, 429, { error: orderBlocked });
-    const result = openPosition(db, me, {
-      code: String(body.code || '').toUpperCase(),
-      side: body.side,
-      qty: body.qty,
-      leverage: body.leverage,
-      tp: body.tp,
-      sl: body.sl
-    });
-    if (!result.ok) return json(res, 400, result);
-    consumeSlot();
-    saveDb();
-    return json(res, 200, { ok: true, player: publicPlayer(me, db) });
-  }
-
-  if (pathname === '/api/close' && method === 'POST') {
-    if (db.config.marketOpen === false) return json(res, 423, { error: '休市中，暂停交易' });
-    if (orderBlocked) return json(res, 429, { error: orderBlocked });
-    const code = String(body.code || '').toUpperCase();
-    const r = closePosition(db, me, code, 'manual');
-    if (!r.ok) return json(res, 400, r);
-    consumeSlot();
-    saveDb();
-    return json(res, 200, { ok: true, result: r, player: publicPlayer(me, db) });
-  }
 
   if (pathname === '/api/work/collect' && method === 'POST') {
     const bank = Math.max(0, Number(me.workBank) || 0);

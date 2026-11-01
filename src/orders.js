@@ -118,8 +118,6 @@ export function placeLimitOrder(db, player, body) {
     qty,
     limit,
     leverage,
-    tp: body.tp ? num(body.tp) : null,
-    sl: body.sl ? num(body.sl) : null,
     reserve,
     createdAt: Date.now(),
     createdTick: db.tick,
@@ -202,9 +200,7 @@ export function processOrders(db) {
           code: order.code,
           side: order.side,
           qty: fillQty,
-          leverage: order.leverage,
-          tp: order.tp,
-          sl: order.sl
+          leverage: order.leverage
         });
 
         if (!r.ok) {

@@ -311,8 +311,6 @@ async function placeLimit() {
       side: state.side,
       qty: Number($('#orderQty').value),
       leverage: Number($('#orderLev').value) || 1,
-      tp: Number($('#orderTp').value) || null,
-      sl: Number($('#orderSl').value) || null,
       limit
     };
   }
@@ -333,7 +331,7 @@ function switchOrderMode(mode) {
 
   const isClose = mode === 'close';
   // 平仓不需要数量/杠杆/止盈止损
-  ['#orderQty', '#orderLev', '#orderTp', '#orderSl'].forEach((sel) => {
+  ['#orderQty', '#orderLev'].forEach((sel) => {
     const el = $(sel);
     const field = el?.closest('.field') || el?.closest('.quick-qty');
     if (field) field.classList.toggle('hidden', isClose);
@@ -408,8 +406,6 @@ function renderMyOrders() {
     });
   });
 }
-
-async function placeLimitStub() {}
 
 function selectStock(code) {
   state.code = code;
@@ -1017,37 +1013,6 @@ function updateCostPreview() {
   $('.trade-panel')?.classList.toggle('is-closed', closed);
 }
 
-async function placeOrder() {
-  const st = state.market?.stocks?.[state.code];
-  if (!st) return;
-  if (st.status !== 'normal') { toast('该标的当前不可交易', 'err'); return; }
-  const qty = Math.floor(Number($('#orderQty').value) || 0);
-  const lev = Number($('#orderLev').value) || 1;
-  const tp = $('#orderTp').value ? Number($('#orderTp').value) : null;
-  const sl = $('#orderSl').value ? Number($('#orderSl').value) : null;
-  if (qty <= 0) { toast('数量必须是正整数', 'err'); return; }
-  const msg = $('#orderMsg');
-  msg.textContent = '';
-  $('#orderBtn').disabled = true;
-  try {
-    const r = await api('/api/order', {
-      method: 'POST',
-      body: JSON.stringify({ code: state.code, side: state.side, qty, leverage: lev, tp, sl })
-    });
-    state.market.me = r.player;
-    renderPositions();
-    renderTopbar();
-    updatePriceLines();
-    if ($('#view-portfolio').classList.contains('active')) loadTrades();
-    if (state.listTab === 'positions') renderSidePositions();
-    loadMyTrades();
-    toast(`${state.side === 'long' ? '开多' : '开空'} ${qty} 股 ${st.name}`, 'ok');
-  } catch (e) {
-    msg.textContent = e.message;
-  } finally {
-    $('#orderBtn').disabled = false;
-  }
-}
 
 
 function positionSignature(pos) {
@@ -2071,7 +2036,7 @@ function bind() {
     });
   });
 
-  ['#orderQty', '#orderLev', '#orderTp', '#orderSl'].forEach((sel) => {
+  ['#orderQty', '#orderLev'].forEach((sel) => {
     $(sel).addEventListener('input', updateCostPreview);
   });
   $('#orderLimit')?.addEventListener('input', () => { state.limitAuto = false; });
