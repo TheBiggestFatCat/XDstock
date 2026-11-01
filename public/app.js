@@ -967,6 +967,22 @@ function syncLeverageLimits() {
   updateCostPreview();
 }
 
+/** 当前现金 + 当前杠杆下能买的最大股数（已扣手续费和印花税） */
+function maxAffordableQty() {
+  const st = state.market?.stocks?.[state.code];
+  if (!st) return 0;
+  const lev = Number($('#orderLev').value) || 1;
+  const cash = state.market?.me?.cash || 0;
+  const cfg = state.market?.config || {};
+  // 每 1 股要花：保证金 + 手续费 + 卖出方向的印花税
+  const perShare = st.price / lev
+    + st.price * (cfg.feeRate || 0)
+    + st.price * (state.side === 'short' ? (cfg.stampDuty || 0) : 0);
+  if (!(perShare > 0)) return 0;
+  // 留 0.5% 余量，避免浮点误差和结算时价格跳动导致「现金不足」
+  return Math.max(0, Math.floor((cash * 0.995) / perShare));
+}
+
 function updateCostPreview() {
   const st = state.market?.stocks?.[state.code];
   if (!st) return;
@@ -2044,27 +2060,13 @@ function bind() {
     });
   });
 
+  // 快捷分仓：按当前现金和杠杆能买的最大股数，再取比例
   $$('.quick-qty button').forEach((b) => {
     b.addEventListener('click', () => {
-      const st = state.market?.stocks?.[state.code];
-      const lev = Number($('#orderLev').value) || 1;
-      if (b.dataset.qty === 'max') {
-        if (!st) return;
-        const cash = state.market?.me?.cash || 0;
-        const cfg = state.market?.config || {};
-        // 先算清每 1 股要花多少钱：保证金 + 手续费 + 卖出方向的印花税
-        const perShare = st.price / lev
-          + st.price * (cfg.feeRate || 0)
-          + st.price * (state.side === 'short' ? (cfg.stampDuty || 0) : 0);
-        // 留 0.5% 余量，避免浮点误差和结算时价格跳动导致「现金不足」
-        let qty = Math.floor((cash * 0.995) / perShare);
-        // 单笔有股数上限，超了就按上限来
-        const qtyCap = Number(cfg.maxOrderQty ?? 1000);
-        if (qtyCap > 0) qty = Math.min(qty, qtyCap);
-        $('#orderQty').value = Math.max(1, qty);
-      } else {
-        $('#orderQty').value = b.dataset.qty;
-      }
+      const frac = Number(b.dataset.frac) || 1;
+      const maxQty = maxAffordableQty();
+      // 再小的比例也至少给 1 股
+      $('#orderQty').value = Math.max(1, Math.floor(maxQty * frac));
       updateCostPreview();
     });
   });
