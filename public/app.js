@@ -261,7 +261,7 @@ function renderSidePositions() {
     return `<div class="stock-item side-pos" data-pos="${p.code}">
       <img class="stock-icon-sm" src="${icon}" alt="" />
       <div class="stock-main">
-        <div class="stock-name">${name} <span class="stock-code">${p.code}</span></div>
+        <div class="stock-name">${escapeHtml(name)} <span class="stock-code">${p.code}</span></div>
         <div class="side-pos-sub">
           <span class="pill ${p.side}">${p.side === 'long' ? '多' : '空'}</span>
           ${p.qty} 股 · ${(p.leverage || 1).toFixed(0)}x
@@ -1073,7 +1073,7 @@ function renderPositions(force = false) {
           const liq = p.side === 'long' ? p.entry * (1 - 1 / lev) : p.entry * (1 + 1 / lev);
           const icon = state.market.stocks[p.code]?.icon || '';
           return `<tr data-pos="${p.code}">
-            <td><img class="stock-icon-sm" src="${icon}" alt="" />${name} <span class="stock-code">${p.code}</span></td>
+            <td><img class="stock-icon-sm" src="${icon}" alt="" />${escapeHtml(name)} <span class="stock-code">${p.code}</span></td>
             <td><span class="pill ${p.side}">${p.side === 'long' ? '多' : '空'}</span></td>
             <td data-cell="qty">${p.qty}</td>
             <td>${lev.toFixed(1)}x</td>
@@ -1206,7 +1206,7 @@ async function loadTrades() {
               : money(t.margin ?? 0);
             return `<tr>
               <td class="stock-code">${fmtTime(t.at)}</td>
-              <td>${t.name || t.code}${t.code ? ` <span class="stock-code">${t.code}</span>` : ''}</td>
+              <td>${escapeHtml(t.name || t.code)}${t.code ? ` <span class="stock-code">${t.code}</span>` : ''}</td>
               <td>${isSteal ? (t.action === 'steal' ? '偷钱' : '被偷') : isOpen ? '开仓' : '平仓'}</td>
               <td>${isSteal ? '<span class="stock-code">—</span>' : `<span class="pill ${t.side}">${t.side === 'long' ? '多' : '空'}</span>`}</td>
               <td>${isSteal ? '—' : t.qty}</td>
@@ -1501,7 +1501,7 @@ async function loadRank(force = false) {
             }
             return `<tr class="${mine}">
               <td><span class="rank-medal">${medal || i + 1}</span></td>
-              <td><span class="rank-user">${rankAvatar(r)}<span class="rank-name">${r.nickname}</span></span></td>
+              <td><span class="rank-user">${rankAvatar(r)}<span class="rank-name">${escapeHtml(r.nickname)}</span></span></td>
               <td class="${cls(r.equity - 100000)}">${money(r.equity)}</td>
               <td>${money(r.cash)}</td>
               <td style="text-align:left">${hold}</td>
@@ -1528,7 +1528,7 @@ function rankAvatar(r) {
     h = Math.imul(h, 16777619) >>> 0;
   }
   const hue = Math.round(((h % 1000) / 1000 * 137.508 * 2) % 360);
-  const ch = (r.nickname || '?').trim().charAt(0) || '?';
+  const ch = escapeHtml((r.nickname || '?').trim().charAt(0) || '?');
   const img = r.avatar
     ? `<img src="${r.avatar}" alt="" loading="lazy" onerror="this.remove()" />`
     : '';

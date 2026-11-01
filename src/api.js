@@ -216,7 +216,12 @@ export async function handleApi(ctx) {
   // ---------- 登录 ----------
   if (pathname === '/api/login' && method === 'POST') {
     if (!db.config.allowRegister) return json(res, 403, { error: '当前关闭注册' });
-    const nickname = String(body.nickname || '').trim().slice(0, 16);
+    // 去掉 HTML 特殊字符，避免昵称被当成标签渲染
+    const nickname = String(body.nickname || '')
+      .replace(/[<>&"'`\\]/g, '')
+      .replace(/[\u0000-\u001f]/g, '')
+      .trim()
+      .slice(0, 16);
     const pin = String(body.pin || '').trim();
     if (nickname.length < 1) return json(res, 400, { error: '昵称不能为空' });
     if (nickname.length > 16) return json(res, 400, { error: '昵称最多 16 个字' });
@@ -696,8 +701,46 @@ export async function handleApi(ctx) {
     const code = String(body.code || '').toUpperCase();
     const pos = me.positions[code];
     if (!pos) return json(res, 400, { error: '没有这只票的持仓' });
-    pos.tp = body.tp ? Number(body.tp) : null;
-    pos.sl = body.sl ? Number(body.sl) : null;
+
+    const st = db.stocks[code];
+    if (!st) return json(res, 400, { error: '标的不存在' });
+    const price = st.price;
+    const dir = pos.side === 'long' ? 1 : -1;
+
+    const parse = (v) => {
+      if (v === null || v === undefined || v === '') return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : NaN;
+    };
+
+    const tp = parse(body.tp);
+    const sl = parse(body.sl);
+
+    if (tp !== null) {
+      if (!Number.isFinite(tp) || tp <= 0) {
+        return json(res, 400, { error: '止盈价必须是正数' });
+      }
+      // 多头的止盈要高于现价，空头要低于现价，否则一保存就立刻触发
+      if ((tp - price) * dir <= 0) {
+        return json(res, 400, {
+          error: `止盈价必须${dir > 0 ? '高于' : '低于'}现价 ${price.toFixed(2)}，否则会立刻成交`
+        });
+      }
+    }
+
+    if (sl !== null) {
+      if (!Number.isFinite(sl) || sl <= 0) {
+        return json(res, 400, { error: '止损价必须是正数' });
+      }
+      if ((sl - price) * dir >= 0) {
+        return json(res, 400, {
+          error: `止损价必须${dir > 0 ? '低于' : '高于'}现价 ${price.toFixed(2)}，否则会立刻成交`
+        });
+      }
+    }
+
+    pos.tp = tp;
+    pos.sl = sl;
     saveDb();
     return json(res, 200, { ok: true, position: pos });
   }
