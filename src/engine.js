@@ -75,6 +75,19 @@ function stepStock(st, cfg, events, brokerDrift) {
     p *= Math.exp(k * Math.log(st.fair / p));
   }
 
+  // 玩家资金冲击：短时间内的大额净买入/净卖出会推着价格走
+  const flow = Number(st.flow) || 0;
+  if (flow !== 0 && Number(cfg.playerImpactEnabled ?? 1) !== 0) {
+    const strength = Number(cfg.playerImpactStrength ?? 0.0009);
+    const capPerTick = Number(cfg.playerImpactMax ?? 0.008);
+    let impact = flow * strength;
+    impact = Math.max(-capPerTick, Math.min(capPerTick, impact));
+    p *= 1 + impact;
+    // 压力逐轮衰减，冲击是「消化掉」而不是永久抬价
+    st.flow = flow * Number(cfg.playerImpactDecay ?? 0.88);
+    if (Math.abs(st.flow) < 0.02) st.flow = 0;
+  }
+
   if (!Number.isFinite(p) || p <= 0) p = st.price;
   p = Math.max(0.01, p);
 

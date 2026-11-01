@@ -40,6 +40,18 @@ export function playerEquity(db, player) {
   return equity;
 }
 
+/**
+ * 玩家成交对股价的冲击：买入推高，卖出压低
+ * 用「成交额 / 参考成交额」累积成压力，由引擎逐轮释放
+ */
+function addFlow(st, cfg, signedNotional) {
+  if (Number(cfg.playerImpactEnabled ?? 1) === 0) return;
+  const ref = Math.max(1, Number(cfg.playerImpactRef ?? 30000));
+  const maxFlow = Math.max(1, Number(cfg.playerImpactFlowMax ?? 40));
+  const before = Number(st.flow) || 0;
+  st.flow = Math.max(-maxFlow, Math.min(maxFlow, before + signedNotional / ref));
+}
+
 export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) {
   const cfg = db.config;
   const st = db.stocks[code];
@@ -48,6 +60,11 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
 
   qty = Math.floor(num(qty));
   if (!(qty > 0)) return { ok: false, error: '数量必须是正整数' };
+
+  const qtyCap = Math.floor(Number(cfg.maxOrderQty ?? 1000));
+  if (qtyCap > 0 && qty > qtyCap) {
+    return { ok: false, error: `单笔最多 ${qtyCap} 股，大单请分几轮下（市价冲击更小）` };
+  }
 
   leverage = num(leverage, 1);
   if (leverage < (cfg.minLeverage ?? 1) || leverage > (cfg.maxLeverage ?? 20)) {
@@ -72,6 +89,8 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
   }
 
   player.cash -= cost;
+  // 开多 = 买入推高；开空 = 卖出压低
+  addFlow(st, cfg, side === 'long' ? notional : -notional);
   db.tradesThisTick = (db.tradesThisTick || 0) + 1;
   logTrade(db, {
     playerId: player.id,
@@ -133,6 +152,8 @@ export function closePosition(db, player, code, reason = 'manual') {
   const back = Math.max(0, equity - fee - stamp);
 
   player.cash += back;
+  // 平多 = 卖出压低；平空 = 买回推高
+  addFlow(st, cfg, pos.side === 'long' ? -notional : notional);
   delete player.positions[code];
   db.tradesThisTick = (db.tradesThisTick || 0) + 1;
   logTrade(db, {

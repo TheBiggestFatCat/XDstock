@@ -1588,7 +1588,20 @@ async function loadAdmin() {
         ['stampDuty', '印花税率'],
         ['minLeverage', '最小杠杆'],
         ['maxLeverage', '最大杠杆'],
-        ['maxOrdersPerTick', '每轮最多下单']
+        ['maxOrdersPerTick', '每轮最多下单'],
+        ['maxOrderQty', '单笔最多股数']
+      ]
+    },
+    {
+      title: '市场冲击',
+      desc: '玩家大单怎么影响价格',
+      fields: [
+        ['playerImpactEnabled', '开关(1=开 0=关)'],
+        ['playerImpactRef', '参考成交额'],
+        ['playerImpactStrength', '推力系数'],
+        ['playerImpactDecay', '每轮衰减'],
+        ['playerImpactMax', '单轮最大影响'],
+        ['playerImpactFlowMax', '压力上限']
       ]
     },
     {
@@ -1910,7 +1923,10 @@ function bind() {
           + st.price * (cfg.feeRate || 0)
           + st.price * (state.side === 'short' ? (cfg.stampDuty || 0) : 0);
         // 留 0.5% 余量，避免浮点误差和结算时价格跳动导致「现金不足」
-        const qty = Math.floor((cash * 0.995) / perShare);
+        let qty = Math.floor((cash * 0.995) / perShare);
+        // 单笔有股数上限，超了就按上限来
+        const qtyCap = Number(cfg.maxOrderQty ?? 1000);
+        if (qtyCap > 0) qty = Math.min(qty, qtyCap);
         $('#orderQty').value = Math.max(1, qty);
       } else {
         $('#orderQty').value = b.dataset.qty;

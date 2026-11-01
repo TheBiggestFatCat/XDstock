@@ -31,6 +31,17 @@ export const DEFAULT_CONFIG = {
   workOnlineMultiplier: 2,  // 在线时攒的速度翻倍
   workBankTicks: 1440,      // 钱袋上限按多少轮算（1440 轮 = 2 小时）
 
+  // ---- 玩家资金冲击（真实股市感）----
+  playerImpactEnabled: 1,        // 1=开启
+  playerImpactRef: 30000,        // 参考成交额：一笔 3 万算 1 单位压力
+  playerImpactStrength: 0.0009,  // 每单位压力推动多少价格（0.0009 = 0.09%）
+  playerImpactDecay: 0.88,       // 压力每轮衰减系数
+  playerImpactMax: 0.008,        // 单轮最多推动 0.8%
+  playerImpactFlowMax: 40,       // 压力上限（防止堆到离谱）
+
+  // ---- 每笔下单限制 ----
+  maxOrderQty: 1000,             // 单笔最多买多少股
+
   // ---- 收益曲线 ----
   equitySampleTicks: 12,    // 每多少轮记录一次资产快照（12 轮 ≈ 1 分钟）
   equityMaxPoints: 400,     // 每人最多留多少个点（≈ 6.7 小时）

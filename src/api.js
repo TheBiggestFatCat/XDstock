@@ -177,6 +177,8 @@ function marketPayload(db, me) {
       feeRate: db.config.feeRate,
       stampDuty: db.config.stampDuty,
       maxOrdersPerTick: db.config.maxOrdersPerTick,
+      maxOrderQty: db.config.maxOrderQty ?? 1000,
+      playerImpactEnabled: db.config.playerImpactEnabled ?? 1,
       workRatePerTick: db.config.workRatePerTick ?? 50,
       workOnlineMultiplier: db.config.workOnlineMultiplier ?? 2,
       workBankTicks: db.config.workBankTicks ?? 1440,
@@ -487,7 +489,9 @@ export async function handleApi(ctx) {
       'eventChance', 'localEventChance', 'eventDurationMin', 'eventDurationMax',
       'workRatePerTick', 'workOnlineMultiplier', 'workBankTicks', 'stealMin', 'stealMax', 'stealCapRatio', 'stealCooldownTicks',
       'equitySampleTicks', 'equityMaxPoints',
-      'maxOrdersPerTick',
+      'maxOrdersPerTick', 'maxOrderQty',
+      'playerImpactEnabled', 'playerImpactRef', 'playerImpactStrength',
+      'playerImpactDecay', 'playerImpactMax', 'playerImpactFlowMax',
       'brokerMidpoint', 'brokerMidFloor', 'brokerSensitivity', 'brokerCap', 'brokerAlpha',
       'startingCash', 'adminPin', 'allowRegister', 'marketOpen', 'pinLength'
     ];

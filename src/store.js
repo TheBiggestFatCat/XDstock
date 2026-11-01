@@ -27,6 +27,7 @@ function freshStock(code) {
     trait: seed.trait,
     price: seed.initialPrice,
     fair: seed.initialPrice,
+    flow: 0,          // 玩家资金冲击累积（正=净买入，负=净卖出）
     // 停牌 / 退市
     status: 'normal', // normal | suspended | delisted
     statusUntil: 0,
