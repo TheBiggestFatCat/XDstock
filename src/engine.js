@@ -80,12 +80,15 @@ function stepStock(st, cfg, events, brokerDrift) {
   if (flow !== 0 && Number(cfg.playerImpactEnabled ?? 1) !== 0) {
     const strength = Number(cfg.playerImpactStrength ?? 0.0009);
     const capPerTick = Number(cfg.playerImpactMax ?? 0.008);
-    let impact = flow * strength;
+    // 首轮全额，后续按「后续影响倍率」打折
+    const tail = st.flowFresh ? 1 : Number(cfg.playerImpactTail ?? 1);
+    let impact = flow * strength * tail;
     impact = Math.max(-capPerTick, Math.min(capPerTick, impact));
     p *= 1 + impact;
     // 压力逐轮衰减，冲击是「消化掉」而不是永久抬价
     st.flow = flow * Number(cfg.playerImpactDecay ?? 0.88);
     if (Math.abs(st.flow) < 0.02) st.flow = 0;
+    st.flowFresh = false;
   }
 
   if (!Number.isFinite(p) || p <= 0) p = st.price;

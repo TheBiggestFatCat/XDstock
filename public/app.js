@@ -2342,6 +2342,7 @@ async function loadAdmin() {
         ['playerImpactRef', '参考成交额'],
         ['playerImpactStrength', '推力系数'],
         ['playerImpactDecay', '每轮衰减'],
+        ['playerImpactTail', '后续影响倍率(1=不变)'],
         ['playerImpactMax', '单轮最大影响'],
         ['playerImpactFlowMax', '压力上限'],
         ['impactCostCoef', '冲击成本系数(0=不收)'],

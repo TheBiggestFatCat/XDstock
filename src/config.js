@@ -36,6 +36,9 @@ export const DEFAULT_CONFIG = {
   playerImpactRef: 30000,        // 参考成交额：一笔 3 万算 1 单位压力
   playerImpactStrength: 0.0009,  // 每单位压力推动多少价格（0.0009 = 0.09%）
   playerImpactDecay: 0.88,       // 压力每轮衰减系数
+  // 后续影响倍率：1 = 照常；0.5 = 只有首轮全额，之后每轮只有一半力度
+  // 首轮冲击不受影响（首轮永远按 1 倍算）
+  playerImpactTail: 1,
   playerImpactMax: 0.008,        // 单轮最多推动 0.8%
   playerImpactFlowMax: 12,       // 压力上限（防止堆到离谱；也限制大单的极限涨幅）
 

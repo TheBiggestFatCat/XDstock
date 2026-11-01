@@ -64,6 +64,8 @@ function addFlow(st, cfg, signedNotional) {
   const maxFlow = Math.max(1, Number(cfg.playerImpactFlowMax ?? 40));
   const before = Number(st.flow) || 0;
   st.flow = Math.max(-maxFlow, Math.min(maxFlow, before + signedNotional / ref));
+  // 标记「本轮刚有成交」，下一轮走首轮全额冲击，之后按后续倍率衰减
+  st.flowFresh = true;
 }
 
 /**
