@@ -140,7 +140,21 @@ export function genNextReport(st, ctx = {}) {
   }
   margin = clamp(margin, ind.margin[0] * 0.7, ind.margin[1] * 1.2);
 
-  const revenue = (Number(f.revenue) || 1) * (1 + growth);
+  // 营收 = 存量业务（70%）+ 与业务量挂钩的部分（30%）
+  // 券商看全市场成交量，外汇看汇率波动幅度：
+  // 这样数字本身就体现"最近行情怎么样"，而不只是影响增速
+  let revenue = (Number(f.revenue) || 1) * (1 + growth) * 0.7;
+  if (trait === 'broker') {
+    const vf = clamp(Number(ctx.volumeFactor) || 1, 0.15, 5);
+    revenue += baseRev * 0.3 * vf;
+  } else if (trait === 'fx') {
+    const ff = clamp(Number(ctx.fxFactor) || 1, 0.15, 5);
+    revenue += baseRev * 0.3 * ff;
+  } else {
+    // 其他行业没有业务量联动，按原比例补回来
+    revenue += (Number(f.revenue) || 1) * (1 + growth) * 0.3;
+  }
+
   const netProfit = revenue * margin;
   const eps = netProfit / shares;
   const bps = (Number(f.bps) || 1) + eps * rand(0.4, 0.9);
