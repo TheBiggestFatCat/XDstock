@@ -41,6 +41,10 @@ const state = {
   orderMode: 'open',
   shopDir: 1,
   tradeTab: 'order',
+  eqFitted: false,
+  eqLastCount: 0,
+  eqLastTime: 0,
+  eqLastValue: 0,
   stockTradesLoaded: false,
   stream: null
 };
@@ -1952,6 +1956,8 @@ function ensureEquityChart() {
       borderVisible: false,
       timeVisible: true,
       secondsVisible: false,
+      // 不要因为来了新数据就自动平移视图，否则用户缩放后每个 tick 都会被拽走
+      shiftVisibleRangeOnNewBar: false,
       tickMarkFormatter: (t) => fmtLocalTime(t, false)
     },
     crosshair: {
@@ -2025,9 +2031,40 @@ async function loadEquityCurve() {
       totalData.push({ time: p.time, value: p.equity });
       tradingData.push({ time: p.time, value: p.trading });
     }
-    state.eqTotal.setData(totalData);
-    state.eqTrading.setData(tradingData);
-    chart.timeScale().fitContent();
+    const ts = chart.timeScale();
+
+    // 数据没变化就不重画，避免每轮都闪一下
+    const lastPoint = totalData[totalData.length - 1];
+    const sameAsBefore = state.eqLastCount === totalData.length
+      && state.eqLastTime === lastPoint.time
+      && state.eqLastValue === lastPoint.value;
+
+    if (!sameAsBefore) {
+      // 记录更新前的视野，以及用户是不是贴着最右边看最新数据
+      const before = ts.getVisibleLogicalRange();
+      const atRight = !before || !state.eqLastCount
+        || before.to >= state.eqLastCount - 1.5;
+
+      state.eqTotal.setData(totalData);
+      state.eqTrading.setData(tradingData);
+      state.eqLastCount = totalData.length;
+      state.eqLastTime = lastPoint.time;
+      state.eqLastValue = lastPoint.value;
+
+      if (!state.eqFitted) {
+        ts.fitContent();
+        state.eqFitted = true;
+      } else if (atRight) {
+        // 用户在看最新数据 → 跟着走
+        ts.scrollToRealTime();
+      } else if (before) {
+        // 用户缩放到别处在看历史 → 原样保持，不要动
+        ts.setVisibleLogicalRange(before);
+      }
+    } else if (!state.eqFitted) {
+      ts.fitContent();
+      state.eqFitted = true;
+    }
 
     const last = pts[pts.length - 1];
     const first = pts[0];

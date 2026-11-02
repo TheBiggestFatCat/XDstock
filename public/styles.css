@@ -61,6 +61,8 @@ html, body {
   margin: 0;
   padding: 0;
   min-height: 100%;
+  /* 有任何长内容都不该让整页左右晃动 */
+  overflow-x: hidden;
 }
 
 body {
@@ -453,6 +455,8 @@ input.tpsl-input {
 .active-event {
   font-size: 12px; padding: 8px 11px; border-radius: 10px;
   background: var(--hl-warm); border: 1px solid var(--bd-warn); color: #8a6d1f;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .config-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
 .config-form .field { margin-bottom: 0; }
@@ -616,7 +620,13 @@ input.tpsl-input {
   .shop-grid { grid-template-columns: 1fr; }
   .rank-row { gap: 8px; padding: 9px 8px; }
   .news-panel { margin-bottom: 10px; }
-  .news-feed { max-height: 148px; }
+  /* 手机上限制高度并内部滚动，否则内容会溢出面板盖住下面的行情列表 */
+  .news-feed {
+    max-height: 232px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
 
   /* 指纹/刘海屏安全区 */
   .login-wrap { padding: calc(20px + env(safe-area-inset-top)) 16px calc(20px + env(safe-area-inset-bottom)); }
@@ -699,7 +709,14 @@ input.tpsl-input {
   from { opacity: 0; transform: translateX(-8px); }
   to { opacity: 1; transform: none; }
 }
-.news-text { flex: 1; color: var(--ink); min-width: 0; }
+.news-text {
+  flex: 1;
+  color: var(--ink);
+  min-width: 0;
+  /* 长串（URL、英文名）也要能断行，否则会把容器撑宽 */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .news-left { font-size: 11px; color: var(--ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 .news-badge {
@@ -785,7 +802,13 @@ input.tpsl-input {
   padding: 8px 11px; border-radius: 10px; background: var(--hl-cool);
   border: 1px solid var(--line); font-size: 12.5px;
 }
-.notice-row .notice-text { flex: 1; min-width: 0; color: var(--ink); }
+.notice-row .notice-text {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .notice-empty { font-size: 12px; color: var(--ink-3); padding: 6px 2px; }
 
 .fee-cell { color: var(--ink-2); }
