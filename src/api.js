@@ -277,6 +277,7 @@ function marketPayload(db, me) {
       feeRate: db.config.feeRate,
       stampDuty: db.config.stampDuty,
       maxOrdersPerTick: db.config.maxOrdersPerTick,
+      globalEventScale: db.config.globalEventScale ?? 0.2,
 
       maxFillNotionalPerTick: db.config.maxFillNotionalPerTick ?? 150000,
       shopFakeNewsPrice: db.config.shopFakeNewsPrice ?? 500000,
