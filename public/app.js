@@ -363,6 +363,19 @@ function renderReport() {
       <div><span>ROE</span><b>${((r.roe || 0) * 100).toFixed(1)}%</b></div>
       <div><span>资产负债率</span><b>${((r.debt || 0) * 100).toFixed(0)}%</b></div>
     </div>
+    ${(st.preview && state.market?.me?.theme === 'tycoon') ? `
+      <div class="preview-box">
+        <div class="preview-head">
+          <span>🐊 提前看到的财报</span>
+          <span>还有 ${st.preview.tickLeft} 轮公布</span>
+        </div>
+        <div class="preview-grid">
+          <div><span>营业收入</span><b>${fmtMoney(st.preview.revenue)}</b></div>
+          <div><span>净利润</span><b>${fmtMoney(st.preview.netProfit)}</b></div>
+          <div><span>每股收益</span><b>$${Number(st.preview.eps).toFixed(3)}</b></div>
+          <div><span>预期变化</span><b class="${st.preview.expectPct >= 0 ? 'up' : 'down'}">${st.preview.expectPct >= 0 ? '+' : ''}${st.preview.expectPct.toFixed(1)}%</b></div>
+        </div>
+      </div>` : ''}
   `;
 }
 
@@ -390,19 +403,7 @@ function renderIndexWeights() {
           <span class="iw-cap">${fmtMoney(w.freeCap || 0)}</span>
         </div>`).join('')}
     </div>
-    ${(st.preview && state.market?.me?.theme === 'tycoon') ? `
-      <div class="preview-box">
-        <div class="preview-head">
-          <span>🐊 提前看到的财报</span>
-          <span>还有 ${st.preview.tickLeft} 轮公布</span>
-        </div>
-        <div class="preview-grid">
-          <div><span>营业收入</span><b>${fmtMoney(st.preview.revenue)}</b></div>
-          <div><span>净利润</span><b>${fmtMoney(st.preview.netProfit)}</b></div>
-          <div><span>每股收益</span><b>$${Number(st.preview.eps).toFixed(3)}</b></div>
-          <div><span>预期变化</span><b class="${st.preview.expectPct >= 0 ? 'up' : 'down'}">${st.preview.expectPct >= 0 ? '+' : ''}${st.preview.expectPct.toFixed(1)}%</b></div>
-        </div>
-      </div>` : ''}`;
+  `;
 }
 
 function toggleReportPanel() {
