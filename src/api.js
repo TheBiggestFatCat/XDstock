@@ -226,6 +226,10 @@ function marketPayload(db, me) {
       feeRate: db.config.feeRate,
       stampDuty: db.config.stampDuty,
       maxOrdersPerTick: db.config.maxOrdersPerTick,
+      // 现时活动的三个参数，参数设置面板要用
+      activityEnabled: db.config.activityEnabled ?? 1,
+      activityThreshold: db.config.activityThreshold ?? 500000,
+      activityReward: db.config.activityReward ?? 4000000,
       maxFillNotionalPerTick: db.config.maxFillNotionalPerTick ?? 150000,
       shopFakeNewsPrice: db.config.shopFakeNewsPrice ?? 500000,
       shopFakeNewsChance: db.config.shopFakeNewsChance ?? 0.2,
