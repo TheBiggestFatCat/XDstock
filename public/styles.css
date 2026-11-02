@@ -2277,3 +2277,49 @@ body[data-theme="tycoon"] .brand-logo {
   display: inline-flex; align-items: center; justify-content: center;
   border-radius: 50%; background: var(--soft-2); font-size: 13px;
 }
+
+/* ---- 隐世仙人（青紫雾气） ---- */
+body[data-theme="hermit"] {
+  --soft: #f7f5fd;
+  --soft-2: #f0edfa;
+  --soft-3: #e8e4f7;
+  --soft-blue: #f3f6fd;
+  --soft-gray: #f5f3fb;
+  --tabs-1: rgba(247, 245, 253, .98);
+  --tabs-2: rgba(247, 245, 253, .86);
+  --bg: #f2effc;
+  --bg-2: #e6e0f7;
+  --card: #ffffff;
+  --surface: #fbfaff;
+  --ink: #241f33;
+  --ink-2: #5f5582;
+  --ink-3: #948cb0;
+  --line: #e3ddf4;
+  --accent: #7c6bb0;
+  --accent-2: #5b4f8a;
+  --accent-soft: #ece7fa;
+  --up: #e11d48;
+  --down: #15803d;
+  --shadow: 0 8px 28px rgba(91, 79, 138, .10);
+  --shadow-lg: 0 18px 48px rgba(91, 79, 138, .16);
+  --glass: rgba(247, 245, 253, .82);
+  --glass-line: rgba(227, 221, 244, .9);
+  --glass-hover: rgba(236, 231, 250, .8);
+  --blob-a: #cdbdf0;
+  --blob-b: #e4dcfa;
+  --blob-c: #bcaae8;
+}
+body[data-theme="hermit"] .tab.active {
+  background: linear-gradient(135deg, #a78bfa, #6d5ba8);
+  box-shadow: 0 8px 20px rgba(124, 107, 176, .3);
+}
+body[data-theme="hermit"] .brand-logo {
+  background: linear-gradient(140deg, #c4b5fd, #7c6bb0);
+  box-shadow: 0 10px 24px rgba(124, 107, 176, .35);
+}
+.tp-hermit-1, .tp-hermit-2, .tp-hermit-3 {
+  border-radius: 8px; padding: 5px 10px; font-size: 11px; text-align: center;
+}
+.tp-hermit-1 { background: #f2effc; color: #5b4f8a; }
+.tp-hermit-2 { background: #7c6bb0; color: #fff; }
+.tp-hermit-3 { background: #fbfaff; color: #5f5582; border: 1px solid #e3ddf4; }

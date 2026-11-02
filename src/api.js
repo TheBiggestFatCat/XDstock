@@ -424,6 +424,21 @@ export async function handleApi(ctx) {
       const equity = playerEquity(db, p);
       // 暗黑大手：别人看到的持仓方向也是随机的
       const stealth = p.theme === 'dark' && (!viewer || viewer.id !== p.id);
+      // 隐世仙人：别人看不到他的持仓（成交记录照旧可见）
+      const hermit = p.theme === 'hermit' && (!viewer || viewer.id !== p.id);
+      if (hermit) {
+        return {
+          id: p.id,
+          nickname: p.nickname,
+          avatar: p.avatar || null,
+          cash: p.cash,
+          equity,
+          guardUntil: p.guardUntil || 0,
+          positions: [],
+          theme: p.theme,
+          hidden: true
+        };
+      }
       const positions = Object.entries(p.positions || {}).map(([code, pos]) => {
         const st = db.stocks[code];
         return {
@@ -1010,7 +1025,7 @@ export async function handleApi(ctx) {
   }
 
   // ---------- 主题配色 ----------
-  const THEMES = ['red', 'dark', 'tycoon'];
+  const THEMES = ['red', 'dark', 'tycoon', 'hermit'];
 
   if (pathname === '/api/shop/theme' && method === 'POST') {
     const code = String(body.theme || '').trim();

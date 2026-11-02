@@ -540,6 +540,10 @@ const THEME_CHART = {
     text: '#55682f', grid: 'rgba(223,234,196,.8)', border: 'rgba(223,234,196,.95)',
     cross: 'rgba(101,163,13,.45)', crossLabel: '#65a30d'
   },
+  hermit: {
+    text: '#5f5582', grid: 'rgba(227,221,244,.8)', border: 'rgba(227,221,244,.95)',
+    cross: 'rgba(124,107,176,.45)', crossLabel: '#7c6bb0'
+  },
 };
 
 /** 把主题套到 body 上，并同步图表配色 */
