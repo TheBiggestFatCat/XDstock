@@ -84,12 +84,6 @@ export const DEFAULT_CONFIG = {
   // 指数调仓周期（2160 轮 = 3 小时 = 一个「季度」）
   indexRebalanceTicks: 2160,
 
-  // 现时活动：打倒量化资本
-  activityEnabled: 1,            // 1 = 活动进行中
-  activityTargets: ['鹰角网络'],   // 被瓜分名单（玩家昵称数组）
-  activityThreshold: 5000000,    // 总资产超过多少触发（500 万）
-  activityReward: 4000000,       // 平分给他的总金额
-  activityCooldownMinutes: 10,   // 同一个目标两次被瓜分之间的间隔
 
   // 「红红的牛」技能：指数处于上升趋势时平仓，额外返 1% 成交额
   redBonusRate: 0.01,

@@ -177,11 +177,6 @@ function migrate(d) {
     if (typeof st.nextReportTick !== 'number') st.nextReportTick = 0;
   }
 
-  // 老存档补上活动状态
-  if (!merged.activity) {
-    merged.activity = { participants: [], status: 'running', lastResult: null };
-  }
-
   // 老存档补上 ST 字段
   for (const s2 of Object.values(merged.stocks)) {
     if (typeof s2.stTicks !== 'number') s2.stTicks = 0;

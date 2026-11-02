@@ -6,7 +6,6 @@ import { TIMEFRAMES } from './config.js';
 import { getBuild } from './build.js';
 import { playerEquity, positionPnl } from './trading.js';
 import { placeLimitOrder, cancelOrder } from './orders.js';
-import { activityPayload, joinActivity, adminActivity } from './activity.js';
 import { reportPayload } from './fundamentals.js';
 
 const TOKEN_TTL = 30 * 24 * 3600 * 1000;
@@ -208,7 +207,6 @@ function marketPayload(db, me) {
     build: getBuild(),
     tick: db.tick,
     tickMs: db.config.tickMs,
-    activity: activityPayload(db, me),
     marketOpen: db.config.marketOpen !== false,
     startedAt: db.startedAt || 0,
     serverTime: now(),
@@ -273,12 +271,7 @@ function marketPayload(db, me) {
       feeRate: db.config.feeRate,
       stampDuty: db.config.stampDuty,
       maxOrdersPerTick: db.config.maxOrdersPerTick,
-      // 现时活动的三个参数，参数设置面板要用
-      activityEnabled: db.config.activityEnabled ?? 1,
-      activityThreshold: db.config.activityThreshold ?? 500000,
-      activityReward: db.config.activityReward ?? 4000000,
-      activityJoinMinutes: db.config.activityJoinMinutes ?? 10,
-      activityCooldownMinutes: db.config.activityCooldownMinutes ?? 10,
+
       maxFillNotionalPerTick: db.config.maxFillNotionalPerTick ?? 150000,
       shopFakeNewsPrice: db.config.shopFakeNewsPrice ?? 500000,
       shopFakeNewsChance: db.config.shopFakeNewsChance ?? 0.2,
@@ -478,7 +471,6 @@ export async function handleApi(ctx) {
   if (pathname === '/api/admin/state' && method === 'GET') {
     return json(res, 200, {
       config: db.config,
-      activity: activityPayload(db, ctx?.player || null),
       marketOpen: db.config.marketOpen !== false,
       notices: db.notices || [],
       closedAt: db.closedAt || 0,
@@ -538,14 +530,6 @@ export async function handleApi(ctx) {
       for (const [tk, sess] of Object.entries(db.sessions || {})) {
         if (sess.playerId === gone) delete db.sessions[tk];
       }
-      // 从活动报名和冷却记录里清掉
-      const act = db.activity;
-      if (act) {
-        if (Array.isArray(act.participants)) {
-          act.participants = act.participants.filter((x) => x !== gone);
-        }
-        if (act.lastHitAt) delete act.lastHitAt[gone];
-      }
       saveDb();
       return json(res, 200, { ok: true, deleted: true, nickname: nick });
     }
@@ -567,14 +551,6 @@ export async function handleApi(ctx) {
       .sort((a, b) => b.equity - a.equity);
     return json(res, 200, { players: rows });
   }
-
-  if (pathname === '/api/admin/activity' && method === 'POST') {
-    const r = adminActivity(db, String(body.action || 'reset'), body.targets);
-    if (!r.ok) return json(res, 400, r);
-    saveDb();
-    return json(res, 200, { ok: true, activity: activityPayload(db, null) });
-  }
-
 
   if (pathname === '/api/admin/stock-trait' && method === 'POST') {
     const code = String(body.code || '').toUpperCase();
@@ -726,8 +702,6 @@ export async function handleApi(ctx) {
       'shopBodyguardPrice', 'shopBodyguardTicks', 'shopThemePrice',
       'shopChannelBasePrice', 'shopChannelRatio', 'shopChannelStep',
       'stPrice', 'stDelistTicks',
-      'activityEnabled', 'activityThreshold', 'activityReward',
-      'activityCooldownMinutes', 'activityJoinMinutes',
       'fxEnabled', 'fxCoef', 'fxLeverage', 'fxRefreshMs', 'fxTrack',
       'impactCostCoef', 'impactCostMax', 'playerImpactTail',
       'maxOrdersPerTick', 'maxFillNotionalPerTick',
@@ -927,19 +901,6 @@ export async function handleApi(ctx) {
     if (!r.ok) return json(res, 400, r);
     saveDb();
     return json(res, 200, { ok: true, player: publicPlayer(me, db) });
-  }
-
-  // ---------- 现时活动 ----------
-  if (pathname === '/api/activity' && method === 'GET') {
-    return json(res, 200, { activity: activityPayload(db, me) });
-  }
-
-  if (pathname === '/api/activity/join' && method === 'POST') {
-    const join = body.join !== false;
-    const r = joinActivity(db, me, join);
-    if (!r.ok) return json(res, 400, r);
-    saveDb();
-    return json(res, 200, { ok: true, activity: activityPayload(db, me) });
   }
 
   // ---------- 商城 ----------
