@@ -11,11 +11,23 @@
 
 /** 行业：合理市盈率 + 净利率区间 + 营收增速区间 */
 export const INDUSTRY = {
-  消费: { pe: 18, margin: [0.06, 0.16], growth: [0.02, 0.18] },
-  科技: { pe: 25, margin: [0.10, 0.28], growth: [0.10, 0.45] },
-  金融: { pe: 10, margin: [0.18, 0.35], growth: [0.00, 0.12] },
-  传媒: { pe: 15, margin: [0.08, 0.22], growth: [0.03, 0.25] },
-  外汇: { pe: 12, margin: [0.12, 0.25], growth: [0.01, 0.10] }
+  消费: { pe: 18, margin: [0.06, 0.16], growth: [-0.08, 0.16] },
+  科技: { pe: 25, margin: [0.10, 0.28], growth: [-0.06, 0.42] },
+  金融: { pe: 10, margin: [0.18, 0.35], growth: [-0.06, 0.12] },
+  传媒: { pe: 15, margin: [0.08, 0.22], growth: [-0.10, 0.22] },
+  外汇: { pe: 12, margin: [0.12, 0.25], growth: [-0.05, 0.10] }
+};
+
+/** 每家公司的天生体质：有的能长大，有的注定萎缩 */
+const TRAIT_BIAS = {
+  old_money: -0.035,   // 老钱：守成，慢慢缩
+  casino: 0.06,        // 赌场：高增长高波动
+  hype: 0.025,         // 话题驱动：靠新闻
+  reversal: 0.0,       // 反转王：随波逐流
+  meme: -0.05,         // 梗股：热度过了就凉
+  backstop: -0.015,    // 护盘：稳但没增长
+  fx: 0.0,
+  broker: 0.0,
 };
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -91,7 +103,8 @@ export function backDerive(st, targetFair) {
     debt: rand(0.25, 0.6),
     dividendRate: rand(0.1, 0.4),
     reportAt: Date.now(),
-    reportTick: 0
+    reportTick: 0,
+    bias: (TRAIT_BIAS[st.trait?.id] ?? 0) + (Math.random() - 0.5) * 0.04
   };
 }
 
@@ -106,8 +119,17 @@ export function genNextReport(st, ctx = {}) {
   const midG = (ind.growth[0] + ind.growth[1]) / 2;
   const trait = st.trait?.id;
 
-  // 增速：向行业中枢回归（50% 上期 + 50% 中枢）
-  let growth = (Number(f.growth) || midG) * 0.5 + midG * 0.5;
+  // 天生体质：决定这家公司长期是扩张还是萎缩
+  let bias = Number.isFinite(Number(f.bias))
+    ? Number(f.bias)
+    : ((TRAIT_BIAS[trait] ?? 0) + (Math.random() - 0.5) * 0.04);
+  // 12% 概率遇到景气/衰退周期，体质发生偏移
+  if (Math.random() < 0.12) {
+    bias = clamp(bias + rand(-0.05, 0.05), -0.16, 0.16);
+  }
+
+  // 增速：向行业中枢回归（50% 上期 + 50% 中枢）+ 天生体质
+  let growth = ((Number(f.growth) || midG) * 0.5 + midG * 0.5 + bias);
 
   // 规模衰减：营收已经是基准的 N 倍时，增速按 1/(1+(N-1)*0.8) 收缩，
   // 不然高成长股每期 30% 复利，几期就涨到天上去
@@ -155,6 +177,9 @@ export function genNextReport(st, ctx = {}) {
     revenue += (Number(f.revenue) || 1) * (1 + growth) * 0.3;
   }
 
+  // 跌到基准的 25% 就不再往下掉，避免公司直接归零
+  revenue = Math.max(revenue, baseRev * 0.25);
+
   const netProfit = revenue * margin;
   const eps = netProfit / shares;
   const bps = (Number(f.bps) || 1) + eps * rand(0.4, 0.9);
@@ -173,7 +198,8 @@ export function genNextReport(st, ctx = {}) {
     debt: clamp((Number(f.debt) || 0.4) + rand(-0.05, 0.05), 0.05, 0.9),
     dividendRate: clamp((Number(f.dividendRate) || 0.25) + rand(-0.05, 0.05), 0, 0.6),
     reportAt: Date.now(),
-    reportTick: 0
+    reportTick: 0,
+    bias
   };
 }
 
