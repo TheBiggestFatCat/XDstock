@@ -127,6 +127,8 @@ function migrate(d) {
     };
   }
   merged.stocks[INDEX_STOCK.code].isIndex = true;
+  // 指数图标始终以代码为准，换图标不用改存档
+  merged.stocks[INDEX_STOCK.code].icon = INDEX_STOCK.icon;
 
   // 老存档补上汇率缓存
   if (!merged.fx || typeof merged.fx !== 'object') {

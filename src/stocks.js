@@ -151,7 +151,7 @@ export const INDEX_BASE = 1000;
 export const INDEX_STOCK = {
   code: 'DENG',
   name: '灯证指数',
-  icon: '/assets/logo.png',
+  icon: '/assets/stocks/DENG.png',
   industry: '指数',
   desc: '七只标的的等权合成指数',
   initialPrice: 1000,

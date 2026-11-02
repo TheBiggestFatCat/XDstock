@@ -255,14 +255,18 @@ function renderChartSub(st) {
   const cfg = state.market?.config || {};
   const rate = Number(fx.rate) || 0;
   const base = Number(fx.base) || rate || 0;
-  const coef = Number(st.trait?.coef ?? cfg.fxCoef ?? 1);
-  const lev = Number(st.trait?.lev ?? cfg.fxLeverage ?? 8);
-
   el.classList.remove('hidden');
-  // 只显示当前汇率价格
-  el.innerHTML = rate
-    ? `<span class="cs-tag">AUD/JPY</span><b>${rate.toFixed(3)}</b>`
-    : '<span class="cs-tag">AUD/JPY</span><b>获取中…</b>';
+  if (!rate) {
+    el.innerHTML = '<span class="cs-tag">AUD/JPY</span><b>获取中…</b>';
+    return;
+  }
+  // 相对基准汇率的涨跌幅（股价就是按这个换算的）
+  const chg = base > 0 ? (rate / base - 1) * 100 : 0;
+  const cls2 = chg > 0 ? 'up' : chg < 0 ? 'down' : 'flat';
+  el.innerHTML = `
+    <span class="cs-tag">AUD/JPY</span>
+    <b>${rate.toFixed(3)}</b>
+    <span class="${cls2}" title="相对基准汇率 ${base.toFixed(3)}">${chg >= 0 ? '+' : ''}${chg.toFixed(3)}%</span>`;
 }
 
 function renderStBanner(st) {
