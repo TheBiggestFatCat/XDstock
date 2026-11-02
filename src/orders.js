@@ -97,11 +97,11 @@ export function placeLimitOrder(db, player, body) {
     return { ok: false, error: '这只票你还有反向持仓，先平掉再挂' };
   }
 
-  // 押金按「实际可能成交的价」估：
-  //   买单 → 取限价和现价里更低的那个（成交价不会高于它）
-  //   卖单 → 取更高的那个
+  // 押金按「最坏情况成交价」冻结：
+  //   买单 → 直接按【限价】冻结（成交价最高就是限价，按现价冻结价格一涨就不够）
+  //   卖单 → 取限价和现价里更高的那个
   const buySide = side === 'long';
-  const refPrice = buySide ? Math.min(limit, st.price) : Math.max(limit, st.price);
+  const refPrice = buySide ? limit : Math.max(limit, st.price);
   const reserve = estimateReserve(cfg, refPrice, qty, leverage, side);
   if (player.cash < reserve) {
     return { ok: false, error: `押金不足，需要 $${reserve.toFixed(2)}，你只有 $${player.cash.toFixed(2)}` };
@@ -216,7 +216,15 @@ export function processOrders(db) {
       if (order.action === 'open') {
         // 从押金里按比例解冻这一轮要用的部分
         const perShareReserve = (order.reserve || 0) / remainQty;
-        const portion = perShareReserve * fillQty;
+        let portion = perShareReserve * fillQty;
+
+        // 价格如果往上跳了，按比例解冻的不一定够这一轮的成本，
+        // 就从本单剩下的押金里再补一点，避免误报「现金不足」并撤单
+        const needNow = estimateReserve(db.config, px, fillQty, order.leverage, order.side) * 1.01;
+        if (needNow > portion) {
+          const spare = Math.max(0, (order.reserve || 0) - portion);
+          portion += Math.min(spare, needNow - portion);
+        }
         player.cash = num(player.cash, 0) + portion;
 
         const r = openPosition(db, player, {
@@ -235,7 +243,7 @@ export function processOrders(db) {
               type: 'fail',
               code: order.code,
               name: order.name,
-              reason: r.error || '成交失败'
+              reason: (r.error || '成交失败') + '，该挂单已自动撤销'
             });
             // 失败一次就撤掉，避免死循环
             const idx = orders.indexOf(order);

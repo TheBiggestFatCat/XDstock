@@ -1854,12 +1854,17 @@ function maxAffordableQty() {
   const cash = state.market?.me?.cash || 0;
   const cfg = state.market?.config || {};
   // 每 1 股要花：保证金 + 手续费 + 卖出方向的印花税
-  const perShare = st.price / lev
-    + st.price * (cfg.feeRate || 0)
-    + st.price * (state.side === 'short' ? (cfg.stampDuty || 0) : 0);
+  // 价格口径必须和服务端冻结的一致：买单按限价（成交价最高就是限价），
+  // 否则「全仓」算出来的股数会比冻结金额多一点点，下单就报押金不足
+  const limitPx = Math.round(Number($('#orderLimit')?.value) * 100) / 100;
+  const rawPrice = limitPx > 0 ? limitPx : st.price;
+  const refPrice = isBuySide() ? rawPrice : Math.max(rawPrice, st.price);
+  const perShare = refPrice / lev
+    + refPrice * (cfg.feeRate || 0)
+    + refPrice * (state.side === 'short' ? (cfg.stampDuty || 0) : 0);
   if (!(perShare > 0)) return 0;
-  // 留 0.5% 余量，避免浮点误差和结算时价格跳动导致「现金不足」
-  return Math.max(0, Math.floor((cash * 0.995) / perShare));
+  // 再留 0.2% 余量，防浮点误差
+  return Math.max(0, Math.floor((cash * 0.998) / perShare));
 }
 
 function updateCostPreview() {
@@ -1868,7 +1873,11 @@ function updateCostPreview() {
   const qty = Number($('#orderQty').value) || 0;
   const lev = Number($('#orderLev').value) || 1;
   const cfg = state.market.config || {};
-  const notional = qty * st.price;
+  // 和服务端冻结口径一致：买单按限价估（成交价最高就是限价），卖单取更高的那个
+  const limitPx = Math.round(Number($('#orderLimit')?.value) * 100) / 100;
+  const rawPrice = limitPx > 0 ? limitPx : st.price;
+  const refPrice = isBuySide() ? rawPrice : Math.max(rawPrice, st.price);
+  const notional = qty * refPrice;
   const margin = notional / lev;
   const fee = notional * (cfg.feeRate || 0);
   const stamp = state.side === 'short' ? notional * (cfg.stampDuty || 0) : 0;
