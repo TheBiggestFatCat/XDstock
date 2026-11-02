@@ -6,6 +6,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.View;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -32,7 +33,10 @@ public class MainActivity extends AppCompatActivity {
     private SwipeRefreshLayout swipe;
     private View errorBox;
 
-    @SuppressLint("SetJavaScriptEnabled")
+    /** 网页当前的滚动位置，由 JS 通过 XDShell 回报 */
+    private volatile int pageScrollY = 0;
+
+    @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -61,15 +65,20 @@ public class MainActivity extends AppCompatActivity {
         webView.setBackgroundColor(0xFFF4FAF8);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
 
+        // 网页把自己的滚动位置报上来，下拉刷新靠它判断「是不是已经在顶部」
+        webView.addJavascriptInterface(new ScrollReporter(), "XDShell");
+
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 errorBox.setVisibility(View.GONE);
+                pageScrollY = 0;
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 swipe.setRefreshing(false);
+                installScrollReporter(view);
             }
 
             @Override
@@ -84,6 +93,15 @@ public class MainActivity extends AppCompatActivity {
         });
 
         swipe.setColorSchemeColors(0xFF14B8A6);
+
+        // 关键：只有页面已经在最顶部，下拉才算「刷新」。
+        // 否则手指往下滑想要的是滚动页面，不该触发刷新。
+        swipe.setOnChildScrollUpCallback((parent, child) -> {
+            if (pageScrollY > 2) return true;              // 网页没到顶
+            return webView.getScrollY() > 2
+                    || webView.canScrollVertically(-1);     // 原生滚动条兜底
+        });
+
         swipe.setOnRefreshListener(() -> {
             errorBox.setVisibility(View.GONE);
             webView.reload();
@@ -98,6 +116,31 @@ public class MainActivity extends AppCompatActivity {
             webView.loadUrl(HOME_URL);
         } else {
             webView.restoreState(savedInstanceState);
+        }
+    }
+
+    /** 把网页的滚动位置持续报给原生层 */
+    private void installScrollReporter(WebView view) {
+        String js = "(function(){"
+                + "if(window.__xdShellOn)return;window.__xdShellOn=1;"
+                + "function rep(){try{"
+                + "var y=Math.max(window.pageYOffset||0,"
+                + "document.documentElement?document.documentElement.scrollTop:0,"
+                + "document.body?document.body.scrollTop:0);"
+                + "XDShell.reportScroll(Math.round(y));}catch(e){}}"
+                + "window.addEventListener('scroll',rep,{passive:true});"
+                + "document.addEventListener('scroll',rep,{passive:true,capture:true});"
+                + "document.addEventListener('touchmove',function(){setTimeout(rep,30);},{passive:true,capture:true});"
+                + "document.addEventListener('touchend',rep,{passive:true,capture:true});"
+                + "setInterval(rep,400);rep();"
+                + "})();";
+        view.evaluateJavascript(js, null);
+    }
+
+    private class ScrollReporter {
+        @JavascriptInterface
+        public void reportScroll(int y) {
+            pageScrollY = y;
         }
     }
 
