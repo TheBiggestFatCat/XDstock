@@ -22,9 +22,58 @@ private static final String HOME_URL = "http://47.103.83.218/";
 
 ## 三、怎么打包成 APK
 
+三种方式，**推荐用 GitHub 云打包**：不用装任何东西，浏览器里点两下就出 APK。
+
+### 方式一：GitHub Actions 云打包（推荐，免费）
+
+仓库里已经放好了工作流：`.github/workflows/android-apk.yml`
+
+**步骤：**
+
+1. 把代码推到 GitHub（新建一个仓库，public / private 都行）
+   ```bash
+   cd D:\WebProjects\XDstock
+   git remote add origin https://github.com/<你的用户名>/<仓库名>.git
+   git push -u origin master
+   ```
+
+2. 打开仓库页 → 顶部 **Actions** 标签
+   - 第一次会提示启用，点 **I understand my workflows, go ahead and enable them**
+
+3. 左侧选 **打包安卓 APK** → 右边 **Run workflow** → 绿色按钮
+
+4. 等 3~5 分钟，任务变成绿色 ✅
+
+5. 点进这次运行 → 页面底部 **Artifacts** → 下载 **xdstock-apk**
+   - 下载下来是个 zip，解压里面有 `app-debug.apk`
+   - 传到手机安装即可（需要允许「安装未知来源应用」）
+
+**免费额度：** 公开仓库完全免费；私有仓库每月 2000 分钟，一次构建约 4 分钟，够用 400 次。
+
+**说明：** 用的是 `app-debug.apk`，已签名（debug 签名），可以直接安装，
+但不是正式发布签名，不能上架应用商店。
+
+#### 只建一个「安卓专用」仓库（更干净）
+
+不想把整个游戏源码推上去的话，可以只推 `android` 目录：
+
+```bash
+cd D:\WebProjects\XDstock\android
+copy ..\.github\workflows\android-apk.yml .github\workflows\   # 手动建好目录
+git init
+git add .
+git commit -m "init"
+git remote add origin https://github.com/<你的用户名>/<仓库名>.git
+git push -u origin master
+```
+
+工作流会自动判断项目在 `android/` 子目录还是仓库根目录，两种结构都能编译。
+
+### 方式二：Android Studio（本地）
+
 需要装 **Android Studio**（或 Android SDK + Gradle）。本机目前没装 SDK，所以只能提供源码工程。
 
-### 方法一：Android Studio（最简单）
+### 2.1 Android Studio（最简单）
 
 1. 打开 Android Studio → `Open` → 选择这个 `android` 目录
 2. 等它自动同步（第一次会下载 Gradle 和依赖，约 5~10 分钟）
@@ -35,7 +84,7 @@ private static final String HOME_URL = "http://47.103.83.218/";
    ```
 5. 传到手机安装（需要允许「安装未知来源应用」）
 
-### 方法二：命令行
+### 2.2 命令行
 
 ```bash
 # 1. 装命令行工具（Windows）
@@ -55,7 +104,7 @@ gradle wrapper          # 第一次生成 gradle wrapper
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 
-### 方法三：发版 APK（体积更小、可签名）
+### 2.3 发版 APK（体积更小、可签名）
 
 ```bash
 ./gradlew assembleRelease
