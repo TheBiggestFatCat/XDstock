@@ -78,6 +78,9 @@ export const DEFAULT_CONFIG = {
   shopChannelRatio: 1.5,         // 每买一次价格乘这个
   shopChannelStep: 100000,       // 每次提升的成交额
 
+  // 市场噪声成交：每轮编几笔「散户」成交，让成交列表看着像有人在交易
+  marketTradesEnabled: 1,
+
   // 财报：每多少轮发一期（720 轮 = 1 小时）
   reportIntervalTicks: 720,
 

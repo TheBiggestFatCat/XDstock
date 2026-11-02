@@ -2270,3 +2270,10 @@ body[data-theme="tycoon"] .brand-logo {
 .tp-tycoon-1 { background: #eef7dc; color: #4d7c0f; }
 .tp-tycoon-2 { background: #65a30d; color: #fff; }
 .tp-tycoon-3 { background: #f8fcef; color: #55682f; border: 1px solid #dfeac4; }
+
+/* 市场噪声成交的头像 */
+.st-emoji {
+  width: 22px; height: 22px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; background: var(--soft-2); font-size: 13px;
+}

@@ -1626,7 +1626,9 @@ async function loadStockTrades() {
     }
     box.innerHTML = rows.map((r) => `
       <div class="st-row">
-        ${rankAvatar(r)}
+        ${r.emoji
+          ? `<span class="st-emoji">${r.emoji}</span>`
+          : rankAvatar(r)}
         <span class="st-side ${r.buy ? 'buy' : 'sell'}">${r.buy ? '买' : '卖'}</span>
         <span class="st-lev">${(Number(r.leverage) || 1).toFixed(0)}x</span>
         <span class="st-amt">${money(r.amount)}</span>

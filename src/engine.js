@@ -1,5 +1,6 @@
 import { INDEX_BASE } from './stocks.js';
 import { genNextReport, fairFromReport, impactFactor } from './fundamentals.js';
+import { genMarketTrades } from './marketTrades.js';
 import { now } from './store.js';
 
 let gaussSpare = null;
@@ -260,6 +261,9 @@ export function stepMarket(db) {
     const cap = cfg.historyTicks ?? 3600;
     if (st.series.length > cap) st.series.splice(0, st.series.length - cap);
   }
+
+  // 3.5 生成市场噪声成交（反映本轮的随机波动）
+  genMarketTrades(db);
 
   // 4. 生成新新闻
   spawnNews(db);
