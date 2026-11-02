@@ -226,6 +226,8 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
       bonus = notional * redRate;
       back += bonus;
       pos.redBonusGiven = true;
+      // 累计统计，主题卡片上要显示
+      player.redBonusEarned = num(player.redBonusEarned) + bonus;
     }
   }
 

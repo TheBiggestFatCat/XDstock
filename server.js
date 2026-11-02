@@ -237,6 +237,7 @@ function tickPayload(forPlayerId) {
       guardUntil: p.guardUntil || 0,
       fakeNewsReadyAt: p.fakeNewsReadyAt || 0,
       channelLevel: p.channelLevel || 0,
+      redBonusEarned: p.redBonusEarned || 0,
       frozen: Math.round((p.orders || []).reduce((a, o) => a + (Number(o.reserve) || 0), 0) * 100) / 100,
       orders: (p.orders || []).map((o) => ({
         id: o.id,

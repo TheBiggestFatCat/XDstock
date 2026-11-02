@@ -590,6 +590,14 @@ function renderShop() {
     chBtn.textContent = poor ? `现金不足（差 ${money0(chPrice - cash)}）` : `购买 · ${money0(chPrice)}`;
   }
 
+  // ---- 红牛的累计返现 ----
+  const redEarned = Number(state.market?.me?.redBonusEarned || 0);
+  const redEarnedEl = $('#redEarned');
+  if (redEarnedEl) {
+    redEarnedEl.textContent = money(redEarned);
+    redEarnedEl.className = redEarned > 0 ? 'up' : '';
+  }
+
   // ---- 主题 ----
   const ownedThemes = state.market?.me?.themes || [];
   const curTheme = state.theme || state.market?.me?.theme || 'default';
