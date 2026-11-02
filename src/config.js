@@ -80,6 +80,9 @@ export const DEFAULT_CONFIG = {
   // 财报：每多少轮发一期（720 轮 = 1 小时）
   reportIntervalTicks: 720,
 
+  // 指数调仓周期（2160 轮 = 3 小时 = 一个「季度」）
+  indexRebalanceTicks: 2160,
+
   // 现时活动：打倒量化资本
   activityEnabled: 1,            // 1 = 活动进行中
   activityTargets: ['鹰角网络'],   // 被瓜分名单（玩家昵称数组）

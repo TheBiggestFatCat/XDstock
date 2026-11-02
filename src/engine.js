@@ -253,22 +253,23 @@ export function stepMarket(db) {
   // 4. 生成新新闻
   spawnNews(db);
 
-  // 5. 指数：按市值加权（基期市值 = 初始价 × 总股本）
+  // 5. 指数：权重按季度调仓，期内权重冻结
   const live = stocks.filter((s) => s.status === 'normal' && !s.isIndex);
   if (live.length) {
-    let nowCap = 0;
-    let baseCap = 0;
-    for (const s of live) {
-      const sh = Number(s.shares) || 0;
-      if (!(sh > 0)) continue;
-      nowCap += s.price * sh;
-      baseCap += (Number(s.initialPrice) || 0) * sh;
+    const idx = db.index;
+    const period = Math.max(60, Number(cfg.indexRebalanceTicks ?? 2160));
+    if (!idx.weights || !idx.basePrices || !(idx.nextRebalanceTick > 0)
+      || db.tick >= idx.nextRebalanceTick) {
+      rebalanceIndex(db, live, period);
     }
-    if (baseCap > 0) {
-      db.index.value = Number(((nowCap / baseCap) * INDEX_BASE).toFixed(2));
-    } else {
-      const ratio = live.reduce((sum, s) => sum + s.price / s.initialPrice, 0) / live.length;
-      db.index.value = Number((ratio * INDEX_BASE).toFixed(2));
+    let sum = 0;
+    for (const s of live) {
+      const w = Number(idx.weights?.[s.code]) || 0;
+      const b = Number(idx.basePrices?.[s.code]) || 0;
+      if (w > 0 && b > 0) sum += w * (s.price / b);
+    }
+    if (sum > 0) {
+      db.index.value = Number(((Number(idx.scale) || INDEX_BASE) * sum).toFixed(2));
     }
   }
   db.index.series.push(db.index.value);
@@ -458,4 +459,30 @@ function fmtYi(v) {
   if (Math.abs(n) >= 1e8) return (n / 1e8).toFixed(2) + '亿';
   if (Math.abs(n) >= 1e4) return (n / 1e4).toFixed(2) + '万';
   return n.toFixed(0);
+}
+
+
+/**
+ * 指数季度调仓：按流通市值定权重，记下期初价和期初点位，期内权重冻结。
+ */
+export function rebalanceIndex(db, live, period) {
+  const idx = db.index;
+  const caps = {};
+  let total = 0;
+  for (const s of live) {
+    const sh = Number(s.shares) || 0;
+    const ff = Number(s.freeFloat) || 0.45;
+    const cap = s.price * sh * ff;
+    if (cap > 0) { caps[s.code] = cap; total += cap; }
+  }
+  if (!(total > 0)) return;
+  const weights = {};
+  for (const code of Object.keys(caps)) weights[code] = caps[code] / total;
+  const basePrices = {};
+  for (const s of live) basePrices[s.code] = Math.max(0.01, Number(s.price) || 0.01);
+  idx.weights = weights;
+  idx.basePrices = basePrices;
+  idx.scale = Number(idx.value) > 0 ? Number(idx.value) : 1000;
+  idx.rebalanceTick = db.tick;
+  idx.nextRebalanceTick = db.tick + period;
 }

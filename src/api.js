@@ -198,7 +198,24 @@ function marketPayload(db, me) {
     index: {
       value: db.index.value,
       series: db.index.series.slice(-600),
-      changes: changesFor(db.index.series, TIMEFRAMES)
+      changes: changesFor(db.index.series, TIMEFRAMES),
+      nextRebalanceTick: Number(db.index.nextRebalanceTick) || 0,
+      rebalanceTick: Number(db.index.rebalanceTick) || 0,
+      weights: Object.entries(db.index.weights || {})
+        .map(([code, w]) => {
+          const st2 = db.stocks[code] || {};
+          const sh = Number(st2.shares) || 0;
+          const px2 = Number(st2.price) || 0;
+          return {
+            code,
+            name: st2.name || code,
+            weight: w,
+            price: px2,
+            marketCap: px2 * sh,
+            freeCap: px2 * sh * (Number(st2.freeFloat) || 0.45)
+          };
+        })
+        .sort((a, b) => b.weight - a.weight)
     },
     stocks,
     events: db.events

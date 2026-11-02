@@ -294,11 +294,40 @@ function renderReport() {
   const tickMs = state.market?.tickMs || 5000;
   const tick = state.market?.tick || 0;
 
-  if (!st || st.isIndex) {
+  const btn = $('#reportBtn');
+  const capEl = $('#reportCap');
+
+  if (!st) {
     if (panel) panel.classList.add('hidden');
     if (nextEl) nextEl.textContent = '';
+    if (btn) btn.classList.add('hidden');
+    if (capEl) capEl.textContent = '';
     return;
   }
+
+  // 指数没有财报，只有成分权重
+  if (st.isIndex) {
+    const idx = state.market?.index || {};
+    if (btn) {
+      btn.classList.remove('hidden');
+      btn.textContent = '📊 成分权重';
+    }
+    if (capEl) capEl.textContent = '';
+    const leftRb = (Number(idx.nextRebalanceTick) || 0) - tick;
+    if (nextEl) {
+      nextEl.innerHTML = leftRb > 0
+        ? `距下次调仓 <b>${fmtAgo(leftRb, tickMs)}</b>`
+        : '<b>即将调仓</b>';
+    }
+    if (panel && !panel.classList.contains('hidden')) renderIndexWeights();
+    return;
+  }
+
+  if (btn) {
+    btn.classList.remove('hidden');
+    btn.textContent = '📊 财报';
+  }
+  if (capEl) capEl.textContent = `市值 ${fmtMoney(st.marketCap || 0)}`;
 
   const r = st.report || {};
   const left = (Number(st.nextReportTick) || 0) - tick;
@@ -332,6 +361,32 @@ function renderReport() {
       <div><span>资产负债率</span><b>${((r.debt || 0) * 100).toFixed(0)}%</b></div>
     </div>
   `;
+}
+
+function renderIndexWeights() {
+  const panel = $('#reportPanel');
+  if (!panel) return;
+  const idx = state.market?.index || {};
+  const list = idx.weights || [];
+  if (!list.length) {
+    panel.innerHTML = '<div class="field-hint">还没有权重数据，下一轮生成</div>';
+    return;
+  }
+  panel.innerHTML = `
+    <div class="rp-head">
+      <span class="rp-ind">成分权重</span>
+      <span class="rp-period">共 ${list.length} 只</span>
+      <span class="rp-cap">季度调仓 · 期内权重冻结</span>
+    </div>
+    <div class="iw-list">
+      ${list.map((w) => `
+        <div class="iw-row">
+          <span class="iw-name">${escapeHtml(w.name)}</span>
+          <span class="iw-bar"><i style="width:${(w.weight * 100).toFixed(1)}%"></i></span>
+          <span class="iw-pct">${(w.weight * 100).toFixed(2)}%</span>
+          <span class="iw-cap">${fmtMoney(w.freeCap || 0)}</span>
+        </div>`).join('')}
+    </div>`;
 }
 
 function toggleReportPanel() {
