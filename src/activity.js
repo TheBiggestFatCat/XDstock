@@ -6,8 +6,9 @@ const DEFAULT = () => ({
   status: 'idle',
   results: [],
   lastResult: null,
-  startedAt: 0,   // 管理员点启动的时间
-  armsAt: 0       // 到这个时间点之后才可能触发（给玩家报名时间）
+  startedAt: 0,
+  armsAt: 0,
+  lastHitAt: {}
 });
 
 export function ensureActivity(db) {
@@ -19,6 +20,7 @@ export function ensureActivity(db) {
   if (a.lastResult === undefined) a.lastResult = null;
   if (typeof a.startedAt !== 'number') a.startedAt = 0;
   if (typeof a.armsAt !== 'number') a.armsAt = 0;
+  if (!a.lastHitAt || typeof a.lastHitAt !== 'object') a.lastHitAt = {};
   return a;
 }
 
@@ -60,6 +62,7 @@ export function activityPayload(db, viewer) {
     aliveCount: alive.length,
     totalEquity: alive.reduce((s, t) => s + t.equity, 0),
     participantCount: a.participants.length,
+    cooldownMinutes: Number(cfg.activityCooldownMinutes ?? 10),
     startedAt: a.startedAt,
     joined: !!(viewer && a.participants.includes(viewer.id)),
     isTarget: !!(viewer && targets.some((p) => p.id === viewer.id)),
@@ -104,6 +107,7 @@ export function adminActivity(db, action, targets) {
     a.participants = [];
     a.results = [];
     a.lastResult = null;
+    a.lastHitAt = {};
     a.status = 'running';
     a.startedAt = Date.now();
     a.armsAt = 0;
@@ -117,6 +121,7 @@ export function adminActivity(db, action, targets) {
     a.participants = [];
     a.results = [];
     a.lastResult = null;
+    a.lastHitAt = {};
     a.status = 'idle';
     return { ok: true };
   }
@@ -134,10 +139,14 @@ export function checkActivity(db) {
   const threshold = Number(cfg.activityThreshold ?? 500000);
   const reward = Math.max(0, Number(cfg.activityReward ?? 4000000));
   const hits = [];
+  const cdMs = Math.max(0, Number(cfg.activityCooldownMinutes ?? 10)) * 60 * 1000;
+  const nowTs = Date.now();
 
   for (const target of findTargets(db)) {
     const equity = playerEquity(db, target);
     if (!(equity > threshold)) continue;
+    const last = Number(a.lastHitAt[target.id] || 0);
+    if (cdMs > 0 && last && nowTs - last < cdMs) continue;
 
     // ---- 强平 ----
     let closed = 0;
@@ -171,6 +180,7 @@ export function checkActivity(db) {
     };
     a.results.push(result);
     a.lastResult = result;
+    a.lastHitAt[target.id] = nowTs;
     hits.push(result);
 
     if (Array.isArray(db.notices)) {
@@ -186,11 +196,8 @@ export function checkActivity(db) {
     }
   }
 
-  // 开火完自动重置：清空报名，名单不动，下一轮重新报名
+  // 开火完只做清理：参与者保留，名单不动，目标进入冷却
   if (hits.length) {
-    a.participants = [];
-    a.startedAt = Date.now();
-    // 只保留最近 10 条战果
     if (a.results.length > 10) a.results = a.results.slice(-10);
   }
   return hits.length ? hits : null;

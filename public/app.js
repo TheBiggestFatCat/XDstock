@@ -2838,7 +2838,8 @@ async function loadAdmin() {
       fields: [
         ['activityEnabled', '活动开关(1=开)'],
         ['activityThreshold', '触发阈值(资产)'],
-        ['activityReward', '平分总金额']
+        ['activityReward', '平分总金额'],
+        ['activityCooldownMinutes', '同一目标冷却(分钟)']
       ]
     },
     {
