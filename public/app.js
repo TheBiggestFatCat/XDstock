@@ -603,22 +603,6 @@ function renderShop() {
       }
     }
 
-    // 报名倒计时
-    const cdEl = $('#actCountdown');
-    if (cdEl) {
-      if (act.status === 'running' && act.joinLeftMs > 0) {
-        const m = Math.floor(act.joinLeftMs / 60000);
-        const sec = Math.floor((act.joinLeftMs % 60000) / 1000);
-        cdEl.classList.remove('hidden');
-        cdEl.innerHTML = `⏳ 报名时间还剩 <b>${m}:${String(sec).padStart(2, '0')}</b>，结束后随时可能开火`;
-      } else if (act.status === 'running' && (act.targets || []).some((t) => !t.raided)) {
-        cdEl.classList.remove('hidden');
-        cdEl.innerHTML = '🔴 <b>已进入开火状态</b>，随时可能瓜分';
-      } else {
-        cdEl.classList.add('hidden');
-      }
-    }
-
     const btn = $('#actJoinBtn');
     if (btn) {
       if (act.status === 'done') {
@@ -796,27 +780,6 @@ async function actAdminAction(action) {
   }
 }
 
-function tickActivityCountdown() {
-  const el = $('#actCountdown');
-  const act = state.market?.activity;
-  if (!el || !act) return;
-  if (act.status === 'running' && act.armsAt > 0) {
-    const left = act.armsAt - Date.now();
-    if (left > 0) {
-      const mm = Math.floor(left / 60000);
-      const ss = Math.floor((left % 60000) / 1000);
-      el.classList.remove('hidden');
-      el.innerHTML = `⏳ 报名时间还剩 <b>${mm}:${String(ss).padStart(2, '0')}</b>，结束后随时可能开火`;
-      return;
-    }
-    if ((act.targets || []).some((t) => !t.raided)) {
-      el.classList.remove('hidden');
-      el.innerHTML = '🔴 <b>已进入开火状态</b>，随时可能瓜分';
-      return;
-    }
-  }
-  el.classList.add('hidden');
-}
 
 async function toggleActivity() {
   const act = state.market?.activity;
@@ -2875,8 +2838,7 @@ async function loadAdmin() {
       fields: [
         ['activityEnabled', '活动开关(1=开)'],
         ['activityThreshold', '触发阈值(资产)'],
-        ['activityReward', '平分总金额'],
-        ['activityJoinMinutes', '报名时间(分钟)']
+        ['activityReward', '平分总金额']
       ]
     },
     {
@@ -3298,9 +3260,5 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   });
 }
-
-setInterval(() => {
-  if ($('#view-shop')?.classList.contains('active')) tickActivityCountdown();
-}, 1000);
 
 boot();

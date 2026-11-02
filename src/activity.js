@@ -38,24 +38,18 @@ export function findTargets(db) {
   );
 }
 
-/** 已经在 results 里被瓜分过的玩家 id */
-function raidedIds(a) {
-  return new Set((a.results || []).map((r) => r.targetId));
-}
 
 export function activityPayload(db, viewer) {
   const a = ensureActivity(db);
   const cfg = db.config;
   const targets = findTargets(db);
-  const done = raidedIds(a);
-
   const list = targets.map((p) => ({
     id: p.id,
     name: p.nickname,
     equity: playerEquity(db, p),
-    raided: done.has(p.id)
+    raided: false
   }));
-  const alive = list.filter((t) => !t.raided);
+  const alive = list;
 
   return {
     name: '打倒量化资本',
@@ -67,10 +61,6 @@ export function activityPayload(db, viewer) {
     totalEquity: alive.reduce((s, t) => s + t.equity, 0),
     participantCount: a.participants.length,
     startedAt: a.startedAt,
-    armsAt: a.armsAt,
-    joinLeftMs: a.status === 'running' ? Math.max(0, a.armsAt - Date.now()) : 0,
-    joinMinutes: Number(cfg.activityJoinMinutes ?? 10),
-    armed: a.status === 'running' && Date.now() >= a.armsAt,
     joined: !!(viewer && a.participants.includes(viewer.id)),
     isTarget: !!(viewer && targets.some((p) => p.id === viewer.id)),
     results: a.results,
@@ -111,14 +101,12 @@ export function adminActivity(db, action, targets) {
     return { ok: true };
   }
   if (action === 'start') {
-    const mins = Math.max(0, Number(db.config.activityJoinMinutes ?? 10));
     a.participants = [];
     a.results = [];
     a.lastResult = null;
     a.status = 'running';
     a.startedAt = Date.now();
-    // 启动后先给玩家这么多分钟报名，到点才可能开火
-    a.armsAt = Date.now() + mins * 60 * 1000;
+    a.armsAt = 0;
     return { ok: true };
   }
   if (action === 'stop') {
@@ -142,16 +130,12 @@ export function checkActivity(db) {
   if (Number(cfg.activityEnabled ?? 1) === 0) return null;
   if (a.status !== 'running') return null;
   if (!a.participants.length) return null;
-  // 报名时间还没结束，先不开火
-  if (a.armsAt && Date.now() < a.armsAt) return null;
 
   const threshold = Number(cfg.activityThreshold ?? 500000);
   const reward = Math.max(0, Number(cfg.activityReward ?? 4000000));
-  const done = raidedIds(a);
   const hits = [];
 
   for (const target of findTargets(db)) {
-    if (done.has(target.id)) continue;
     const equity = playerEquity(db, target);
     if (!(equity > threshold)) continue;
 
@@ -202,9 +186,12 @@ export function checkActivity(db) {
     }
   }
 
-  // 名单全被打完了就结束
-  if (hits.length && findTargets(db).every((t) => raidedIds(a).has(t.id))) {
-    a.status = 'done';
+  // 开火完自动重置：清空报名，名单不动，下一轮重新报名
+  if (hits.length) {
+    a.participants = [];
+    a.startedAt = Date.now();
+    // 只保留最近 10 条战果
+    if (a.results.length > 10) a.results = a.results.slice(-10);
   }
   return hits.length ? hits : null;
 }
