@@ -282,7 +282,10 @@ function tickPayload(forPlayerId) {
     },
     notices: (d.notices || [])
       .filter((n) => now() - n.at < 24 * 3600 * 1000)
-      .map((n) => ({ id: n.id, text: n.text, at: n.at })),
+      .map((n) => ({
+        id: n.id, text: n.text, at: n.at,
+        ageTicks: Number(n.tick) > 0 ? Math.max(0, d.tick - Number(n.tick)) : null
+      })),
     events: d.events
       .filter((e) => e.announced !== false)
       // 同样只下发已公布的文案和方向
@@ -291,7 +294,10 @@ function tickPayload(forPlayerId) {
         text: e.text,
         companies: e.companies,
         dir: e.dir || (e.trend > 0 ? 1 : -1),
-        createdAt: e.createdAt
+        createdAt: e.createdAt,
+        ageTicks: Number(e.createdTick) > 0
+          ? Math.max(0, d.tick - Number(e.createdTick))
+          : Math.max(0, (Number(e.duration) || 0) - (Number(e.remaining) || 0))
       })),
     me
   };
