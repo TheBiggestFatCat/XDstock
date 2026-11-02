@@ -329,6 +329,9 @@ function renderReport() {
   }
   if (capEl) capEl.textContent = `市值 ${fmtMoney(st.marketCap || 0)}`;
 
+  // 金融大鳄：提前 20 轮看到金融板块财报
+  const pv = st.preview;
+
   const r = st.report || {};
   const left = (Number(st.nextReportTick) || 0) - tick;
   if (nextEl) {
@@ -386,7 +389,20 @@ function renderIndexWeights() {
           <span class="iw-pct">${(w.weight * 100).toFixed(2)}%</span>
           <span class="iw-cap">${fmtMoney(w.freeCap || 0)}</span>
         </div>`).join('')}
-    </div>`;
+    </div>
+    ${(st.preview && state.market?.me?.theme === 'tycoon') ? `
+      <div class="preview-box">
+        <div class="preview-head">
+          <span>🐊 提前看到的财报</span>
+          <span>还有 ${st.preview.tickLeft} 轮公布</span>
+        </div>
+        <div class="preview-grid">
+          <div><span>营业收入</span><b>${fmtMoney(st.preview.revenue)}</b></div>
+          <div><span>净利润</span><b>${fmtMoney(st.preview.netProfit)}</b></div>
+          <div><span>每股收益</span><b>$${Number(st.preview.eps).toFixed(3)}</b></div>
+          <div><span>预期变化</span><b class="${st.preview.expectPct >= 0 ? 'up' : 'down'}">${st.preview.expectPct >= 0 ? '+' : ''}${st.preview.expectPct.toFixed(1)}%</b></div>
+        </div>
+      </div>` : ''}`;
 }
 
 function toggleReportPanel() {
@@ -518,7 +534,11 @@ const THEME_CHART = {
   dark: {
     text: '#9aa6b9', grid: 'rgba(38,45,58,.9)', border: 'rgba(45,54,70,.95)',
     cross: 'rgba(240,192,74,.35)', crossLabel: '#d9a52f'
-  }
+  },
+  tycoon: {
+    text: '#55682f', grid: 'rgba(223,234,196,.8)', border: 'rgba(223,234,196,.95)',
+    cross: 'rgba(101,163,13,.45)', crossLabel: '#65a30d'
+  },
 };
 
 /** 把主题套到 body 上，并同步图表配色 */
@@ -807,6 +827,23 @@ function renderShop() {
   document.querySelectorAll('.theme-card .shop-price').forEach((el) => {
     el.textContent = money0(themePrice);
   });
+  // 主题切换冷却
+  const themeCd = Number(cfg.shopThemeCooldown ?? 100);
+  const themeLast = Number(state.market?.me?.themeChangedTick || 0);
+  const themeTick = state.market?.tick || 0;
+  const themeLeft = (themeCd > 0 && themeLast > 0)
+    ? Math.max(0, themeCd - (themeTick - themeLast)) : 0;
+
+  document.querySelectorAll('[data-cd-for]').forEach((el) => {
+    if (themeLeft > 0) {
+      el.classList.remove('hidden');
+      const sec = Math.ceil(themeLeft * ((state.market?.config?.tickMs || 5000) / 1000));
+      el.innerHTML = `换主题冷却中 <b>${themeLeft} 轮</b>（约 ${Math.ceil(sec / 60)} 分钟）`;
+    } else {
+      el.classList.add('hidden');
+    }
+  });
+
   document.querySelectorAll('.theme-btn').forEach((b) => {
     const code = b.dataset.themeCode;
     const has = ownedThemes.includes(code);
@@ -817,7 +854,11 @@ function renderShop() {
       return;
     }
     if (isCur) { b.textContent = '正在使用'; b.disabled = true; return; }
-    if (has) { b.textContent = '切换到这套'; b.disabled = false; return; }
+    if (has) {
+      b.textContent = themeLeft > 0 ? `冷却 ${themeLeft} 轮` : '切换到这套';
+      b.disabled = themeLeft > 0;
+      return;
+    }
     const poor = cash < themePrice;
     b.textContent = poor ? `现金不足（差 ${money0(themePrice - cash)}）` : '购买';
     b.disabled = poor;

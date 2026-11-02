@@ -429,12 +429,25 @@ export function runReports(db) {
       st.nextReportTick = db.tick + gap * (i + 1);
       continue;
     }
+    // 金融板块：提前 20 轮把下一期财报算好，给「金融大鳄」主题偷看
+    const isFinance = st.trait?.id === 'broker' || st.trait?.id === 'fx'
+      || String(st.industry || '').includes('金融');
+    const lead = 20;
+    if (isFinance && !st.pendingReport && db.tick >= st.nextReportTick - lead) {
+      const ctxP = {
+        volumeFactor: (Number(db.volumeAvg) || 0) / 2,
+        fxFactor: (Number(db.fxVolAvg) || 0) / 0.004
+      };
+      st.pendingReport = genNextReport(st, ctxP);
+    }
+
     if (db.tick < st.nextReportTick) continue;
 
     const before = Number(st.fair) || 0;
     const volumeFactor = (Number(db.volumeAvg) || 0) / 2;          // 2 笔/轮算正常
     const fxFactor = (Number(db.fxVolAvg) || 0) / 0.004;           // 0.4% 波动算正常
-    st.fundamentals = genNextReport(st, { volumeFactor, fxFactor });
+    st.fundamentals = st.pendingReport || genNextReport(st, { volumeFactor, fxFactor });
+    st.pendingReport = null;
 
     // 合理价：新财报算出来的值 70% + 上期 30%，避免一次财报把线拉到天上
     const computed = fairFromReport(st);

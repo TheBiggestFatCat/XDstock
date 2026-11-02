@@ -71,6 +71,7 @@ export const DEFAULT_CONFIG = {
   shopBodyguardPrice: 50000,   // 保镖售价
   shopBodyguardTicks: 720,     // 保护时长（720 轮 = 1 小时）
   shopThemePrice: 2000000,     // 主题配色售价
+  shopThemeCooldown: 100,      // 换主题后的冷却轮数
 
   // 交易专属通道：每次 +10 万单笔成交上限，价格指数增长
   shopChannelBasePrice: 300000,  // 第一次购买的价格

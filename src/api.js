@@ -82,6 +82,7 @@ function publicPlayer(p, db) {
     channelLevel: p.channelLevel || 0,
     redBonusEarned: p.redBonusEarned || 0,
     theme: p.theme || 'default',
+    themeChangedTick: p.themeChangedTick || 0,
     themes: Array.isArray(p.themes) ? p.themes : [],
     frozen: Math.round((p.orders || []).reduce((a, o) => a + (Number(o.reserve) || 0), 0) * 100) / 100,
     orders: (p.orders || []).map((o) => ({
@@ -171,6 +172,22 @@ function marketPayload(db, me) {
       fair: Number(st.fair) || 0,
       nextReportTick: Number(st.nextReportTick) || 0,
       report,
+      // 金融大鳄：提前看到金融板块的下一期财报
+      preview: (me && me.theme === 'tycoon' && st.pendingReport)
+        ? {
+          eps: Number(st.pendingReport.eps) || 0,
+          revenue: Number(st.pendingReport.revenue) || 0,
+          netProfit: Number(st.pendingReport.netProfit) || 0,
+          growth: Number(st.pendingReport.growth) || 0,
+          tickLeft: Math.max(0, (Number(st.nextReportTick) || 0) - db.tick),
+          expectPct: (() => {
+            const f = st.fundamentals || {};
+            const oldEps = Number(f.eps) || 0;
+            const newEps = Number(st.pendingReport.eps) || 0;
+            return oldEps > 0 ? ((newEps / oldEps) - 1) * 100 : 0;
+          })()
+        }
+        : null,
       // 按各 K 线周期算涨跌幅（前端跟着当前周期显示）
       changes: changesFor(st.series, TIMEFRAMES),
       changePct: prev ? ((st.price - prev) / prev) * 100 : 0,
@@ -1029,7 +1046,7 @@ export async function handleApi(ctx) {
   }
 
   // ---------- 主题配色 ----------
-  const THEMES = ['red', 'dark'];
+  const THEMES = ['red', 'dark', 'tycoon'];
 
   if (pathname === '/api/shop/theme' && method === 'POST') {
     const code = String(body.theme || '').trim();
@@ -1037,6 +1054,17 @@ export async function handleApi(ctx) {
 
     const price = Number(db.config.shopThemePrice ?? 2000000);
     if (!Array.isArray(me.themes)) me.themes = [];
+
+    // 主题切换冷却
+    const cd = Math.max(0, Number(db.config.shopThemeCooldown ?? 100));
+    const lastAt = Number(me.themeChangedTick || 0);
+    if (cd > 0 && lastAt > 0 && db.tick - lastAt < cd) {
+      const left = cd - (db.tick - lastAt);
+      return json(res, 429, {
+        error: `主题刚换过，还要等 ${left} 轮（约 ${Math.ceil(left * (db.config.tickMs ?? 5000) / 60000)} 分钟）`,
+        leftTicks: left
+      });
+    }
     if (!me.themes.includes(code)) {
       if (me.cash < price) {
         return json(res, 400, {
@@ -1048,9 +1076,11 @@ export async function handleApi(ctx) {
       me.themes.push(code);
     }
     me.theme = code;
+    me.themeChangedTick = db.tick;
     saveDb();
     return json(res, 200, {
-      ok: true, theme: code, themes: me.themes, price, cash: me.cash
+      ok: true, theme: code, themes: me.themes, price, cash: me.cash,
+      changedTick: me.themeChangedTick
     });
   }
 
@@ -1059,9 +1089,16 @@ export async function handleApi(ctx) {
     if (code !== 'default' && !(Array.isArray(me.themes) && me.themes.includes(code))) {
       return json(res, 400, { error: '还没买这个主题' });
     }
+    const cd = Math.max(0, Number(db.config.shopThemeCooldown ?? 100));
+    const lastAt = Number(me.themeChangedTick || 0);
+    if (code !== me.theme && cd > 0 && lastAt > 0 && db.tick - lastAt < cd) {
+      const left = cd - (db.tick - lastAt);
+      return json(res, 429, { error: `主题刚换过，还要等 ${left} 轮`, leftTicks: left });
+    }
+    if (code !== me.theme) me.themeChangedTick = db.tick;
     me.theme = code;
     saveDb();
-    return json(res, 200, { ok: true, theme: code });
+    return json(res, 200, { ok: true, theme: code, changedTick: me.themeChangedTick });
   }
 
   if (pathname === '/api/shop/bodyguard' && method === 'POST') {

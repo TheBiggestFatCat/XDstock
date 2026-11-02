@@ -2203,3 +2203,62 @@ body[data-theme="dark"] .fee-bonus { color: var(--down); }
   border-color: #b91c1c; color: #b91c1c;
 }
 .ban-btn.del:hover { background: #b91c1c; color: #fff; }
+
+/* ---- 金融大鳄（黄绿） ---- */
+body[data-theme="tycoon"] {
+  --soft: #f8fcef;
+  --soft-2: #f2f8e2;
+  --soft-3: #eaf3d4;
+  --soft-blue: #f0f9e8;
+  --soft-gray: #f5f9ec;
+  --tabs-1: rgba(248, 252, 239, .98);
+  --tabs-2: rgba(248, 252, 239, .86);
+  --bg: #eef7dc;
+  --bg-2: #e4f0c8;
+  --card: #ffffff;
+  --surface: #fbfdf5;
+  --ink: #1e2b0b;
+  --ink-2: #55682f;
+  --ink-3: #8a9a68;
+  --line: #dfeac4;
+  --accent: #65a30d;
+  --accent-2: #4d7c0f;
+  --accent-soft: #eaf5d2;
+  --up: #e11d48;
+  --down: #15803d;
+  --shadow: 0 8px 28px rgba(77, 124, 15, .10);
+  --shadow-lg: 0 18px 48px rgba(77, 124, 15, .16);
+  --glass: rgba(248, 252, 239, .82);
+  --glass-line: rgba(214, 232, 176, .9);
+  --glass-hover: rgba(234, 245, 210, .8);
+  --blob-a: #d4ec9a;
+  --blob-b: #e8f6c4;
+  --blob-c: #c9e58a;
+}
+body[data-theme="tycoon"] .tab.active {
+  background: linear-gradient(135deg, #84cc16, #4d7c0f);
+  box-shadow: 0 8px 20px rgba(101, 163, 13, .3);
+}
+body[data-theme="tycoon"] .brand-logo {
+  background: linear-gradient(140deg, #a3e635, #65a30d);
+  box-shadow: 0 10px 24px rgba(101, 163, 13, .35);
+}
+
+/* 金融大鳄：提前看到的财报 */
+.preview-box {
+  margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+  background: var(--accent-soft);
+  border: 1px dashed var(--accent);
+}
+.preview-head {
+  font-size: 11.5px; color: var(--accent-2); font-weight: 700;
+  margin-bottom: 8px; display: flex; justify-content: space-between;
+}
+.preview-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 12px;
+}
+.preview-grid > div { display: flex; flex-direction: column; gap: 2px; }
+.preview-grid span { font-size: 10.5px; color: var(--ink-3); }
+.preview-grid b { font-size: 12.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.theme-cd { font-size: 11.5px; color: var(--ink-3); margin: 6px 0 2px; }
+.theme-cd b { color: var(--up); }
