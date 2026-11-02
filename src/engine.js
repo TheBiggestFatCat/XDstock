@@ -184,13 +184,17 @@ function publishEvent(e) {
   e.announced = true;
   e.kind = 'after';
   e.publishedAt = now();
-  const keep = Math.random() < 0.5;
+  // 继续 / 反转 的概率和幅度要配平，否则每轮都有一点点净下行，
+  // 积少成多会让所有股票长期阴跌（之前是 50/50，但反转幅度是继续的 2 倍）
+  //   继续：60% × 平均 +0.0004 = +0.00024
+  //   反转：40% × 平均 -0.0006 = -0.00024   ← 期望值正好抵消
+  const keep = Math.random() < 0.6;
   if (keep) {
     e.after = 'continue';
-    e.trend = e.dir * uniform(0.0002, 0.0005);
+    e.trend = e.dir * uniform(0.0003, 0.0005);
   } else {
     e.after = 'reverse';
-    e.trend = -e.dir * uniform(0.0004, 0.0008);
+    e.trend = -e.dir * uniform(0.0005, 0.0007);
   }
   return e;
 }
