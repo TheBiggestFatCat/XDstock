@@ -242,11 +242,17 @@ function marketPayload(db, me) {
         text: e.text,
         companies: e.companies,
         dir: e.dir || (e.trend > 0 ? 1 : -1),
-        createdAt: e.createdAt
+        createdAt: e.createdAt,
+        ageTicks: Number(e.createdTick) > 0
+          ? Math.max(0, db.tick - Number(e.createdTick))
+          : Math.max(0, (Number(e.duration) || 0) - (Number(e.remaining) || 0))
       })),
     notices: (db.notices || [])
       .filter((n) => now() - n.at < 24 * 3600 * 1000)
-      .map((n) => ({ id: n.id, text: n.text, at: n.at, kind: n.kind || null })),
+      .map((n) => ({
+        id: n.id, text: n.text, at: n.at, kind: n.kind || null,
+        ageTicks: Number(n.tick) > 0 ? Math.max(0, db.tick - Number(n.tick)) : null
+      })),
     me: me ? publicPlayer(me, db) : null,
     fx: {
       rate: Number(db.fx?.rate) || 0,
@@ -659,6 +665,7 @@ export async function handleApi(ctx) {
       announced: false,
       manual: true
     };
+    ev.createdTick = db.tick;
     db.events.push(ev);
     saveDb();
     return json(res, 200, { ok: true, event: ev });
@@ -668,7 +675,12 @@ export async function handleApi(ctx) {
     const text = String(body.text || '').trim().slice(0, 300);
     if (!text) return json(res, 400, { error: '公告内容为空' });
     if (!Array.isArray(db.notices)) db.notices = [];
-    const notice = { id: 'n_' + Math.random().toString(36).slice(2, 10), text, at: now() };
+    const notice = {
+      id: 'n_' + Math.random().toString(36).slice(2, 10),
+      text,
+      at: now(),
+      tick: db.tick
+    };
     db.notices.push(notice);
     if (db.notices.length > 20) db.notices.splice(0, db.notices.length - 20);
     saveDb();

@@ -2323,3 +2323,10 @@ body[data-theme="hermit"] .brand-logo {
 .tp-hermit-1 { background: #f2effc; color: #5b4f8a; }
 .tp-hermit-2 { background: #7c6bb0; color: #fff; }
 .tp-hermit-3 { background: #fbfaff; color: #5f5582; border: 1px solid #e3ddf4; }
+
+.news-age {
+  margin-left: auto; flex: none;
+  font-size: 10.5px; color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  padding-left: 8px; white-space: nowrap;
+}

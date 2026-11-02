@@ -180,6 +180,7 @@ export function spawnNews(db) {
     announced: false
   };
 
+  if (typeof ev.createdTick !== 'number') ev.createdTick = db.tick;
   db.events.push(ev);
   return ev;
 }
@@ -488,6 +489,7 @@ export function runReports(db) {
       duration: 40,
       remaining: 40,
       createdAt: Date.now(),
+      createdTick: db.tick,
       announced: true,
       isReport: true
     });

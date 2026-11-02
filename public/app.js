@@ -1495,16 +1495,21 @@ function renderNews() {
   }
 
   // 公告永远排在最前面，且不参与行情
+  const ageTip = (n) => (n === null || n === undefined)
+    ? '' : `<span class="news-age">已过去 ${n} 轮</span>`;
+
   const noticeHtml = notices.slice(0, 3).map((n) => `
     <div class="news-item news-notice">
       <span class="news-badge badge-notice">公告</span>
       <span class="news-text">${escapeHtml(n.text)}</span>
+      ${ageTip(n.ageTicks)}
     </div>`).join('');
 
   const newsHtml = list.slice(0, Math.max(1, 4 - Math.min(3, notices.length))).map((ev) => `
     <div class="news-item">
       ${newsBadge(ev)}
       <span class="news-text">${ev.text}</span>
+      ${ageTip(ev.ageTicks)}
     </div>`).join('');
 
   feed.innerHTML = noticeHtml + newsHtml;
