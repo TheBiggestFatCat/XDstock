@@ -438,7 +438,9 @@ export async function handleApi(ctx) {
       'volMult', 'revMult', 'eventMult', 'drift',
       'streak', 'bounceLo', 'bounceHi',
       'lotteryChance', 'lotteryLo', 'lotteryHi',
-      'floorRatio', 'floorBoost'
+      'floorRatio', 'floorBoost',
+      // 实时汇率（留美外汇）
+      'coef', 'lev', 'fxEnabled', 'refreshMs', 'track'
     ];
     const changed = {};
     for (const [k, v] of Object.entries(body.patch || {})) {

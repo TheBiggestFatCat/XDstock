@@ -77,13 +77,14 @@ function stepStock(st, cfg, events, brokerDrift, fxData) {
     const base = Number(fx.base) || rate || 0;
     const coef = Number(t.coef ?? cfg.fxCoef ?? 1);
     const lev = Number(t.lev ?? cfg.fxLeverage ?? 8);
-    if (rate > 0 && base > 0 && Number(cfg.fxEnabled ?? 1) !== 0) {
+    const fxOn = Number(t.fxEnabled ?? cfg.fxEnabled ?? 1) !== 0;
+    if (rate > 0 && base > 0 && fxOn) {
       // 汇率涨跌 × 系数 × 杠杆 = 股价应有的涨跌
       const implied = 1 + (rate / base - 1) * coef * lev;
       fxTarget = st.initialPrice * Math.max(0.1, implied);
       st.fxTarget = fxTarget;
       // 每轮朝目标靠一点，汇率更新时不会一根直线跳完
-      const track = Math.max(0, Math.min(1, Number(cfg.fxTrack ?? 0.06)));
+      const track = Math.max(0, Math.min(1, Number(t.track ?? cfg.fxTrack ?? 0.06)));
       if (track > 0 && fxTarget > 0) {
         p *= Math.exp(track * Math.log(fxTarget / p));
       }

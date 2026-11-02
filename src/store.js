@@ -133,6 +133,18 @@ function migrate(d) {
     merged.fx = { rate: 0, prevRate: 0, base: 0, at: 0, source: '', stale: true };
   }
 
+  // 老存档：汇率类标的补上新参数
+  for (const s2 of Object.values(merged.stocks)) {
+    if (s2.trait && s2.trait.id === 'fx') {
+      const seed = STOCK_SEED[s2.code]?.trait || {};
+      if (typeof s2.trait.fxEnabled !== 'number') s2.trait.fxEnabled = seed.fxEnabled ?? 1;
+      if (typeof s2.trait.refreshMs !== 'number') s2.trait.refreshMs = seed.refreshMs ?? 60000;
+      if (typeof s2.trait.track !== 'number') s2.trait.track = seed.track ?? 0.06;
+      if (typeof s2.trait.coef !== 'number') s2.trait.coef = seed.coef ?? 1;
+      if (typeof s2.trait.lev !== 'number') s2.trait.lev = seed.lev ?? 8;
+    }
+  }
+
   // 老存档补上 ST 字段
   for (const s2 of Object.values(merged.stocks)) {
     if (typeof s2.stTicks !== 'number') s2.stTicks = 0;

@@ -543,15 +543,24 @@ async function refreshFx() {
 }
 
 let fxTimer = null;
+let fxLastAt = 0;
 function startFxLoop() {
-  const d = getDb();
-  if (Number(d.config.fxEnabled ?? 1) === 0) return;
-  const ms = Math.max(15000, Number(d.config.fxRefreshMs ?? 60000));
-  refreshFx().catch((e) => console.error('[fx] 初始化失败:', e.message));
-  fxTimer = setInterval(() => {
+  // 每 5 秒瞄一眼：到点没到点、开没开，都是现读个股设置
+  const tick = () => {
+    const d = getDb();
+    const fxStock = Object.values(d.stocks).find((st) => st.trait?.id === 'fx');
+    if (!fxStock) return;
+    const t = fxStock.trait || {};
+    if (Number(t.fxEnabled ?? d.config.fxEnabled ?? 1) === 0) return;
+    const ms = Math.max(15000, Number(t.refreshMs ?? d.config.fxRefreshMs ?? 60000));
+    if (Date.now() - fxLastAt < ms) return;
+    fxLastAt = Date.now();
     refreshFx().catch((e) => console.error('[fx] 抓取失败:', e.message));
-  }, ms);
-  if (fxTimer.unref) fxTimer.unref();
+  };
+  refreshFx().catch((e) => console.error('[fx] 初始化失败:', e.message));
+  fxLastAt = Date.now();
+  const timer = setInterval(tick, 5000);
+  if (timer.unref) timer.unref();
 }
 
 const timer = setInterval(loop, Math.max(1000, db.config.tickMs || 5000));

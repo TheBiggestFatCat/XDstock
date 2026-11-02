@@ -257,23 +257,11 @@ function renderChartSub(st) {
   const coef = Number(st.trait?.coef ?? cfg.fxCoef ?? 1);
   const lev = Number(st.trait?.lev ?? cfg.fxLeverage ?? 8);
 
-  if (!rate) {
-    el.classList.remove('hidden');
-    el.innerHTML = '<span class="cs-tag">FX</span> 汇率数据暂不可用，股价按自身波动走';
-    return;
-  }
-  const chg = base ? (rate / base - 1) * 100 : 0;
-  const target = Number(st.fxTarget) || 0;
-  const cls = chg > 0 ? 'up' : chg < 0 ? 'down' : 'flat';
   el.classList.remove('hidden');
-  el.innerHTML = `
-    <span class="cs-tag">AUD/JPY</span>
-    <b>${rate.toFixed(3)}</b>
-    <span class="${cls}">${chg >= 0 ? '+' : ''}${chg.toFixed(3)}%</span>
-    <span class="cs-sep">·</span>
-    <span>系数 ×${coef} 杠杆 ×${lev}</span>
-    ${target > 0 ? `<span class="cs-sep">·</span><span>目标价 <b>${target.toFixed(2)}</b></span>` : ''}
-    ${fx.stale ? '<span class="cs-warn">（数据延迟）</span>' : ''}`;
+  // 只显示当前汇率价格
+  el.innerHTML = rate
+    ? `<span class="cs-tag">AUD/JPY</span><b>${rate.toFixed(3)}</b>`
+    : '<span class="cs-tag">AUD/JPY</span><b>获取中…</b>';
 }
 
 function renderStBanner(st) {
@@ -2483,17 +2471,6 @@ async function loadAdmin() {
       ]
     },
     {
-      title: '实时汇率',
-      desc: '留美外汇的股价由 AUD/JPY 驱动',
-      fields: [
-        ['fxEnabled', '汇率驱动(1=开 0=关)'],
-        ['fxCoef', '放大系数'],
-        ['fxLeverage', '杠杆倍数'],
-        ['fxRefreshMs', '抓取间隔(毫秒)'],
-        ['fxTrack', '每轮靠拢比例']
-      ]
-    },
-    {
       title: '新闻事件',
       desc: '消息怎么影响价格',
       fields: [
@@ -2597,7 +2574,13 @@ const TRAIT_LABELS = {
   lotteryLo: ['彩票涨幅下限', '如 0.25 = 25%'],
   lotteryHi: ['彩票涨幅上限', '如 0.6 = 60%'],
   floorRatio: ['护盘触发比例', '跌到初始价的几成开始托'],
-  floorBoost: ['护盘加成', '每轮往上托多少']
+  floorBoost: ['护盘加成', '每轮往上托多少'],
+  // 实时汇率（只有留美外汇有）
+  fxEnabled: ['汇率驱动(1=开)', '1 由 AUD/JPY 驱动，0 纯随机'],
+  coef: ['汇率系数', '汇率涨跌放大倍数'],
+  lev: ['汇率杠杆', '和系数相乘，越大越猛'],
+  refreshMs: ['抓取间隔(毫秒)', '多久拉一次汇率，最快 15000'],
+  track: ['靠拢比例', '每轮向目标价靠 多少，0.06=6%']
 };
 
 function renderTraitForm(stocks) {
@@ -2624,7 +2607,7 @@ function renderTraitForm(stocks) {
 
     return `<section class="trait-card">
       <div class="trait-head">
-        <img class="stock-icon-sm" src="/assets/stocks/${st.code}.png" alt="" />
+        <img class="stock-icon-sm" src="${st.icon || '/assets/stocks/' + st.code + '.png'}" alt="" />
         <b>${st.name}</b>
         <span class="stock-code">${st.code}</span>
         <span class="trait-tag">${st.traitName || '—'}</span>

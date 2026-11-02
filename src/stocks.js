@@ -118,7 +118,10 @@ export const STOCK_SEED = {
       revMult: 0,
       // 股价 = 初始价 × (1 + 汇率涨跌 × 系数 × 杠杆)
       coef: 1,
-      lev: 8
+      lev: 8,
+      fxEnabled: 1,     // 1=由汇率驱动 0=纯随机
+      refreshMs: 60000, // 多久抓一次汇率
+      track: 0.06       // 每轮向目标价靠拢的比例
     }
   },
   XD: {
