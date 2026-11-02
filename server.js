@@ -9,7 +9,7 @@ import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, positionPnl, logTrade } from './src/trading.js';
 import { processOrders } from './src/orders.js';
 import { checkDelist } from './src/delist.js';
-import { checkActivity } from './src/activity.js';
+import { checkActivity, activityPayload } from './src/activity.js';
 import { fetchAudJpy } from './src/fx.js';
 import { handleApi } from './src/api.js';
 import { NEWS_POOL } from './src/news.js';
@@ -193,6 +193,8 @@ const server = http.createServer(async (req, res) => {
 // ---------------- 游戏主循环 ----------------
 function tickPayload(forPlayerId) {
   const d = getDb();
+  const tickPlayer = forPlayerId && d.players[forPlayerId] ? d.players[forPlayerId] : null;
+  const activity = activityPayload(d, tickPlayer);
   const stocks = {};
   for (const [code, st] of Object.entries(d.stocks)) {
     const prev = st.series.length > 1 ? st.series[st.series.length - 2] : st.price;
@@ -260,6 +262,7 @@ function tickPayload(forPlayerId) {
     type: 'tick',
     build: getBuild(),
     tick: d.tick,
+    activity,
     closed: d.config.marketOpen === false,
     index: d.index.value,
     indexChanges: changesFor(d.index.series, TIMEFRAMES),

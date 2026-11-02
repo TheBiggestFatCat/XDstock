@@ -796,6 +796,28 @@ async function actAdminAction(action) {
   }
 }
 
+function tickActivityCountdown() {
+  const el = $('#actCountdown');
+  const act = state.market?.activity;
+  if (!el || !act) return;
+  if (act.status === 'running' && act.armsAt > 0) {
+    const left = act.armsAt - Date.now();
+    if (left > 0) {
+      const mm = Math.floor(left / 60000);
+      const ss = Math.floor((left % 60000) / 1000);
+      el.classList.remove('hidden');
+      el.innerHTML = `⏳ 报名时间还剩 <b>${mm}:${String(ss).padStart(2, '0')}</b>，结束后随时可能开火`;
+      return;
+    }
+    if ((act.targets || []).some((t) => !t.raided)) {
+      el.classList.remove('hidden');
+      el.innerHTML = '🔴 <b>已进入开火状态</b>，随时可能瓜分';
+      return;
+    }
+  }
+  el.classList.add('hidden');
+}
+
 async function toggleActivity() {
   const act = state.market?.activity;
   if (!act || act.status === 'done') return;
@@ -1837,6 +1859,7 @@ function onTick(d) {
   m.index.series.push(d.index);
   if (m.index.series.length > 600) m.index.series.shift();
   m.events = d.events || [];
+  if (d.activity) m.activity = d.activity;
 
   checkBuild(d.build);
   if (d.closed !== undefined) m.marketOpen = !d.closed;
@@ -3275,5 +3298,9 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   });
 }
+
+setInterval(() => {
+  if ($('#view-shop')?.classList.contains('active')) tickActivityCountdown();
+}, 1000);
 
 boot();
