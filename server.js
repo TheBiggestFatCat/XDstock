@@ -235,6 +235,7 @@ function tickPayload(forPlayerId) {
       stealEarned: p.stealEarned || 0,
       stealReadyAt: p.stealReadyAt || 0,
       guardUntil: p.guardUntil || 0,
+      fakeNewsReadyAt: p.fakeNewsReadyAt || 0,
       frozen: Math.round((p.orders || []).reduce((a, o) => a + (Number(o.reserve) || 0), 0) * 100) / 100,
       orders: (p.orders || []).map((o) => ({
         id: o.id,

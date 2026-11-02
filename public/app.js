@@ -40,6 +40,7 @@ const state = {
   limitLine: null,
   orderMode: 'open',
   shopDir: 1,
+  fakeNewsTargets: [],
   tradeTab: 'order',
   eqFitted: false,
   eqLastCount: 0,
@@ -479,11 +480,53 @@ function renderShop() {
   const cEl = $('#fakeNewsChance');
   if (cEl) cEl.textContent = Math.round(chance * 100) + '%';
 
+  // 影响标的 chips（股票列表变了就重建，用事件委托避免重复绑定）
+  const chipBox = $('#fakeNewsTargets');
+  const chipList = Object.values(state.market?.stocks || {}).filter((s) => !s.isIndex);
+  const chipSig = chipList.map((s) => s.code).join(',');
+  if (chipBox && chipList.length && chipBox.dataset.sig !== chipSig) {
+    chipBox.innerHTML = chipList.map((s) => (
+      `<button class="chip-toggle" type="button" data-fn-code="${s.code}">${s.name}</button>`
+    )).join('');
+    chipBox.dataset.sig = chipSig;
+  }
+  if (chipBox && !chipBox.dataset.bound) {
+    chipBox.dataset.bound = '1';
+    chipBox.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-fn-code]');
+      if (!b) return;
+      const code = b.dataset.fnCode;
+      const idx = state.fakeNewsTargets.indexOf(code);
+      if (idx >= 0) state.fakeNewsTargets.splice(idx, 1);
+      else state.fakeNewsTargets.push(code);
+      renderShop();
+    });
+  }
+  if (chipBox) {
+    chipBox.querySelectorAll('[data-fn-code]').forEach((b) => {
+      b.classList.toggle('active', state.fakeNewsTargets.includes(b.dataset.fnCode));
+    });
+  }
+
+  // 冷却
+  const cdTicks = Number(cfg.shopFakeNewsCooldown ?? 120);
+  const cdEl = $('#fakeNewsCd');
+  if (cdEl) cdEl.textContent = String(cdTicks);
+  const tickNow2 = state.market?.tick || 0;
+  const readyAt = Number(state.market?.me?.fakeNewsReadyAt || 0);
+  const cdLeft = Math.max(0, readyAt - tickNow2);
+
   const btn = $('#fakeNewsBuy');
   if (btn) {
-    const poor = cash < price;
-    btn.disabled = poor;
-    btn.textContent = poor ? `现金不足（差 ${money0(price - cash)}）` : '购买并发布';
+    if (cdLeft > 0) {
+      const sec = Math.ceil(cdLeft * ((state.market?.config?.tickMs || 5000) / 1000));
+      btn.disabled = true;
+      btn.textContent = `冷却中 · 还有 ${cdLeft} 轮（约 ${Math.ceil(sec / 60)} 分钟）`;
+    } else {
+      const poor = cash < price;
+      btn.disabled = poor;
+      btn.textContent = poor ? `现金不足（差 ${money0(price - cash)}）` : '购买并发布';
+    }
   }
 
   // ---- 保镖 ----
@@ -581,10 +624,13 @@ async function buyFakeNews() {
   try {
     const r = await api('/api/shop/fake-news', {
       method: 'POST',
-      body: JSON.stringify({ text, dir: state.shopDir })
+      body: JSON.stringify({ text, dir: state.shopDir, companies: state.fakeNewsTargets })
     });
     $('#fakeNewsText').value = '';
-    toast(`📰 假新闻已发布（花费 ${money0(r.price)}）`, 'ok');
+    state.fakeNewsTargets = [];
+    if (state.market?.me) state.market.me.fakeNewsReadyAt = r.readyAt;
+    const where = (r.companies && r.companies.length) ? `（影响 ${r.companies.join('/')}）` : '（全市场）';
+    toast(`📰 假新闻已发布${where}，花费 ${money0(r.price)}`, 'ok');
     if (state.market?.me) state.market.me.cash = r.cash;
     refreshMarket();
     loadNewsSoon();

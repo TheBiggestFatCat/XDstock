@@ -324,9 +324,15 @@
             <button class="dir-btn" data-dir="-1">利空</button>
           </div>
 
+          <div class="shop-target">
+            <span>影响标的 <i class="field-hint">不选 = 全市场</i></span>
+            <div class="chip-select" id="fakeNewsTargets"></div>
+          </div>
+
           <p class="shop-warn">
             花钱买一条挂名新闻：<b>一定会显示在快讯里</b>，但只有
-            <b id="fakeNewsChance">20%</b> 的概率真的影响市场。
+            <b id="fakeNewsChance">20%</b> 的概率真的影响市场。<br />
+            用完后冷却 <b id="fakeNewsCd">120</b> 轮。
           </p>
 
           <button id="fakeNewsBuy" class="btn btn-primary btn-block">购买并发布</button>

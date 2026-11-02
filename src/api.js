@@ -76,6 +76,7 @@ function publicPlayer(p, db) {
     stealEarned: p.stealEarned || 0,
     stealReadyAt: p.stealReadyAt || 0,
     guardUntil: p.guardUntil || 0,
+    fakeNewsReadyAt: p.fakeNewsReadyAt || 0,
     theme: p.theme || 'default',
     themes: Array.isArray(p.themes) ? p.themes : [],
     frozen: Math.round((p.orders || []).reduce((a, o) => a + (Number(o.reserve) || 0), 0) * 100) / 100,
@@ -224,6 +225,7 @@ function marketPayload(db, me) {
       maxFillNotionalPerTick: db.config.maxFillNotionalPerTick ?? 150000,
       shopFakeNewsPrice: db.config.shopFakeNewsPrice ?? 500000,
       shopFakeNewsChance: db.config.shopFakeNewsChance ?? 0.2,
+      shopFakeNewsCooldown: db.config.shopFakeNewsCooldown ?? 120,
       shopBodyguardPrice: db.config.shopBodyguardPrice ?? 50000,
       shopBodyguardTicks: db.config.shopBodyguardTicks ?? 720,
       shopThemePrice: db.config.shopThemePrice ?? 2000000,
@@ -313,6 +315,7 @@ export async function handleApi(ctx) {
         stealEarned: 0,
         stealReadyAt: 0,
         guardUntil: 0,
+        fakeNewsReadyAt: 0,
         theme: 'default',
         themes: [],
         orders: [],
@@ -574,7 +577,7 @@ export async function handleApi(ctx) {
       'eventChance', 'localEventChance', 'eventDurationMin', 'eventDurationMax',
       'workRatePerTick', 'workOnlineMultiplier', 'workBankTicks', 'stealMin', 'stealMax', 'stealCapRatio', 'stealCooldownTicks',
       'equitySampleTicks', 'equityMaxPoints',
-      'shopFakeNewsPrice', 'shopFakeNewsChance',
+      'shopFakeNewsPrice', 'shopFakeNewsChance', 'shopFakeNewsCooldown',
       'shopBodyguardPrice', 'shopBodyguardTicks', 'shopThemePrice',
       'stPrice', 'stDelistTicks',
       'fxEnabled', 'fxCoef', 'fxLeverage', 'fxRefreshMs', 'fxTrack',
@@ -780,12 +783,33 @@ export async function handleApi(ctx) {
 
   // ---------- 商城 ----------
   if (pathname === '/api/shop/fake-news' && method === 'POST') {
-    const price = Number(db.config.shopFakeNewsPrice ?? 500000);
+    const price = Number(db.config.shopFakeNewsPrice ?? 100000);
     const chance = Math.max(0, Math.min(1, Number(db.config.shopFakeNewsChance ?? 0.2)));
+    const cdTicks = Math.max(0, Number(db.config.shopFakeNewsCooldown ?? 120));
 
     const text = String(body.text || '').trim().slice(0, 120);
     if (text.length < 4) return json(res, 400, { error: '内容至少 4 个字' });
     const dir = Number(body.dir ?? 1) >= 0 ? 1 : -1;
+
+    // 冷却中不许再买
+    const readyAt = Number(me.fakeNewsReadyAt || 0);
+    if (db.tick < readyAt) {
+      const left = readyAt - db.tick;
+      const sec = Math.ceil((left * (db.config.tickMs ?? 5000)) / 1000);
+      return json(res, 429, {
+        error: `假新闻冷却中，还要等 ${left} 轮（约 ${Math.ceil(sec / 60)} 分钟）`,
+        leftTicks: left
+      });
+    }
+
+    // 影响范围：不传 / 空数组 = 全市场
+    let companies = [];
+    if (Array.isArray(body.companies)) {
+      companies = body.companies
+        .map((c) => String(c).toUpperCase())
+        .filter((c) => db.stocks[c] && !db.stocks[c].isIndex);
+      companies = [...new Set(companies)];
+    }
 
     if (me.cash < price) {
       return json(res, 400, {
@@ -793,27 +817,25 @@ export async function handleApi(ctx) {
       });
     }
 
-    // 花钱
     me.cash -= price;
     me.shopSpent = (me.shopSpent || 0) + price;
+    me.fakeNewsReadyAt = db.tick + cdTicks;
 
-    // 20% 概率真的有冲击，其余只是「挂个名」
     const hit = Math.random() < chance;
     const duration = 80 + Math.floor(Math.random() * 60);
     const ev = {
       id: 'ev_' + Math.random().toString(36).slice(2, 10),
       kind: 'leak',
       text,
-      companies: [],                        // 空 = 全市场
+      companies,
       dir,
-      // 幅度压低：全市场新闻会持续 80~140 轮，每轮 0.03%~0.06% 累计约 3%~8%
       trend: hit ? dir * (0.0003 + Math.random() * 0.0003) : 0,
       leakTicks: 0,
       leakLeft: 0,
       duration,
       remaining: duration,
       createdAt: now(),
-      announced: true,                      // 立刻显示，不走偷跑
+      announced: true,
       fake: true,
       buyerId: me.id
     };
@@ -825,44 +847,11 @@ export async function handleApi(ctx) {
       hit,
       price,
       cash: me.cash,
-      event: { id: ev.id, text: ev.text, dir: ev.dir, createdAt: ev.createdAt }
+      companies,
+      readyAt: me.fakeNewsReadyAt,
+      cooldownTicks: cdTicks,
+      event: { id: ev.id, text: ev.text, dir: ev.dir, companies, createdAt: ev.createdAt }
     });
-  }
-
-  // ---------- 主题配色 ----------
-  const THEMES = ['red', 'dark'];
-
-  if (pathname === '/api/shop/theme' && method === 'POST') {
-    const code = String(body.theme || '').trim();
-    if (!THEMES.includes(code)) return json(res, 400, { error: '没有这个主题' });
-
-    const price = Number(db.config.shopThemePrice ?? 2000000);
-    if (!Array.isArray(me.themes)) me.themes = [];
-    if (!me.themes.includes(code)) {
-      if (me.cash < price) {
-        return json(res, 400, {
-          error: `现金不足，售价 $${price.toLocaleString()}，你只有 $${me.cash.toFixed(2)}`
-        });
-      }
-      me.cash -= price;
-      me.shopSpent = (me.shopSpent || 0) + price;
-      me.themes.push(code);
-    }
-    me.theme = code;
-    saveDb();
-    return json(res, 200, {
-      ok: true, theme: code, themes: me.themes, price, cash: me.cash
-    });
-  }
-
-  if (pathname === '/api/shop/theme/select' && method === 'POST') {
-    const code = String(body.theme || 'default').trim();
-    if (code !== 'default' && !(Array.isArray(me.themes) && me.themes.includes(code))) {
-      return json(res, 400, { error: '还没买这个主题' });
-    }
-    me.theme = code;
-    saveDb();
-    return json(res, 200, { ok: true, theme: code });
   }
 
   if (pathname === '/api/shop/bodyguard' && method === 'POST') {

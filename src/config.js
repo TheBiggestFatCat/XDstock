@@ -65,8 +65,9 @@ export const DEFAULT_CONFIG = {
   stDelistTicks: 100,  // 连续这么多轮低于该值就退市
 
   // ---- 商城 ----
-  shopFakeNewsPrice: 500000,   // 假新闻售价
+  shopFakeNewsPrice: 100000,   // 假新闻售价
   shopFakeNewsChance: 0.2,     // 真的会影响市场的概率（其余只显示不生效）
+  shopFakeNewsCooldown: 120,   // 冷却轮数（120 轮 = 10 分钟）
   shopBodyguardPrice: 50000,   // 保镖售价
   shopBodyguardTicks: 720,     // 保护时长（720 轮 = 1 小时）
   shopThemePrice: 2000000,     // 主题配色售价
