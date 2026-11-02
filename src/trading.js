@@ -83,6 +83,45 @@ export function impactCostRate(db, notional) {
   return Math.min(maxRate, rate);
 }
 
+/** 指数成分：当前权重（没有权重时按等权） */
+function indexWeights(db) {
+  const idx = db.index || {};
+  const w = idx.weights || {};
+  const live = Object.values(db.stocks).filter((s) => !s.isIndex && s.status === 'normal');
+  let sumW = 0;
+  for (const s of live) sumW += Math.max(0, Number(w[s.code]) || 0);
+  return live.map((s) => ({
+    st: s,
+    weight: sumW > 0
+      ? Math.max(0, Number(w[s.code]) || 0) / sumW
+      : 1 / Math.max(1, live.length)
+  }));
+}
+
+/**
+ * 买卖指数 = 按权重买一篮子成分股。
+ * 把成交额按权重拆开，分别记到每只成分股的资金流上，
+ * 这样买指数会真的把整个市场推上去。
+ */
+function distributeIndexFlow(db, signedNotional) {
+  for (const { st, weight } of indexWeights(db)) {
+    if (weight <= 0) continue;
+    addFlow(st, db.config, signedNotional * weight);
+  }
+}
+
+/** 指数的冲击成本 = 各成分腿冲击成本之和（拆单后更便宜，符合直觉） */
+function indexImpactCost(db, notional) {
+  let total = 0;
+  for (const { st, weight } of indexWeights(db)) {
+    if (weight <= 0) continue;
+    const leg = notional * weight;
+    total += leg * impactCostRate(db, leg);
+  }
+  return total;
+}
+
+
 /** 指数是否处于上升趋势：现价 > MA5 > MA10 > MA30 */
 export function indexUptrend(db) {
   const series = db.index?.series || [];
@@ -123,7 +162,7 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
 
   // 冲击成本：这笔单自己会推动价格，成本由下单人承担
   // 指数是由成分股算出来的，买卖它不会推动它自己，所以不收冲击成本
-  const impactCost = st.isIndex ? 0 : notional * impactCostRate(db, notional);
+  const impactCost = st.isIndex ? indexImpactCost(db, notional) : notional * impactCostRate(db, notional);
   const cost = margin + fee + stamp + impactCost;
   if (player.cash < cost) {
     return { ok: false, error: `现金不足，需要 $${cost.toFixed(2)}，你只有 $${player.cash.toFixed(2)}` };
@@ -136,7 +175,12 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
 
   player.cash -= cost;
   // 开多 = 买入推高；开空 = 卖出压低
-  addFlow(st, cfg, side === 'long' ? notional : -notional);
+  if (st.isIndex) {
+    // 指数：按权重把冲击分摊给成分股
+    distributeIndexFlow(db, side === 'long' ? notional : -notional);
+  } else {
+    addFlow(st, cfg, side === 'long' ? notional : -notional);
+  }
   db.tradesThisTick = (db.tradesThisTick || 0) + 1;
   logTrade(db, {
     playerId: player.id,
@@ -205,9 +249,9 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
   let equity = marginPart + pnl;
   if (equity < 0) equity = 0; // 亏损不会超过这部分保证金
   // 冲击成本：平仓同样要为自己造成的冲击付钱（强平/退市除外）
-  const impactCost = reason === 'liquidated' || reason === 'delisted' || st.isIndex
+  const impactCost = reason === 'liquidated' || reason === 'delisted'
     ? 0
-    : notional * impactCostRate(db, notional);
+    : (st.isIndex ? indexImpactCost(db, notional) : notional * impactCostRate(db, notional));
   let back = Math.max(0, equity - fee - stamp - impactCost);
 
   // 「红红的牛」技能：牛市里平仓，额外返 1% 成交额（每个持仓只算一次）
@@ -233,7 +277,11 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
 
   player.cash += back;
   // 平多 = 卖出压低；平空 = 买回推高
-  addFlow(st, cfg, pos.side === 'long' ? -notional : notional);
+  if (st.isIndex) {
+    distributeIndexFlow(db, pos.side === 'long' ? -notional : notional);
+  } else {
+    addFlow(st, cfg, pos.side === 'long' ? -notional : notional);
+  }
 
   if (closeQty >= pos.qty) {
     delete player.positions[code];
