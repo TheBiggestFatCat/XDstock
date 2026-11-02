@@ -311,7 +311,8 @@ function loop() {
   if (d.config.marketOpen === false) {
     const frozen = tickPayload(null);
     for (const c of clients) {
-      const payload = { ...frozen, me: tickPayload(c.playerId).me, closed: true };
+      const personal = tickPayload(c.playerId);
+      const payload = { ...frozen, me: personal.me, activity: personal.activity, closed: true };
       try {
         c.res.write(`data: ${JSON.stringify(payload)}\n\n`);
       } catch {
@@ -513,7 +514,9 @@ function loop() {
   }
   const base = tickPayload(null);
   for (const c of clients) {
-    const payload = { ...base, me: tickPayload(c.playerId).me };
+    // activity 里有 joined（我参没参加），必须按人算，不能共用 base
+    const personal = tickPayload(c.playerId);
+    const payload = { ...base, me: personal.me, activity: personal.activity };
     const notes = byPlayer.get(c.playerId);
     if (notes) payload.closes = notes;
     const alerts = stealAlerts.get(c.playerId);
