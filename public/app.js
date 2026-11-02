@@ -564,6 +564,32 @@ function renderShop() {
       : (guardLeft > 0 ? '再续一小时' : '购买保镖');
   }
 
+  // ---- 交易专属通道 ----
+  const chBase = Number(cfg.shopChannelBasePrice ?? 300000);
+  const chRatio = Number(cfg.shopChannelRatio ?? 1.5);
+  const chStep = Number(cfg.shopChannelStep ?? 100000);
+  const baseCap = Number(cfg.maxFillNotionalPerTick ?? 300000);
+  const chLevel = Math.max(0, Number(state.market?.me?.channelLevel || 0));
+  const chPrice = Math.round(chBase * Math.pow(chRatio, chLevel));
+  const capNow = baseCap + chStep * chLevel;
+  const capNext = baseCap + chStep * (chLevel + 1);
+
+  const chPriceEl = $('#channelPrice');
+  if (chPriceEl) chPriceEl.textContent = money0(chPrice);
+  const chCapNow = $('#channelCapNow');
+  if (chCapNow) chCapNow.textContent = money0(capNow);
+  const chLv = $('#channelLevel');
+  if (chLv) chLv.textContent = `${chLevel} 级`;
+  const chCapNext = $('#channelCapNext');
+  if (chCapNext) chCapNext.textContent = money0(capNext);
+
+  const chBtn = $('#channelBuy');
+  if (chBtn) {
+    const poor = cash < chPrice;
+    chBtn.disabled = poor;
+    chBtn.textContent = poor ? `现金不足（差 ${money0(chPrice - cash)}）` : `购买 · ${money0(chPrice)}`;
+  }
+
   // ---- 主题 ----
   const ownedThemes = state.market?.me?.themes || [];
   const curTheme = state.theme || state.market?.me?.theme || 'default';
@@ -613,6 +639,26 @@ async function buyBodyguard() {
   } catch (e) {
     toast(e.message, 'err');
     btn.textContent = old;
+  } finally {
+    renderShop();
+  }
+}
+
+async function buyChannel() {
+  const btn = $('#channelBuy');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = '购买中…';
+  try {
+    const r = await api('/api/shop/channel', { method: 'POST' });
+    if (state.market?.me) {
+      state.market.me.cash = r.cash;
+      state.market.me.channelLevel = r.level;
+    }
+    toast(`⚡ 通道升到 ${r.level} 级，单笔上限 ${money0(r.cap)}`, 'ok');
+    refreshMarket();
+  } catch (e) {
+    toast(e.message, 'err');
   } finally {
     renderShop();
   }
@@ -2545,8 +2591,13 @@ async function loadAdmin() {
       fields: [
         ['shopFakeNewsPrice', '假新闻售价'],
         ['shopFakeNewsChance', '生效概率(0.2=20%)'],
+        ['shopFakeNewsCooldown', '假新闻冷却(轮)'],
         ['shopBodyguardPrice', '保镖售价'],
-        ['shopBodyguardTicks', '保镖时长(轮)']
+        ['shopBodyguardTicks', '保镖时长(轮)'],
+        ['shopThemePrice', '主题售价'],
+        ['shopChannelBasePrice', '通道首价'],
+        ['shopChannelRatio', '通道涨价倍率'],
+        ['shopChannelStep', '通道每级加成']
       ]
     },
     {
@@ -2913,6 +2964,7 @@ function bind() {
   });
   $('#fakeNewsBuy')?.addEventListener('click', buyFakeNews);
   $('#bodyguardBuy')?.addEventListener('click', buyBodyguard);
+  $('#channelBuy')?.addEventListener('click', buyChannel);
   $('#mBackBtn')?.addEventListener('click', () => {
     document.body.classList.remove('m-detail');
     resizeChartNow();

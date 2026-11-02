@@ -71,6 +71,11 @@ export const DEFAULT_CONFIG = {
   shopBodyguardPrice: 50000,   // 保镖售价
   shopBodyguardTicks: 720,     // 保护时长（720 轮 = 1 小时）
   shopThemePrice: 2000000,     // 主题配色售价
+
+  // 交易专属通道：每次 +10 万单笔成交上限，价格指数增长
+  shopChannelBasePrice: 300000,  // 第一次购买的价格
+  shopChannelRatio: 1.5,         // 每买一次价格乘这个
+  shopChannelStep: 100000,       // 每次提升的成交额
   // 「红红的牛」技能：指数处于上升趋势时平仓，额外返 1% 成交额
   redBonusRate: 0.01,
   redBonusMinTicks: 12,        // 持仓至少满这么多轮才算（防开平刷奖励）

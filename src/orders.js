@@ -199,7 +199,11 @@ export function processOrders(db) {
 
       // 每轮最多成交这么多「金额」，换算成股数（大单会被拆成多轮）
       // 与杠杆无关：杠杆只影响占用多少保证金，不影响这张单在市场里吃掉的筹码
-      const notionalCap = Math.max(1, num(db.config.maxFillNotionalPerTick, 150000));
+      // 玩家买了「交易专属通道」的话，每级 +10 万
+      const channelStep = num(db.config.shopChannelStep, 100000);
+      const channelLevel = Math.max(0, Math.floor(num(player.channelLevel, 0)));
+      const notionalCap = Math.max(1, num(db.config.maxFillNotionalPerTick, 300000))
+        + channelLevel * channelStep;
       const fillCap = Math.max(1, Math.floor(notionalCap / Math.max(px, 0.01)));
       const remainQty = Math.max(0, Math.floor(order.qty));
       if (remainQty < 1) {
