@@ -2934,7 +2934,8 @@ async function loadAdmin() {
         ['eventChance', '新闻概率/tick'],
         ['eventImpactScale', '影响倍率(1=标准)'],
         ['eventDurationMin', '最短持续(轮)'],
-        ['eventDurationMax', '最长持续(轮)']
+        ['eventDurationMax', '最长持续(轮)'],
+        ['globalEventScale', '全市场新闻折扣(0.2=20%)']
       ]
     },
     {

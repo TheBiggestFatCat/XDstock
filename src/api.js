@@ -722,7 +722,7 @@ export async function handleApi(ctx) {
     const allowed = [
       'tickMs', 'baseVolatility', 'meanReversion', 'eventImpactScale',
       'feeRate', 'stampDuty', 'minLeverage', 'maxLeverage',
-      'eventChance', 'localEventChance', 'eventDurationMin', 'eventDurationMax',
+      'eventChance', 'localEventChance', 'eventDurationMin', 'eventDurationMax', 'globalEventScale',
       'workRatePerTick', 'workOnlineMultiplier', 'workBankTicks', 'stealMin', 'stealMax', 'stealCapRatio', 'stealCooldownTicks',
       'equitySampleTicks', 'equityMaxPoints',
       'shopFakeNewsPrice', 'shopFakeNewsChance', 'shopFakeNewsCooldown',
