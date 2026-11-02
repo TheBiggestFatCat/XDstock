@@ -64,6 +64,12 @@ export function freeCap(st) {
   return marketCap(st) * ff;
 }
 
+/** 行业中枢增速：作为「市场预期」的基准 */
+export function industryMidGrowth(st) {
+  const ind = industryOf(st);
+  return (ind.growth[0] + ind.growth[1]) / 2;
+}
+
 /** 由财报推出合理价 */
 export function fairFromReport(st) {
   const ind = industryOf(st);
@@ -138,6 +144,15 @@ export function genNextReport(st, ctx = {}) {
   const decay = 1 / (1 + Math.max(0, multiple - 1) * 1.5);
   growth *= decay;
 
+  // 业务联动也属于「可预期」的一部分
+  if (trait === 'broker') {
+    const vf = clamp(Number(ctx.volumeFactor) || 1, 0.2, 4);
+    // 已经在上面加过，这里不再重复
+  }
+
+  // 市场预期 = 这家公司按当前规模本该有的增速（不含随机噪声）
+  const expectedGrowth = clamp(growth, -0.35, 0.9);
+
   growth += rand(-0.08, 0.08);
 
   // ----- 业务联动 -----
@@ -199,7 +214,8 @@ export function genNextReport(st, ctx = {}) {
     dividendRate: clamp((Number(f.dividendRate) || 0.25) + rand(-0.05, 0.05), 0, 0.6),
     reportAt: Date.now(),
     reportTick: 0,
-    bias
+    bias,
+    expectedGrowth
   };
 }
 
@@ -237,6 +253,7 @@ export function reportPayload(st) {
     dividendRate: Number(f.dividendRate) || 0,
     period: Number(f.period) || 0,
     reportAt: Number(f.reportAt) || 0,
-    lastSurprise: Number(st.lastSurprise) || 0
+    lastSurprise: Number(st.lastSurprise) || 0,
+    expectedGrowth: Number(f.expectedGrowth) || 0
   };
 }

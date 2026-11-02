@@ -1,5 +1,5 @@
 import { INDEX_BASE } from './stocks.js';
-import { genNextReport, fairFromReport, impactFactor } from './fundamentals.js';
+import { genNextReport, fairFromReport, impactFactor, industryMidGrowth } from './fundamentals.js';
 import { genMarketTrades } from './marketTrades.js';
 import { now } from './store.js';
 
@@ -456,25 +456,32 @@ export function runReports(db) {
     // 合理价：新财报算出来的值 70% + 上期 30%，避免一次财报把线拉到天上
     const computed = fairFromReport(st);
     const smoothed = before > 0 ? computed * 0.7 + before * 0.3 : computed;
-    st.lastSurprise = before > 0 ? (smoothed - before) / before : 0;
     st.fair = Number(smoothed.toFixed(4));
+
+    // 超预期 = 实际增速 − 市场预期（这家公司按规模应有的增速）
+    const expectRaw = Number(st.fundamentals.expectedGrowth);
+    const expected = Number.isFinite(expectRaw) ? expectRaw : industryMidGrowth(st);
+    const diff = Number(st.fundamentals.growth) - expected;
+    st.lastSurprise = Math.max(-0.3, Math.min(0.3, diff));
+    st.expectedGrowth = expected;
     st.nextReportTick = db.tick + interval;
 
     // 财报当期的价格冲击：超预期就上冲/下杀
     const surprise = st.lastSurprise;
-    const shock = Math.max(-0.06, Math.min(0.06, surprise * 0.5));
+    const shock = Math.max(-0.06, Math.min(0.06, surprise * 0.8));
     if (Number.isFinite(shock) && Math.abs(shock) > 0.0005) {
       st.price = Number((st.price * (1 + shock)).toFixed(4));
     }
 
     // 挂一条新闻，让所有人知道
     const f = st.fundamentals;
-    const good = surprise >= 0;
+    const verdict = surprise > 0.02 ? '超预期' : surprise < -0.02 ? '不及预期' : '符合预期';
+    const good = surprise > 0.02;
     db.events.push({
       id: 'ev_' + Math.random().toString(36).slice(2, 10),
       kind: 'after',
       text: `${st.name}发${f.period}季报：营收${fmtYi(f.revenue)}，净利${fmtYi(f.netProfit)}，`
-        + `同比${(f.growth * 100).toFixed(1)}%，${good ? '超预期' : '不及预期'}`,
+        + `同比${(f.growth * 100).toFixed(1)}%，市场预期${(expected * 100).toFixed(1)}%，${verdict}`,
       companies: [st.code],
       dir: good ? 1 : -1,
       trend: 0,
