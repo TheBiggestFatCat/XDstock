@@ -436,10 +436,12 @@ input.tpsl-input {
 .admin-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
 .admin-stocks { display: flex; flex-direction: column; gap: 8px; }
 .admin-stock {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  display: flex; flex-direction: column; align-items: stretch; gap: 8px;
   padding: 10px 12px; border-radius: 12px; background: var(--soft); font-size: 13px;
 }
-.admin-stock .as-actions { display: flex; gap: 6px; }
+.admin-stock .as-actions {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
 .chip-select { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .chip-toggle {
   font-family: inherit; font-size: 12px; padding: 6px 12px; border-radius: 9px;
@@ -1753,3 +1755,28 @@ body[data-theme="dark"] .fee-bonus { color: var(--down); }
 }
 .cs-sep { color: var(--ink-3); }
 .cs-warn { color: #b45309; }
+
+/* ---------- 管理面板：个股股价输入 ---------- */
+.as-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.as-price {
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 100%;
+  font-family: inherit;
+  font-size: 12.5px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.as-price:focus { outline: none; border-color: var(--accent); }
+
+/* 个股操作按钮紧凑一点，窄面板里能一行放下 */
+.admin-stock .as-actions .mini-btn {
+  padding: 5px 9px;
+  font-size: 11.5px;
+}
+.admin-stock .as-actions .as-price { margin-right: 2px; }

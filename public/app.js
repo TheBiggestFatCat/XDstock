@@ -2292,6 +2292,9 @@ async function loadAdmin() {
         <div class="book-meta">$${s.price.toFixed(2)} · ${s.traitName}</div>
       </div>
       <div class="as-actions">
+        <input class="as-price" type="number" step="0.01" min="0.01"
+          data-price-for="${s.code}" value="${s.price.toFixed(2)}" title="直接改这只票的价格" />
+        <button class="mini-btn" data-act="set" data-code="${s.code}">设置价</button>
         <button class="mini-btn" data-act="suspend" data-code="${s.code}">停牌</button>
         <button class="mini-btn" data-act="resume" data-code="${s.code}">复牌</button>
         <button class="mini-btn danger" data-act="delist" data-code="${s.code}">退市</button>
@@ -2299,12 +2302,27 @@ async function loadAdmin() {
     </div>`).join('');
   $$('#adminStocks [data-act]').forEach((b) => {
     b.addEventListener('click', async () => {
+      const payload = { action: b.dataset.act, code: b.dataset.code, hours: 1 };
+      if (b.dataset.act === 'set') {
+        const inp = document.querySelector(`.as-price[data-price-for="${b.dataset.code}"]`);
+        const v = Number(inp && inp.value);
+        if (!(v > 0)) { toast('先填一个大于 0 的价格', 'err'); return; }
+        payload.price = v;
+      }
       try {
-        await adminApi('/api/admin/stock', { action: b.dataset.act, code: b.dataset.code, hours: 1 });
-        toast('操作成功', 'ok');
+        await adminApi('/api/admin/stock', payload);
+        toast(payload.price ? `价格已设为 $${payload.price}` : '操作成功', 'ok');
         loadAdmin();
         refreshMarket();
       } catch (e) { toast(e.message, 'err'); }
+    });
+  });
+  // 输入框里按回车也能提交
+  $$('#adminStocks .as-price').forEach((inp) => {
+    inp.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const btn = document.querySelector(`#adminStocks [data-act="set"][data-code="${inp.dataset.priceFor}"]`);
+      if (btn) btn.click();
     });
   });
 

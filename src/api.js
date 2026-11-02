@@ -470,11 +470,22 @@ export async function handleApi(ctx) {
       st.status = 'normal';
       st.statusUntil = 0;
     } else if (action === 'set') {
-      if (body.price) {
-        st.price = Number(body.price);
-        st.series.push(Number(body.price.toFixed(4)));
+      const price = Number(body.price);
+      if (!Number.isFinite(price) || price <= 0) {
+        return json(res, 400, { error: '股价必须是大于 0 的数字' });
       }
-      if (body.fair) st.fair = Number(body.fair);
+      const p = Math.max(0.01, Math.round(price * 100) / 100);
+      st.price = p;
+      // 合理价一起设过去，否则均值回归会慢慢把价格拉回原位
+      st.fair = Math.round(p * 100) / 100;
+      if (!Array.isArray(st.series)) st.series = [];
+      st.series.push(Number(p.toFixed(4)));
+      // 设完价重新判定一次 ST
+      const stLine = Math.max(0.01, Number(db.config.stPrice ?? 3));
+      if (!st.isIndex && st.status !== 'delisted') {
+        st.st = p < stLine;
+        if (!st.st) st.stTicks = 0;
+      }
     } else {
       return json(res, 400, { error: '未知操作' });
     }
