@@ -794,8 +794,16 @@ function applyDrawPrice(price, { commit = false } = {}) {
   }
 
   // 方向校验：多头止盈在上、止损在下；空头相反
+  // 注意：必须用「现价」判断，pos.price 是开仓成本价，价格走远后会误判
   const dir = pos.side === 'long' ? 1 : -1;
-  const price0 = pos.price || state.market?.stocks?.[state.code]?.price || 0;
+  const price0 = state.market?.stocks?.[state.code]?.price
+    || state.market?.me?.positions?.[state.code]?.price
+    || 0;
+  if (!(price0 > 0)) {
+    showPreviewLine(price, target);
+    if (commit) toast('还没拿到现价，稍等一下再画', 'err');
+    return;
+  }
   const bad = target === 'tp'
     ? (price - price0) * dir <= 0
     : (price - price0) * dir >= 0;
@@ -957,7 +965,18 @@ function bindChartDrawing() {
     e.preventDefault();
     apply(e.touches[0].clientY);
   }, { passive: false });
-  el.addEventListener('touchend', stop);
+  // 松手才算数：之前只 stop 不提交，手机上永远设不上止盈止损
+  el.addEventListener('touchend', (e) => {
+    if (state.drawMode && dragging) {
+      const t = e.changedTouches?.[0];
+      if (t) {
+        e.preventDefault();
+        apply(t.clientY, true);
+      }
+    }
+    dragging = false;
+  }, { passive: false });
+  el.addEventListener('touchcancel', stop);
 }
 
 // ---------------- 限价挂单 ----------------
@@ -1383,7 +1402,31 @@ async function loadCandles() {
   const tf = state.tf;
   try {
     const d = await api(`/api/candles?code=${encodeURIComponent(code)}&tf=${tf}`);
-    state.candles = d.candles || [];
+    // 防竞态：切股票/切周期时前一个请求可能后到，直接把新数据覆盖成旧股票
+    if (code !== state.code || tf !== state.tf) return;
+
+    // 清洗：时间必须递增且唯一，否则图表库内部按时间查不到数据会抛
+    // 「Value is null」，整块 K 线画不出来
+    const seen = new Set();
+    const clean = [];
+    for (const c of (d.candles || [])) {
+      if (!c || !Number.isFinite(c.time) || c.time <= 0) continue;
+      if (!Number.isFinite(c.open) || !Number.isFinite(c.high)
+        || !Number.isFinite(c.low) || !Number.isFinite(c.close)) continue;
+      const t = Math.floor(c.time);
+      if (seen.has(t)) continue;
+      seen.add(t);
+      clean.push({
+        time: t,
+        open: c.open,
+        high: Math.max(c.high, c.open, c.close, c.low),
+        low: Math.min(c.low, c.open, c.close, c.high),
+        close: c.close
+      });
+    }
+    clean.sort((a, b) => a.time - b.time);
+
+    state.candles = clean;
     state.candleSeries.setData(state.candles);
     renderMAs();
     state.plSig = null;
@@ -1494,13 +1537,17 @@ function updateMarkers() {
 
 function applyTickToChart(price) {
   if (!state.candleSeries) return;
+  if (!Number.isFinite(price) || price <= 0) return;
   const group = TF_SECONDS[state.tf] || 12;
   const tickMs = state.market?.tickMs || 5000;
   const tick = state.market?.tick || 0;
   const bucket = Math.floor(tick / group);
   const base = state.market?.startedAt || 0;
   const time = Math.floor((base + bucket * group * tickMs) / 1000);
+  // 时间戳不合理就别往序列里塞，否则时间乱序会让整块 K 线渲染失败
+  if (!Number.isFinite(time) || time <= 0 || !base) return;
   const last = state.candles[state.candles.length - 1];
+  if (last && time < last.time - 1) return;
   if (!last || last.time < time) {
     const c = { time, open: price, high: price, low: price, close: price };
     state.candles.push(c);
