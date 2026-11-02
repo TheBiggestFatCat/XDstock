@@ -195,7 +195,21 @@ export function genNextReport(st, ctx = {}) {
   // 跌到基准的 25% 就不再往下掉，避免公司直接归零
   revenue = Math.max(revenue, baseRev * 0.25);
 
-  const netProfit = revenue * margin;
+  let netProfit = revenue * margin;
+  let tradePnl = 0;
+
+  // 外汇：净利里加一块「自营盘盈亏」
+  // 本金 × 杠杆 × 本期汇率涨跌，方向正确就赚，方向错了就亏
+  if (trait === 'fx') {
+    const lev = Math.max(0, Number(st.trait?.lev) || 8);
+    const fxRet = clamp(Number(ctx.fxReturn) || 0, -0.12, 0.12);
+    tradePnl = baseRev * 0.5 * fxRet * lev;
+    netProfit += tradePnl;
+  }
+
+  // 允许亏损，但别亏到把公司做没了
+  netProfit = Math.max(netProfit, -baseRev * 0.6);
+
   const eps = netProfit / shares;
   const bps = (Number(f.bps) || 1) + eps * rand(0.4, 0.9);
   const roe = bps > 0 ? eps / bps : 0;
@@ -205,6 +219,7 @@ export function genNextReport(st, ctx = {}) {
     revenue,
     baseRevenue: baseRev,
     netProfit,
+    tradePnl,
     eps,
     bps,
     roe,

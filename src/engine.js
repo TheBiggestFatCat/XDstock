@@ -442,9 +442,12 @@ export function runReports(db) {
       || String(st.industry || '').includes('金融');
     const lead = 20;
     if (isFinance && !st.pendingReport && db.tick >= st.nextReportTick - lead) {
+      const fxNowP = Number(db.fx?.rate) || 0;
+      const fxBaseP = Number(db.fx?.reportBase) || fxNowP;
       const ctxP = {
         volumeFactor: (Number(db.volumeAvg) || 0) / 2,
-        fxFactor: (Number(db.fxVolAvg) || 0) / 0.004
+        fxFactor: (Number(db.fxVolAvg) || 0) / 0.004,
+        fxReturn: fxBaseP > 0 ? fxNowP / fxBaseP - 1 : 0
       };
       st.pendingReport = genNextReport(st, ctxP);
     }
@@ -454,7 +457,13 @@ export function runReports(db) {
     const before = Number(st.fair) || 0;
     const volumeFactor = (Number(db.volumeAvg) || 0) / 2;          // 2 笔/轮算正常
     const fxFactor = (Number(db.fxVolAvg) || 0) / 0.004;           // 0.4% 波动算正常
-    st.fundamentals = st.pendingReport || genNextReport(st, { volumeFactor, fxFactor });
+    // 本期汇率涨跌：以上一期财报时的汇率为基准
+    const fxNow = Number(db.fx?.rate) || 0;
+    const fxBase = Number(db.fx?.reportBase) || fxNow;
+    const fxReturn = fxBase > 0 ? fxNow / fxBase - 1 : 0;
+    st.fundamentals = st.pendingReport || genNextReport(st, { volumeFactor, fxFactor, fxReturn });
+    // 这一期结束后，汇率基准往前推
+    if (db.fx) db.fx.reportBase = fxNow;
     st.pendingReport = null;
 
     // 合理价：新财报算出来的值 70% + 上期 30%，避免一次财报把线拉到天上
