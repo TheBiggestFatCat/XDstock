@@ -126,6 +126,11 @@ function auth(ctx) {
   }
   const player = db.players[s.playerId];
   if (!player) return null;
+  // 封禁中的账号，旧 token 立即失效
+  if (player.banned) {
+    delete db.sessions[token];
+    return null;
+  }
   return { token, player, scope: s.scope || 'full' };
 }
 
@@ -268,6 +273,16 @@ export async function handleApi(ctx) {
   // ---------- 登录 ----------
   if (pathname === '/api/login' && method === 'POST') {
     if (!db.config.allowRegister) return json(res, 403, { error: '当前关闭注册' });
+    // 封禁检查（按昵称先查一遍）
+    {
+      const wantName = String(body.nickname || '').trim();
+      const hit = Object.values(db.players).find((p) => p.nickname === wantName && p.banned);
+      if (hit) {
+        return json(res, 403, {
+          error: `该账号已被封禁${hit.banReason ? '：' + hit.banReason : ''}`
+        });
+      }
+    }
     // 去掉 HTML 特殊字符，避免昵称被当成标签渲染
     const nickname = String(body.nickname || '')
       .replace(/[<>&"'`\\]/g, '')
@@ -448,13 +463,43 @@ export async function handleApi(ctx) {
     });
   }
 
+  if (pathname === '/api/admin/player' && method === 'POST') {
+    const id = String(body.id || '');
+    const p = db.players[id];
+    if (!p) return json(res, 404, { error: '没有这个玩家' });
+    const action = String(body.action || '');
+    if (action === 'ban') {
+      p.banned = true;
+      p.banReason = String(body.reason || '').slice(0, 40);
+      p.bannedAt = now();
+      // 踢掉他所有会话
+      let kicked = 0;
+      for (const [tk, sess] of Object.entries(db.sessions || {})) {
+        if (sess.playerId === id) { delete db.sessions[tk]; kicked += 1; }
+      }
+      saveDb();
+      return json(res, 200, { ok: true, banned: true, kicked });
+    }
+    if (action === 'unban') {
+      p.banned = false;
+      p.banReason = '';
+      p.bannedAt = 0;
+      saveDb();
+      return json(res, 200, { ok: true, banned: false });
+    }
+    return json(res, 400, { error: '未知操作' });
+  }
+
   if (pathname === '/api/admin/players' && (method === 'GET' || method === 'POST')) {
     const rows = Object.values(db.players)
       .map((p) => ({
         id: p.id,
         nickname: p.nickname,
         equity: playerEquity(db, p),
-        cash: p.cash || 0
+        cash: p.cash || 0,
+        banned: !!p.banned,
+        banReason: p.banReason || '',
+        online: !!p.online
       }))
       .sort((a, b) => b.equity - a.equity);
     return json(res, 200, { players: rows });

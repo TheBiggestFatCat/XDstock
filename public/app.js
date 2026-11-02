@@ -629,9 +629,9 @@ function renderShop() {
       if (rs.length) {
         res.classList.remove('hidden');
         res.innerHTML = '战果：' + rs.map((r) => (
-          `<div class="act-res-row"><b>${escapeHtml(r.targetName)}</b> 资产 $${money0(r.equity)} 触发，`
-          + `强平 ${r.closed} 个仓位，$${money0(r.pool)} 分给 ${r.winners} 人`
-          + (r.winners ? `（每人 $${money0(r.share)}）` : '')
+          `<div class="act-res-row"><b>${escapeHtml(r.targetName)}</b> 资产 ${money0(r.equity)} 触发，`
+          + `强平 ${r.closed} 个仓位，${money0(r.pool)} 分给 ${r.winners} 人`
+          + (r.winners ? `（每人 ${money0(r.share)}）` : '')
           + '</div>'
         )).join('');
       } else {
@@ -730,9 +730,12 @@ async function buyBodyguard() {
 
 async function loadAdminPlayers() {
   const box = $('#actAdminTargets');
-  if (!box) return;
+  const banBox = $('#banList');
+  if (!box && !banBox) return;
   try {
     const [d, mk] = await Promise.all([adminApi('/api/admin/players'), api('/api/market')]);
+    state.adminPlayers = d.players || [];
+    renderBanList();
     const act = mk.activity || {};
     const active = new Set((act.targets || []).map((t) => t.name));
     const rows = d.players || [];
@@ -752,11 +755,59 @@ async function loadAdminPlayers() {
     if (resBox) {
       const rs = act.results || [];
       resBox.innerHTML = rs.length
-        ? rs.map((r) => `<div class="act-res-row">${escapeHtml(r.targetName)} · 池 $${money0(r.pool)} · ${r.winners} 人</div>`).join('')
+        ? rs.map((r) => `<div class="act-res-row">${escapeHtml(r.targetName)} · 池 ${money0(r.pool)} · ${r.winners} 人</div>`).join('')
         : '<div class="field-hint">还没有瓜分记录</div>';
     }
   } catch (e) {
     box.innerHTML = `<div class="field-hint">${e.message}</div>`;
+  }
+}
+
+function renderBanList() {
+  const box = $('#banList');
+  if (!box) return;
+  const kw = ($('#banSearch')?.value || '').trim().toLowerCase();
+  const all = state.adminPlayers || [];
+  const list = kw ? all.filter((p) => p.nickname.toLowerCase().includes(kw)) : all;
+  const bannedCount = all.filter((p) => p.banned).length;
+  const cnt = $('#banCount');
+  if (cnt) cnt.textContent = `共 ${all.length} 人 · 已封禁 ${bannedCount} 人`;
+
+  if (!list.length) {
+    box.innerHTML = '<div class="field-hint">没有匹配的玩家</div>';
+    return;
+  }
+  box.innerHTML = list.map((p) => `
+    <div class="ban-row${p.banned ? ' banned' : ''}">
+      <div class="ban-main">
+        <b>${escapeHtml(p.nickname)}</b>
+        ${p.banned ? '<span class="ban-tag">已封禁</span>' : ''}
+        ${p.banReason ? `<span class="ban-reason">${escapeHtml(p.banReason)}</span>` : ''}
+        <span class="ban-money">${money0(p.equity)}</span>
+      </div>
+      <button class="ban-btn ${p.banned ? 'unban' : ''}" data-ban-id="${p.id}" data-ban-action="${p.banned ? 'unban' : 'ban'}">
+        ${p.banned ? '解封' : '封禁'}
+      </button>
+    </div>`).join('');
+
+  box.querySelectorAll('[data-ban-id]').forEach((b) => {
+    b.addEventListener('click', () => banPlayer(b.dataset.banId, b.dataset.banAction));
+  });
+}
+
+async function banPlayer(id, action) {
+  let reason = '';
+  if (action === 'ban') {
+    reason = prompt('封禁理由（可留空，会显示在登录提示里）：') || '';
+  }
+  try {
+    const r = await adminApi('/api/admin/player', { id, action, reason });
+    toast(action === 'ban'
+      ? `已封禁${r.kicked ? `，踢下线 ${r.kicked} 个会话` : ''}`
+      : '已解封', 'ok');
+    loadAdminPlayers();
+  } catch (e) {
+    toast(e.message, 'err');
   }
 }
 
@@ -1812,6 +1863,12 @@ function connectStream() {
 }
 
 function onTick(d) {
+  if (d.banned) {
+    localStorage.removeItem('xd_token');
+    document.body.innerHTML = '<div style="padding:40px;text-align:center;font-size:15px">'
+      + '你的账号已被封禁' + (d.reason ? '：' + d.reason : '') + '</div>';
+    return;
+  }
   const m = state.market;
   if (!m) return;
   m.tick = d.tick;
@@ -3208,6 +3265,7 @@ function bind() {
   $('#fakeNewsBuy')?.addEventListener('click', buyFakeNews);
   $('#bodyguardBuy')?.addEventListener('click', buyBodyguard);
   $('#actJoinBtn')?.addEventListener('click', toggleActivity);
+  $('#banSearch')?.addEventListener('input', renderBanList);
   $('#actAdminSave')?.addEventListener('click', () => actAdminAction('targets'));
   $('#actAdminStart')?.addEventListener('click', () => actAdminAction('start'));
   $('#actAdminStop')?.addEventListener('click', () => actAdminAction('stop'));

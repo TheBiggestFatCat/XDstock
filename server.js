@@ -514,6 +514,16 @@ function loop() {
   }
   const base = tickPayload(null);
   for (const c of clients) {
+    // 被封禁的立即断开
+    const cp = d.players[c.playerId];
+    if (cp && cp.banned) {
+      try {
+        c.res.write(`data: ${JSON.stringify({ banned: true, reason: cp.banReason || '' })}\n\n`);
+        c.res.end();
+      } catch { /* ignore */ }
+      clients.delete(c);
+      continue;
+    }
     // activity 里有 joined（我参没参加），必须按人算，不能共用 base
     const personal = tickPayload(c.playerId);
     const payload = { ...base, me: personal.me, activity: personal.activity };
