@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_CONFIG } from './config.js';
 import { STOCK_SEED, STOCK_CODES, INDEX_BASE, INDEX_STOCK } from './stocks.js';
+import { backDerive, fairFromReport } from './fundamentals.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(__dirname, '..');
@@ -83,22 +84,36 @@ export function createDb() {
 
 export function loadDb() {
   if (db) return db;
+
+  // 1. 先把文件读出来，解析失败也不能动玩家数据
+  let parsed = null;
   try {
     if (fs.existsSync(DB_FILE)) {
-      const raw = fs.readFileSync(DB_FILE, 'utf8');
-      const parsed = JSON.parse(raw);
-      db = migrate(parsed);
-      return db;
+      parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
     }
   } catch (e) {
-    console.error('[store] 读取 db.json 失败，将使用全新存档:', e.message);
+    console.error('[store] db.json 解析失败:', e.message);
     try {
       fs.copyFileSync(DB_FILE, DB_FILE + '.broken-' + Date.now());
     } catch { /* ignore */ }
   }
-  db = createDb();
-  saveDb(true);
-  return db;
+
+  if (!parsed) {
+    db = createDb();
+    saveDb(true);
+    return db;
+  }
+
+  // 2. 迁移失败绝不能清空存档：退回未迁移的原始数据继续跑
+  try {
+    db = migrate(parsed);
+    saveDb(true);
+    return db;
+  } catch (e) {
+    console.error('[store] 迁移失败，使用原始数据继续运行:', e.message);
+    db = parsed;
+    return db;
+  }
 }
 
 function migrate(d) {
@@ -145,6 +160,21 @@ function migrate(d) {
       if (typeof s2.trait.coef !== 'number') s2.trait.coef = seed.coef ?? 1;
       if (typeof s2.trait.lev !== 'number') s2.trait.lev = seed.lev ?? 8;
     }
+  }
+
+  // 老存档补上股本与财报（按现价倒推，让 fair ≈ 现价）
+  for (const st of Object.values(merged.stocks)) {
+    if (st.isIndex) continue;
+    const seed = STOCK_SEED[st.code];
+    if (!(Number(st.shares) > 0)) st.shares = Number(seed?.shares) || 500000000;
+    if (!(Number(st.freeFloat) > 0)) st.freeFloat = Number(seed?.freeFloat) || 0.45;
+    if (st.industry === undefined && seed) st.industry = seed.industry;
+    if (!st.fundamentals) {
+      st.fundamentals = backDerive(st, Math.max(0.01, Number(st.price) || Number(st.initialPrice) || 1));
+    }
+    // 合理价跟着财报走
+    st.fair = Number(fairFromReport(st).toFixed(4));
+    if (typeof st.nextReportTick !== 'number') st.nextReportTick = 0;
   }
 
   // 老存档补上活动状态

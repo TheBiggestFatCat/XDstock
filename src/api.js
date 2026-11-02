@@ -7,6 +7,7 @@ import { getBuild } from './build.js';
 import { playerEquity, positionPnl } from './trading.js';
 import { placeLimitOrder, cancelOrder } from './orders.js';
 import { activityPayload, joinActivity, adminActivity } from './activity.js';
+import { reportPayload } from './fundamentals.js';
 
 const TOKEN_TTL = 30 * 24 * 3600 * 1000;
 
@@ -155,6 +156,7 @@ function marketPayload(db, me) {
   for (const st of ordered) {
     const code = st.code;
     const prev = st.series.length > 1 ? st.series[st.series.length - 2] : st.price;
+    const report = st.isIndex ? null : reportPayload(st);
     stocks[code] = {
       code,
       name: st.name,
@@ -163,6 +165,12 @@ function marketPayload(db, me) {
       desc: st.desc,
       price: st.price,
       isIndex: !!st.isIndex,
+      shares: Number(st.shares) || 0,
+      marketCap: report ? report.marketCap : 0,
+      freeCap: report ? report.freeCap : 0,
+      fair: Number(st.fair) || 0,
+      nextReportTick: Number(st.nextReportTick) || 0,
+      report,
       // 按各 K 线周期算涨跌幅（前端跟着当前周期显示）
       changes: changesFor(st.series, TIMEFRAMES),
       changePct: prev ? ((st.price - prev) / prev) * 100 : 0,

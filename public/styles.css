@@ -2136,3 +2136,48 @@ body[data-theme="dark"] .fee-bonus { color: var(--down); }
 }
 .chip-toggle { display: inline-flex; align-items: center; }
 .chip-toggle .chip-name { margin-right: 4px; }
+
+/* ---------- 财报 ---------- */
+.report-bar {
+  display: flex; align-items: center; gap: 10px;
+  margin: 6px 0 8px;
+}
+.report-btn {
+  font-size: 12px; padding: 5px 12px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--soft);
+  color: var(--ink-2); cursor: pointer;
+}
+.report-btn:hover { border-color: var(--accent); color: var(--accent); }
+.report-next { font-size: 11.5px; color: var(--ink-3); }
+.report-next b { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+.report-panel {
+  border: 1px solid var(--line); border-radius: 12px;
+  background: var(--soft); padding: 12px 14px; margin-bottom: 10px;
+}
+.rp-head {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 12px; color: var(--ink-2); margin-bottom: 10px;
+}
+.rp-ind {
+  font-size: 11px; padding: 2px 8px; border-radius: 6px;
+  background: var(--hl-cool); color: var(--accent);
+}
+.rp-period { color: var(--ink-3); }
+.rp-cap { margin-left: auto; }
+.rp-cap b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.rp-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 8px 14px; margin-bottom: 10px;
+}
+.rp-grid > div { display: flex; flex-direction: column; gap: 2px; }
+.rp-grid span { font-size: 11px; color: var(--ink-3); }
+.rp-grid b { font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.rp-fair {
+  display: flex; gap: 16px; align-items: center;
+  padding-top: 9px; border-top: 1px dashed var(--line);
+  font-size: 12px; color: var(--ink-2);
+}
+.rp-fair b { color: var(--ink); font-variant-numeric: tabular-nums; }

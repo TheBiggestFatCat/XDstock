@@ -271,6 +271,80 @@ function renderChartSub(st) {
     <span class="${cls2}" title="相对基准汇率 ${base.toFixed(3)}">${chg >= 0 ? '+' : ''}${chg.toFixed(3)}%</span>`;
 }
 
+function fmtMoney(v) {
+  const n = Math.abs(v);
+  if (n >= 1e8) return (v / 1e8).toFixed(2) + ' 亿';
+  if (n >= 1e4) return (v / 1e4).toFixed(1) + ' 万';
+  return v.toFixed(2);
+}
+
+function fmtAgo(ticks, tickMs) {
+  const sec = Math.max(0, ticks) * (tickMs / 1000);
+  if (sec < 60) return Math.round(sec) + ' 秒';
+  const m = Math.floor(sec / 60);
+  const s2 = Math.round(sec % 60);
+  if (m < 60) return m + ' 分 ' + String(s2).padStart(2, '0') + ' 秒';
+  return Math.floor(m / 60) + ' 小时 ' + (m % 60) + ' 分';
+}
+
+function renderReport() {
+  const st = state.market?.stocks?.[state.code];
+  const panel = $('#reportPanel');
+  const nextEl = $('#reportNext');
+  const tickMs = state.market?.tickMs || 5000;
+  const tick = state.market?.tick || 0;
+
+  if (!st || st.isIndex) {
+    if (panel) panel.classList.add('hidden');
+    if (nextEl) nextEl.textContent = '';
+    return;
+  }
+
+  const r = st.report || {};
+  const left = (Number(st.nextReportTick) || 0) - tick;
+  if (nextEl) {
+    nextEl.innerHTML = left > 0
+      ? `距下期财报 <b>${fmtAgo(left, tickMs)}</b>`
+      : '<b>财报已发布</b>';
+  }
+
+  if (!panel || panel.classList.contains('hidden')) return;
+
+  const prem = Number(r.premium) || 0;
+  const cls2 = prem > 0 ? 'up' : prem < 0 ? 'down' : 'flat';
+  const word = prem > 8 ? '高估' : prem < -8 ? '低估' : '接近合理';
+  const g = Number(r.growth) || 0;
+
+  panel.innerHTML = `
+    <div class="rp-head">
+      <span class="rp-ind">${escapeHtml(r.industry || '')}</span>
+      <span class="rp-period">第 ${r.period} 期</span>
+      <span class="rp-cap">总市值 <b>${fmtMoney(r.marketCap || 0)}</b></span>
+    </div>
+    <div class="rp-grid">
+      <div><span>营业收入</span><b>${fmtMoney(r.revenue || 0)}</b></div>
+      <div><span>净利润</span><b>${fmtMoney(r.netProfit || 0)}</b></div>
+      <div><span>同比增速</span><b class="${g >= 0 ? 'up' : 'down'}">${g >= 0 ? '+' : ''}${(g * 100).toFixed(1)}%</b></div>
+      <div><span>每股收益</span><b>$${Number(r.eps || 0).toFixed(3)}</b></div>
+      <div><span>市盈率 PE</span><b>${Number(r.pe || 0).toFixed(1)}</b></div>
+      <div><span>市净率 PB</span><b>${Number(r.pb || 0).toFixed(2)}</b></div>
+      <div><span>ROE</span><b>${((r.roe || 0) * 100).toFixed(1)}%</b></div>
+      <div><span>资产负债率</span><b>${((r.debt || 0) * 100).toFixed(0)}%</b></div>
+    </div>
+    <div class="rp-fair">
+      <div><span>价值回归线</span><b>$${Number(st.fair || 0).toFixed(2)}</b></div>
+      <div><span>现价</span><b>$${Number(st.price || 0).toFixed(2)}</b></div>
+      <div class="${cls2}">${word} <b>${prem >= 0 ? '+' : ''}${prem.toFixed(1)}%</b></div>
+    </div>`;
+}
+
+function toggleReportPanel() {
+  const panel = $('#reportPanel');
+  if (!panel) return;
+  panel.classList.toggle('hidden');
+  if (!panel.classList.contains('hidden')) renderReport();
+}
+
 function renderStBanner(st) {
   let el = $('#stBanner');
   if (!el) {
@@ -1386,6 +1460,7 @@ function selectStock(code) {
   $('#chartName').innerHTML = stBadge + escapeHtml(st.name);
   renderStBanner(st);
   renderChartSub(st);
+  renderReport();
   $('#chartCode').textContent = st.code;
   $('#chartIcon').src = st.icon || '';
   $('#chartPrice').textContent = st.price.toFixed(2);
@@ -1934,6 +2009,7 @@ function onTick(d) {
   const curSt = state.market?.stocks?.[state.code];
   if (curSt && curSt.st !== undefined) renderStBanner(curSt);
   if (curSt) renderChartSub(curSt);
+  renderReport();
 
   if ($('#view-work').classList.contains('active')) renderWork();
   if ($('#view-shop').classList.contains('active')) renderShop();
@@ -3220,6 +3296,7 @@ function bind() {
     updateLimitLine(Number($('#orderLimit').value));
   });
   $('#drawLineBtn')?.addEventListener('click', () => toggleDrawMode());
+  $('#reportBtn')?.addEventListener('click', toggleReportPanel);
   document.querySelectorAll('.dt-btn').forEach((b) => {
     b.addEventListener('click', () => {
       state.drawTarget = b.dataset.target;

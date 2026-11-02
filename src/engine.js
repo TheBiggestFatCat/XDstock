@@ -1,4 +1,5 @@
 import { INDEX_BASE } from './stocks.js';
+import { genNextReport, fairFromReport, impactFactor } from './fundamentals.js';
 import { now } from './store.js';
 
 let gaussSpare = null;
@@ -98,9 +99,12 @@ function stepStock(st, cfg, events, brokerDrift, fxData) {
   }
 
   // 玩家资金冲击：短时间内的大额净买入/净卖出会推着价格走
+  // 流通盘越小，同样一笔钱推动得越猛
   const flow = Number(st.flow) || 0;
   if (flow !== 0 && Number(cfg.playerImpactEnabled ?? 1) !== 0) {
-    const strength = Number(cfg.playerImpactStrength ?? 0.0009);
+    const refCap = Number(cfg.impactRefFreeCap) || 0;
+    const factor = refCap > 0 ? impactFactor(st, refCap) : 1;
+    const strength = Number(cfg.playerImpactStrength ?? 0.0009) * factor;
     const capPerTick = Number(cfg.playerImpactMax ?? 0.008);
     // 首轮全额，后续按「后续影响倍率」打折
     const tail = st.flowFresh ? 1 : Number(cfg.playerImpactTail ?? 1);
@@ -249,12 +253,23 @@ export function stepMarket(db) {
   // 4. 生成新新闻
   spawnNews(db);
 
-  // 5. 指数：只算正常交易的真股票（不含指数自己）
+  // 5. 指数：按市值加权（基期市值 = 初始价 × 总股本）
   const live = stocks.filter((s) => s.status === 'normal' && !s.isIndex);
   if (live.length) {
-    const ratio =
-      live.reduce((sum, s) => sum + s.price / s.initialPrice, 0) / live.length;
-    db.index.value = Number((ratio * INDEX_BASE).toFixed(2));
+    let nowCap = 0;
+    let baseCap = 0;
+    for (const s of live) {
+      const sh = Number(s.shares) || 0;
+      if (!(sh > 0)) continue;
+      nowCap += s.price * sh;
+      baseCap += (Number(s.initialPrice) || 0) * sh;
+    }
+    if (baseCap > 0) {
+      db.index.value = Number(((nowCap / baseCap) * INDEX_BASE).toFixed(2));
+    } else {
+      const ratio = live.reduce((sum, s) => sum + s.price / s.initialPrice, 0) / live.length;
+      db.index.value = Number((ratio * INDEX_BASE).toFixed(2));
+    }
   }
   db.index.series.push(db.index.value);
   const cap = cfg.historyTicks ?? 3600;
@@ -271,6 +286,9 @@ export function stepMarket(db) {
       idxStock.series.splice(0, idxStock.series.length - cap);
     }
   }
+
+  // 6. 财报：到点就发一期
+  runReports(db);
 
   db.tick += 1;
 
@@ -381,4 +399,63 @@ export function changesFor(series, tfTicks) {
     out[key] = base ? ((last - base) / base) * 100 : 0;
   }
   return out;
+}
+
+/** 每家公司错开发财报：间隔 reportIntervalTicks 轮 */
+export function runReports(db) {
+  const cfg = db.config;
+  const interval = Math.max(60, Number(cfg.reportIntervalTicks ?? 720));
+  const list = Object.values(db.stocks).filter((s) => !s.isIndex);
+  if (!list.length) return;
+
+  const gap = Math.max(1, Math.floor(interval / list.length));
+  for (let i = 0; i < list.length; i++) {
+    const st = list[i];
+    if (st.status === 'delisted') continue;
+    if (!st.nextReportTick) {
+      // 错开：第 i 家在 i*gap 轮后先发
+      st.nextReportTick = db.tick + gap * (i + 1);
+      continue;
+    }
+    if (db.tick < st.nextReportTick) continue;
+
+    const before = Number(st.fair) || 0;
+    st.fundamentals = genNextReport(st);
+    st.lastSurprise = before > 0 ? (fairFromReport(st) - before) / before : 0;
+    st.fair = Number(fairFromReport(st).toFixed(4));
+    st.nextReportTick = db.tick + interval;
+
+    // 财报当期的价格冲击：超预期就上冲/下杀
+    const surprise = st.lastSurprise;
+    const shock = Math.max(-0.06, Math.min(0.06, surprise * 0.5));
+    if (Number.isFinite(shock) && Math.abs(shock) > 0.0005) {
+      st.price = Number((st.price * (1 + shock)).toFixed(4));
+    }
+
+    // 挂一条新闻，让所有人知道
+    const f = st.fundamentals;
+    const good = surprise >= 0;
+    db.events.push({
+      id: 'ev_' + Math.random().toString(36).slice(2, 10),
+      kind: 'after',
+      text: `${st.name}发${f.period}季报：营收${fmtYi(f.revenue)}，净利${fmtYi(f.netProfit)}，`
+        + `同比${(f.growth * 100).toFixed(1)}%，${good ? '超预期' : '不及预期'}`,
+      companies: [st.code],
+      dir: good ? 1 : -1,
+      trend: 0,
+      duration: 40,
+      remaining: 40,
+      createdAt: Date.now(),
+      announced: true,
+      isReport: true
+    });
+    if (db.events.length > 40) db.events.shift();
+  }
+}
+
+function fmtYi(v) {
+  const n = Number(v) || 0;
+  if (Math.abs(n) >= 1e8) return (n / 1e8).toFixed(2) + '亿';
+  if (Math.abs(n) >= 1e4) return (n / 1e4).toFixed(2) + '万';
+  return n.toFixed(0);
 }

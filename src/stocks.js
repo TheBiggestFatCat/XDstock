@@ -7,6 +7,8 @@ export const STOCK_SEED = {
     name: '丰川集团',
     icon: '/assets/stocks/TGW.png',
     industry: '消费娱乐',
+    shares: 3000000000,   // 总股本 30 亿股
+    freeFloat: 0.45,          // 流通比例
     desc: '综合商社、品牌零售、物流',
     initialPrice: 120,
     trait: {
@@ -22,6 +24,8 @@ export const STOCK_SEED = {
     name: '无畏科技',
     icon: '/assets/stocks/MAMA.png',
     industry: '科技AI',
+    shares: 800000000,   // 总股本 8 亿股
+    freeFloat: 0.45,          // 流通比例
     desc: '电竞、游戏硬件、AI 算法',
     initialPrice: 150,
     trait: {
@@ -39,6 +43,8 @@ export const STOCK_SEED = {
     name: '肥鱼科技',
     icon: '/assets/stocks/DFY.png',
     industry: '科技AI',
+    shares: 150000000,   // 总股本 1.5 亿股
+    freeFloat: 0.45,          // 流通比例
     desc: '食品科技、直播电商、供应链',
     initialPrice: 90,
     trait: {
@@ -54,6 +60,8 @@ export const STOCK_SEED = {
     name: '瑞幸咖啡',
     icon: '/assets/stocks/LU.png',
     industry: '消费娱乐',
+    shares: 1500000000,   // 总股本 15 亿股
+    freeFloat: 0.45,          // 流通比例
     desc: '咖啡连锁、新零售、饮品',
     initialPrice: 85,
     trait: {
@@ -72,6 +80,8 @@ export const STOCK_SEED = {
     name: '奶蛙传媒',
     icon: '/assets/stocks/NW.png',
     industry: '消费娱乐',
+    shares: 300000000,   // 总股本 3 亿股
+    freeFloat: 0.45,          // 流通比例
     desc: '短视频、IP 运营、潮玩',
     initialPrice: 110,
     trait: {
@@ -92,6 +102,8 @@ export const STOCK_SEED = {
     name: '弦卷财团',
     icon: '/assets/stocks/XJ.png',
     industry: '消费娱乐',
+    shares: 2000000000,   // 总股本 20 亿股
+    freeFloat: 0.45,          // 流通比例
     desc: '财团、偶像企划、游乐园',
     initialPrice: 180,
     trait: {
@@ -108,6 +120,8 @@ export const STOCK_SEED = {
     name: '留美外汇',
     icon: '/assets/stocks/LMFX.jpeg',
     industry: '金融',
+    shares: 200000000,   // 总股本 2 亿股
+    freeFloat: 0.45,          // 流通比例
     desc: '外汇自营、套息交易、高杠杆',
     initialPrice: 100,
     trait: {
@@ -129,6 +143,8 @@ export const STOCK_SEED = {
     name: '小灯证券',
     icon: '/assets/stocks/XD.png',
     industry: '金融',
+    shares: 600000000,   // 总股本 6 亿股
+    freeFloat: 0.45,          // 流通比例
     desc: '券商、做市商、量化',
     initialPrice: 100,
     trait: {

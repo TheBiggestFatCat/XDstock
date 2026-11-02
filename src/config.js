@@ -77,6 +77,9 @@ export const DEFAULT_CONFIG = {
   shopChannelRatio: 1.5,         // 每买一次价格乘这个
   shopChannelStep: 100000,       // 每次提升的成交额
 
+  // 财报：每多少轮发一期（720 轮 = 1 小时）
+  reportIntervalTicks: 720,
+
   // 现时活动：打倒量化资本
   activityEnabled: 1,            // 1 = 活动进行中
   activityTargets: ['鹰角网络'],   // 被瓜分名单（玩家昵称数组）
