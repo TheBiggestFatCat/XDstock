@@ -6,6 +6,7 @@ import { TIMEFRAMES } from './config.js';
 import { getBuild } from './build.js';
 import { playerEquity, positionPnl } from './trading.js';
 import { placeLimitOrder, cancelOrder } from './orders.js';
+import { activityPayload, joinActivity, adminActivity } from './activity.js';
 
 const TOKEN_TTL = 30 * 24 * 3600 * 1000;
 
@@ -177,6 +178,7 @@ function marketPayload(db, me) {
     build: getBuild(),
     tick: db.tick,
     tickMs: db.config.tickMs,
+    activity: activityPayload(db, me),
     marketOpen: db.config.marketOpen !== false,
     startedAt: db.startedAt || 0,
     serverTime: now(),
@@ -413,6 +415,7 @@ export async function handleApi(ctx) {
   if (pathname === '/api/admin/state' && method === 'GET') {
     return json(res, 200, {
       config: db.config,
+      activity: activityPayload(db, ctx?.player || null),
       marketOpen: db.config.marketOpen !== false,
       notices: db.notices || [],
       closedAt: db.closedAt || 0,
@@ -438,6 +441,26 @@ export async function handleApi(ctx) {
       marketOpen: db.config.marketOpen !== false
     });
   }
+
+  if (pathname === '/api/admin/players' && (method === 'GET' || method === 'POST')) {
+    const rows = Object.values(db.players)
+      .map((p) => ({
+        id: p.id,
+        nickname: p.nickname,
+        equity: playerEquity(db, p),
+        cash: p.cash || 0
+      }))
+      .sort((a, b) => b.equity - a.equity);
+    return json(res, 200, { players: rows });
+  }
+
+  if (pathname === '/api/admin/activity' && method === 'POST') {
+    const r = adminActivity(db, String(body.action || 'reset'), body.targets);
+    if (!r.ok) return json(res, 400, r);
+    saveDb();
+    return json(res, 200, { ok: true, activity: activityPayload(db, null) });
+  }
+
 
   if (pathname === '/api/admin/stock-trait' && method === 'POST') {
     const code = String(body.code || '').toUpperCase();
@@ -788,6 +811,19 @@ export async function handleApi(ctx) {
     if (!r.ok) return json(res, 400, r);
     saveDb();
     return json(res, 200, { ok: true, player: publicPlayer(me, db) });
+  }
+
+  // ---------- 现时活动 ----------
+  if (pathname === '/api/activity' && method === 'GET') {
+    return json(res, 200, { activity: activityPayload(db, me) });
+  }
+
+  if (pathname === '/api/activity/join' && method === 'POST') {
+    const join = body.join !== false;
+    const r = joinActivity(db, me, join);
+    if (!r.ok) return json(res, 400, r);
+    saveDb();
+    return json(res, 200, { ok: true, activity: activityPayload(db, me) });
   }
 
   // ---------- 商城 ----------

@@ -358,6 +358,29 @@
           <button id="bodyguardBuy" class="btn btn-primary btn-block">购买保镖</button>
         </div>
 
+        <div class="shop-card activity-card" id="activityCard">
+          <div class="shop-card-head">
+            <span class="shop-icon">🎯</span>
+            <div>
+              <h3 id="actName">打倒量化资本</h3>
+              <p class="shop-sub">现时活动</p>
+            </div>
+            <span class="shop-price" id="actBadge">进行中</span>
+          </div>
+
+          <p class="act-desc">
+            名单里任意一位总资产超过 <b id="actThreshold">$500,000</b>，
+            就<b>强制平掉他所有仓位</b>，并把他资产中的
+            <b id="actReward">$4,000,000</b> 平分给所有参与者。
+          </p>
+
+          <div class="act-list" id="actList"></div>
+
+          <p class="act-count">已有 <b id="actCount">0</b> 人参与</p>
+          <button id="actJoinBtn" class="btn btn-primary btn-block">加入参与列表</button>
+          <p class="act-result hidden" id="actResult"></p>
+        </div>
+
         <div class="shop-card" id="channelCard">
           <div class="shop-card-head">
             <span class="shop-icon">⚡</span>
@@ -505,6 +528,22 @@
             </div>
             <div id="traitForm" class="trait-form"></div>
             <button id="traitSaveBtn" class="btn btn-primary">保存个股设置</button>
+          </div>
+
+          <div class="panel panel-wide">
+            <div class="panel-title">
+              <span>现时活动 · 打倒量化资本</span>
+              <span class="panel-sub" id="actAdminStatus">未开始</span>
+            </div>
+            <p class="field-hint">勾选要被瓜分的玩家（可多选），资产超过阈值时强平并平分</p>
+            <div class="chip-select act-admin-list" id="actAdminTargets"></div>
+            <div class="act-admin-row">
+              <button id="actAdminSave" class="btn">保存名单</button>
+              <button id="actAdminStart" class="btn btn-primary">启动活动</button>
+              <button id="actAdminStop" class="btn">停止</button>
+              <button id="actAdminReset" class="btn">重置</button>
+            </div>
+            <div id="actAdminResults" class="act-admin-results"></div>
           </div>
 
           <div class="panel panel-wide">

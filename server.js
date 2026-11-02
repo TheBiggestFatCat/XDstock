@@ -9,6 +9,7 @@ import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, positionPnl, logTrade } from './src/trading.js';
 import { processOrders } from './src/orders.js';
 import { checkDelist } from './src/delist.js';
+import { checkActivity } from './src/activity.js';
 import { fetchAudJpy } from './src/fx.js';
 import { handleApi } from './src/api.js';
 import { NEWS_POOL } from './src/news.js';
@@ -346,6 +347,8 @@ function loop() {
   let orderEvents = [];
   try {
     orderEvents = processOrders(d);
+    const activityHit = checkActivity(d);
+    if (activityHit) console.log("[活动] 触发:", activityHit.targetName, "平分", activityHit.pool);
   } catch (e) {
     console.error('[orders] 撮合出错:', e.message);
   }

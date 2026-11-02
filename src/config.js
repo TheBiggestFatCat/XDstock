@@ -76,6 +76,13 @@ export const DEFAULT_CONFIG = {
   shopChannelBasePrice: 300000,  // 第一次购买的价格
   shopChannelRatio: 1.5,         // 每买一次价格乘这个
   shopChannelStep: 100000,       // 每次提升的成交额
+
+  // 现时活动：打倒量化资本
+  activityEnabled: 1,            // 1 = 活动进行中
+  activityTargets: ['鹰角网络'],   // 被瓜分名单（玩家昵称数组）
+  activityThreshold: 500000,     // 总资产超过多少触发
+  activityReward: 4000000,       // 平分给他的总金额
+
   // 「红红的牛」技能：指数处于上升趋势时平仓，额外返 1% 成交额
   redBonusRate: 0.01,
   redBonusMinTicks: 12,        // 持仓至少满这么多轮才算（防开平刷奖励）

@@ -566,6 +566,80 @@ function renderShop() {
       : (guardLeft > 0 ? '再续一小时' : '购买保镖');
   }
 
+  // ---- 现时活动 ----
+  const act = state.market?.activity;
+  if (act) {
+    const setTxt = (sel, v) => { const el = $(sel); if (el) el.textContent = v; };
+    setTxt('#actName', act.name || '现时活动');
+    setTxt('#actThreshold', money0(act.threshold));
+    setTxt('#actReward', money0(act.reward));
+    setTxt('#actCount', String(act.participantCount || 0));
+
+    const badge = $('#actBadge');
+    if (badge) {
+      badge.textContent = act.status === 'running' ? '进行中'
+        : act.status === 'done' ? '已结束' : '未开始';
+      badge.className = 'shop-price' + (act.status === 'running' ? ' up' : ' flat');
+    }
+
+    const listEl = $('#actList');
+    if (listEl) {
+      const ts = act.targets || [];
+      if (!ts.length) {
+        listEl.innerHTML = '<div class="act-empty">管理员还没指定名单</div>';
+      } else {
+        listEl.innerHTML = ts.map((t) => {
+          const pctNum = act.threshold > 0
+            ? Math.max(0, Math.min(100, (t.equity / act.threshold) * 100))
+            : 0;
+          return `<div class="act-row${t.raided ? ' done' : ''}">
+            <div class="act-row-head">
+              <b>${escapeHtml(t.name)}</b>
+              <span>${t.raided ? '已瓜分' : money0(t.equity)}</span>
+            </div>
+            <div class="act-bar"><i style="width:${t.raided ? 100 : pctNum.toFixed(1)}%" class="${pctNum >= 100 || t.raided ? 'over' : ''}"></i></div>
+          </div>`;
+        }).join('');
+      }
+    }
+
+    const btn = $('#actJoinBtn');
+    if (btn) {
+      if (act.status === 'done') {
+        btn.disabled = true;
+        btn.textContent = '活动已结束';
+      } else if (act.status !== 'running') {
+        btn.disabled = true;
+        btn.textContent = '活动未开始';
+      } else if (act.isTarget) {
+        btn.disabled = true;
+        btn.textContent = '你在被瓜分名单里';
+      } else if (act.joined) {
+        btn.disabled = false;
+        btn.textContent = '已参与 · 点击退出';
+      } else {
+        btn.disabled = false;
+        btn.textContent = '加入参与列表';
+      }
+    }
+
+    const res = $('#actResult');
+    if (res) {
+      const rs = act.results || [];
+      if (rs.length) {
+        res.classList.remove('hidden');
+        res.innerHTML = '战果：' + rs.map((r) => (
+          `<div class="act-res-row"><b>${escapeHtml(r.targetName)}</b> 资产 $${money0(r.equity)} 触发，`
+          + `强平 ${r.closed} 个仓位，$${money0(r.pool)} 分给 ${r.winners} 人`
+          + (r.winners ? `（每人 $${money0(r.share)}）` : '')
+          + '</div>'
+        )).join('');
+      } else {
+        res.classList.add('hidden');
+      }
+    }
+  }
+
   // ---- 交易专属通道 ----
   const chBase = Number(cfg.shopChannelBasePrice ?? 300000);
   const chRatio = Number(cfg.shopChannelRatio ?? 1.5);
@@ -651,6 +725,74 @@ async function buyBodyguard() {
     btn.textContent = old;
   } finally {
     renderShop();
+  }
+}
+
+async function loadAdminPlayers() {
+  const box = $('#actAdminTargets');
+  if (!box) return;
+  try {
+    const [d, mk] = await Promise.all([adminApi('/api/admin/players'), api('/api/market')]);
+    const act = mk.activity || {};
+    const active = new Set((act.targets || []).map((t) => t.name));
+    const rows = d.players || [];
+    box.innerHTML = rows.map((p) => (
+      `<button type="button" class="chip-toggle${active.has(p.nickname) ? ' active' : ''}" data-act-name="${escapeHtml(p.nickname)}">`
+      + `${escapeHtml(p.nickname)}<i>${money0(p.equity)}</i></button>`
+    )).join('');
+    box.querySelectorAll('[data-act-name]').forEach((b) => {
+      b.addEventListener('click', () => b.classList.toggle('active'));
+    });
+    const st = $('#actAdminStatus');
+    if (st) {
+      st.textContent = act.status === 'running' ? '进行中'
+        : act.status === 'done' ? '已结束' : '未开始';
+    }
+    const resBox = $('#actAdminResults');
+    if (resBox) {
+      const rs = act.results || [];
+      resBox.innerHTML = rs.length
+        ? rs.map((r) => `<div class="act-res-row">${escapeHtml(r.targetName)} · 池 $${money0(r.pool)} · ${r.winners} 人</div>`).join('')
+        : '<div class="field-hint">还没有瓜分记录</div>';
+    }
+  } catch (e) {
+    box.innerHTML = `<div class="field-hint">${e.message}</div>`;
+  }
+}
+
+async function actAdminAction(action) {
+  try {
+    let targets;
+    if (action === 'targets' || action === 'start') {
+      targets = $$('#actAdminTargets .chip-toggle.active').map((b) => b.dataset.actName);
+      if (action === 'start' && !targets.length) {
+        toast('先勾选至少一个要瓜分的玩家', 'err');
+        return;
+      }
+    }
+    await adminApi('/api/admin/activity', { action, targets });
+    toast(action === 'start' ? '活动已启动' : action === 'stop' ? '活动已停止'
+      : action === 'reset' ? '活动已重置' : '名单已保存', 'ok');
+    refreshMarket();
+    loadAdminPlayers();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
+async function toggleActivity() {
+  const act = state.market?.activity;
+  if (!act || act.status === 'done') return;
+  try {
+    const r = await api('/api/activity/join', {
+      method: 'POST',
+      body: JSON.stringify({ join: !act.joined })
+    });
+    state.market.activity = r.activity;
+    toast(r.activity.joined ? '已加入参与列表，等他资产破线' : '已退出参与列表', 'ok');
+    renderShop();
+  } catch (e) {
+    toast(e.message, 'err');
   }
 }
 
@@ -2895,6 +3037,7 @@ function switchView(name) {
   // 切换标签时退回列表态（手机上从个股详情回到列表）
   document.body.classList.remove('m-detail');
   if (name === 'admin') {
+    if (typeof loadAdminPlayers === 'function') loadAdminPlayers();
     if (state.adminToken) loadAdmin();
     else {
       $('#adminLock').classList.remove('hidden');
@@ -3052,6 +3195,11 @@ function bind() {
   });
   $('#fakeNewsBuy')?.addEventListener('click', buyFakeNews);
   $('#bodyguardBuy')?.addEventListener('click', buyBodyguard);
+  $('#actJoinBtn')?.addEventListener('click', toggleActivity);
+  $('#actAdminSave')?.addEventListener('click', () => actAdminAction('targets'));
+  $('#actAdminStart')?.addEventListener('click', () => actAdminAction('start'));
+  $('#actAdminStop')?.addEventListener('click', () => actAdminAction('stop'));
+  $('#actAdminReset')?.addEventListener('click', () => actAdminAction('reset'));
   $('#channelBuy')?.addEventListener('click', buyChannel);
   $('#mBackBtn')?.addEventListener('click', () => {
     document.body.classList.remove('m-detail');

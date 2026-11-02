@@ -2000,3 +2000,77 @@ body[data-theme="dark"] .fee-bonus { color: var(--down); }
   color: var(--ink-2);
 }
 .theme-earned b.up { color: var(--up); }
+
+/* ---------- 现时活动 ---------- */
+.activity-card {
+  border: 1px solid var(--bd-warn);
+  background: linear-gradient(180deg, var(--hl-warm), var(--surface));
+}
+.act-desc {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  margin: 10px 0;
+}
+.act-desc b { color: var(--ink); }
+.act-progress { margin: 10px 0; }
+.act-bar {
+  height: 8px;
+  border-radius: 6px;
+  background: var(--soft);
+  overflow: hidden;
+}
+.act-bar > i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  transition: width .4s ease;
+}
+.act-bar > i.over { background: var(--up); }
+.act-nums {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  margin-top: 6px;
+}
+.act-nums b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.act-count {
+  font-size: 12px;
+  color: var(--ink-2);
+  margin: 8px 0;
+}
+.act-count b { color: var(--accent); font-weight: 700; }
+.act-result {
+  margin-top: 10px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--soft);
+}
+.act-result b { color: var(--ink); }
+
+/* 活动目标列表 */
+.act-list { display: flex; flex-direction: column; gap: 9px; margin: 10px 0; }
+.act-row-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 12px; color: var(--ink-2); margin-bottom: 4px;
+}
+.act-row-head b { color: var(--ink); }
+.act-row.done .act-row-head b { color: var(--ink-3); text-decoration: line-through; }
+.act-empty { font-size: 12px; color: var(--ink-3); padding: 6px 2px; }
+.act-bar i.over { background: var(--up); }
+.act-res-row { font-size: 11.5px; line-height: 1.6; color: var(--ink-2); }
+.act-admin-list { flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+.act-admin-list .chip-toggle { font-size: 12px; padding: 6px 10px; }
+.act-admin-list .chip-toggle i {
+  font-style: normal; opacity: .65; margin-left: 6px; font-size: 11px;
+}
+.act-admin-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.act-admin-results { display: flex; flex-direction: column; gap: 4px; }
+.chip-toggle.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.chip-toggle.active i { opacity: .85; }
