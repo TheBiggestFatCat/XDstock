@@ -405,7 +405,13 @@ function renderReportChart(hist) {
   const ih = H - padT - padB;
 
   const rev = list.map((h) => Number(h.revenue) || 0);
-  const np = list.map((h) => Number(h.netProfit) || 0);
+  const npAbs = list.map((h) => Number(h.netProfit) || 0);
+  // 第二条线画「净利同比」：本期净利相对上一期的变化率（%）
+  const np = npAbs.map((v, i) => {
+    if (i === 0) return null;
+    const prev = npAbs[i - 1];
+    return prev > 0 ? (v / prev - 1) * 100 : 0;
+  });
 
   // 营收和净利量级差太多（几千亿 vs 几百亿），各自拉满，看趋势而不是比大小
   const scaleOf = (arr) => {
@@ -415,7 +421,8 @@ function renderReportChart(hist) {
     return { lo: lo - pad, hi: hi + pad };
   };
   const sRev = scaleOf(rev);
-  const sNp = scaleOf(np);
+  const npValid = np.filter((v) => v !== null);
+  const sNp = scaleOf(npValid.length ? npValid : [0]);
 
   const x = (i) => padL + (list.length === 1 ? iw / 2 : (i / (list.length - 1)) * iw);
   const yOf = (v, sc) => padT + ih - ((v - sc.lo) / Math.max(1e-9, sc.hi - sc.lo)) * ih;
@@ -429,14 +436,16 @@ function renderReportChart(hist) {
   const first = list[0];
   const revChg = Number(first.revenue) > 0
     ? (Number(last.revenue) / Number(first.revenue) - 1) * 100 : 0;
-  const npChg = Number(first.netProfit) > 0
-    ? (Number(last.netProfit) / Number(first.netProfit) - 1) * 100 : 0;
 
-  const npPath = np.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${yNp(v).toFixed(1)}`).join(' ');
+  const npPath = np
+    .map((v, i) => (v === null ? null : `${i ? 'L' : 'M'}${x(i).toFixed(1)},${yNp(v).toFixed(1)}`))
+    .filter(Boolean)
+    .join(' ')
+    .replace(/^L/, 'M');
 
   const dots = list.map((h, i) => `
     <circle cx="${x(i).toFixed(1)}" cy="${y(Number(h.revenue)).toFixed(1)}" r="2.6" class="rc-dot" />
-    <circle cx="${x(i).toFixed(1)}" cy="${yNp(Number(h.netProfit)).toFixed(1)}" r="2.2" class="rc-dot np" />`).join('');
+    ${np[i] === null ? '' : `<circle cx="${x(i).toFixed(1)}" cy="${yNp(np[i]).toFixed(1)}" r="2.2" class="rc-dot np" />`}`).join('');
 
   return `
     <div class="rc-wrap">
@@ -444,7 +453,7 @@ function renderReportChart(hist) {
         <span class="rc-title">财报趋势 · 共 ${list.length} 期</span>
         <span class="rc-legend">
           <i class="rc-l1"></i>营收
-          <i class="rc-l2"></i>净利
+          <i class="rc-l2"></i>净利同比
         </span>
       </div>
       <svg class="rc-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
@@ -456,7 +465,7 @@ function renderReportChart(hist) {
       </svg>
       <div class="rc-foot">
         <span>营收 ${revChg >= 0 ? '+' : ''}${revChg.toFixed(0)}%</span>
-        <span>净利 ${npChg >= 0 ? '+' : ''}${npChg.toFixed(0)}%</span>
+        <span>净利同比 ${(np[list.length - 1] ?? 0) >= 0 ? '+' : ''}${(np[list.length - 1] ?? 0).toFixed(1)}%</span>
         <span>营收 ${money0(last.revenue)} · 净利 ${money0(last.netProfit)}</span>
       </div>
     </div>`;
