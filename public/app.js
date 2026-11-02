@@ -2831,6 +2831,15 @@ async function loadAdmin() {
       ]
     },
     {
+      title: '现时活动',
+      desc: '打倒量化资本',
+      fields: [
+        ['activityEnabled', '活动开关(1=开)'],
+        ['activityThreshold', '触发阈值(资产)'],
+        ['activityReward', '平分总金额']
+      ]
+    },
+    {
       title: '偷钱',
       desc: '从别人口袋里拿',
       fields: [

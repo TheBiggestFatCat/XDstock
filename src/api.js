@@ -612,6 +612,7 @@ export async function handleApi(ctx) {
       'shopBodyguardPrice', 'shopBodyguardTicks', 'shopThemePrice',
       'shopChannelBasePrice', 'shopChannelRatio', 'shopChannelStep',
       'stPrice', 'stDelistTicks',
+      'activityEnabled', 'activityThreshold', 'activityReward',
       'fxEnabled', 'fxCoef', 'fxLeverage', 'fxRefreshMs', 'fxTrack',
       'impactCostCoef', 'impactCostMax', 'playerImpactTail',
       'maxOrdersPerTick', 'maxFillNotionalPerTick',
