@@ -52,6 +52,14 @@ function money(v) {
   const s = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return (neg ? '-$' : '$') + s;
 }
+
+/** 不带小数点的金额（商城价格用） */
+function money0(v) {
+  if (!Number.isFinite(v)) return '$0';
+  const neg = v < 0;
+  const s = Math.abs(Math.round(v)).toLocaleString('en-US');
+  return (neg ? '-$' : '$') + s;
+}
 function moneyShort(v) {
   const a = Math.abs(v);
   if (a >= 1e8) return (v / 1e8).toFixed(2) + ' 亿';
@@ -451,7 +459,7 @@ async function chooseTheme(code) {
         state.market.me.themes = r.themes;
       }
       applyTheme(code);
-      toast(`主题已启用（花费 ${money(r.price)}）`, 'ok');
+      toast(`主题已启用（花费 ${money0(r.price)}）`, 'ok');
       refreshMarket();
     }
   } catch (e) {
@@ -469,7 +477,7 @@ function renderShop() {
   const cash = state.market?.me?.cash || 0;
 
   const pEl = $('#fakeNewsPrice');
-  if (pEl) pEl.textContent = money(price);
+  if (pEl) pEl.textContent = money0(price);
 
   const cEl = $('#fakeNewsChance');
   if (cEl) cEl.textContent = Math.round(chance * 100) + '%';
@@ -478,14 +486,14 @@ function renderShop() {
   if (btn) {
     const poor = cash < price;
     btn.disabled = poor;
-    btn.textContent = poor ? `现金不足（差 ${money(price - cash)}）` : '购买并发布';
+    btn.textContent = poor ? `现金不足（差 ${money0(price - cash)}）` : '购买并发布';
   }
 
   // ---- 保镖 ----
   const bgPrice = Number(cfg.shopBodyguardPrice ?? 50000);
   const bgTicks = Number(cfg.shopBodyguardTicks ?? 720);
   const bgPriceEl = $('#bodyguardPrice');
-  if (bgPriceEl) bgPriceEl.textContent = money(bgPrice);
+  if (bgPriceEl) bgPriceEl.textContent = money0(bgPrice);
   const bgTicksEl = $('#guardTicks');
   if (bgTicksEl) bgTicksEl.textContent = String(bgTicks);
 
@@ -508,7 +516,7 @@ function renderShop() {
     const poor = cash < bgPrice;
     bgBtn.disabled = poor;
     bgBtn.textContent = poor
-      ? `现金不足（差 ${money(bgPrice - cash)}）`
+      ? `现金不足（差 ${money0(bgPrice - cash)}）`
       : (guardLeft > 0 ? '再续一小时' : '购买保镖');
   }
 
@@ -516,7 +524,10 @@ function renderShop() {
   const ownedThemes = state.market?.me?.themes || [];
   const curTheme = state.theme || state.market?.me?.theme || 'default';
   const themePrice = Number(cfg.shopThemePrice ?? 2000000);
-  document.querySelectorAll('.shop-card .shop-price').forEach(() => {});
+  // 主题卡片的价格跟着配置走，统一不带小数
+  document.querySelectorAll('.theme-card .shop-price').forEach((el) => {
+    el.textContent = money0(themePrice);
+  });
   document.querySelectorAll('.theme-btn').forEach((b) => {
     const code = b.dataset.themeCode;
     const has = ownedThemes.includes(code);
@@ -529,7 +540,7 @@ function renderShop() {
     if (isCur) { b.textContent = '正在使用'; b.disabled = true; return; }
     if (has) { b.textContent = '切换到这套'; b.disabled = false; return; }
     const poor = cash < themePrice;
-    b.textContent = poor ? `现金不足（差 ${money(themePrice - cash)}）` : '购买';
+    b.textContent = poor ? `现金不足（差 ${money0(themePrice - cash)}）` : '购买';
     b.disabled = poor;
   });
   document.querySelectorAll('.theme-owned').forEach((el) => {
@@ -576,7 +587,7 @@ async function buyFakeNews() {
       body: JSON.stringify({ text, dir: state.shopDir })
     });
     $('#fakeNewsText').value = '';
-    toast(`📰 假新闻已发布（花费 ${money(r.price)}）`, 'ok');
+    toast(`📰 假新闻已发布（花费 ${money0(r.price)}）`, 'ok');
     if (state.market?.me) state.market.me.cash = r.cash;
     refreshMarket();
     loadNewsSoon();
