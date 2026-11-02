@@ -10,7 +10,7 @@ function fmtLocalTime(sec, withDate = false) {
   return withDate ? `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${hm}` : hm;
 }
 
-const TF_SECONDS = { '1m': 12, '5m': 60, '15m': 180, '1h': 720, '4h': 2880 };
+const TF_SECONDS = { 'tick': 1, '1m': 12, '5m': 60, '15m': 180 };
 
 const state = {
   token: localStorage.getItem('xd_token') || '',
@@ -1999,6 +1999,12 @@ function onTick(d) {
   if ($('#view-shop').classList.contains('active')) renderShop();
   if (state.tradeTab === 'log' && $('#logPane') && !$('#logPane').classList.contains('hidden')) {
     loadStockTrades();
+  }
+  // 有成交（挂单被撮合 / 强平）就重拉一次自己的成交，B/S 标记才不会漏
+  if ((d.orderEvents && d.orderEvents.length) || (d.closes && d.closes.length)) {
+    loadMyTrades();
+  } else {
+    updateMarkers();
   }
   if (d.closes && d.closes.length) handleCloses(d.closes);
   if (d.alerts && d.alerts.length) handleAlerts(d.alerts);

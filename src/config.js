@@ -127,18 +127,16 @@ export const DEFAULT_CONFIG = {
 
 // 交易周期（tick 数）
 export const TIMEFRAMES = {
+  'tick': 1,     // 每个 tick 一根
   '1m': 12,
   '5m': 60,
-  '15m': 180,
-  '1h': 720,
-  '4h': 2880
+  '15m': 180
 };
 
 export const TF_LABELS = {
+  'tick': '逐 tick',
   '1m': '1 分钟',
   '5m': '5 分钟',
-  '15m': '15 分钟',
-  '1h': '1 小时',
-  '4h': '4 小时'
+  '15m': '15 分钟'
 };
 
