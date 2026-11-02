@@ -334,10 +334,18 @@ function renderReport() {
 
   const r = st.report || {};
   const left = (Number(st.nextReportTick) || 0) - tick;
+  const isTycoonNow = state.market?.me?.theme === 'tycoon';
+  const isFinance = ['broker', 'fx'].includes(st.trait?.id)
+    || String(st.industry || '').includes('金融');
   if (nextEl) {
-    nextEl.innerHTML = left > 0
-      ? `距下期财报 <b>${fmtAgo(left, tickMs)}</b>`
-      : '<b>财报已发布</b>';
+    if (left > 0) {
+      nextEl.innerHTML = `距下期财报 <b>${fmtAgo(left, tickMs)}</b>`
+        + (isTycoonNow && isFinance
+          ? `　🐊 ${left > 20 ? `还需 ${left - 20} 轮可预览` : '预览已就绪'}`
+          : '');
+    } else {
+      nextEl.innerHTML = '<b>财报已发布</b>';
+    }
   }
 
   if (!panel || panel.classList.contains('hidden')) return;
@@ -1962,6 +1970,8 @@ function onTick(d) {
     if (s.st !== undefined) m.stocks[code].st = s.st;
     if (s.stTicks !== undefined) m.stocks[code].stTicks = s.stTicks;
     if (s.fxTarget !== undefined) m.stocks[code].fxTarget = s.fxTarget;
+    // 金融大鳄的预览状态每轮同步
+    if (s.preview !== undefined) m.stocks[code].preview = s.preview;
   }
   if (d.me) {
     m.me = { ...m.me, ...d.me };

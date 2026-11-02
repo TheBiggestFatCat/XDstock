@@ -192,6 +192,8 @@ const server = http.createServer(async (req, res) => {
 // ---------------- 游戏主循环 ----------------
 function tickPayload(forPlayerId) {
   const d = getDb();
+  const tp = forPlayerId ? d.players[forPlayerId] : null;
+  const isTycoon = tp && tp.theme === 'tycoon';
   const stocks = {};
   for (const [code, st] of Object.entries(d.stocks)) {
     const prev = st.series.length > 1 ? st.series[st.series.length - 2] : st.price;
@@ -201,6 +203,23 @@ function tickPayload(forPlayerId) {
       changes: changesFor(st.series, TIMEFRAMES),
       status: st.status
     };
+    // 金融大鳄：每轮都下发预览状态，否则前端只在刷新时才知道
+    if (isTycoon && !st.isIndex) {
+      const pend = st.pendingReport;
+      stocks[code].preview = pend
+        ? {
+          eps: Number(pend.eps) || 0,
+          revenue: Number(pend.revenue) || 0,
+          netProfit: Number(pend.netProfit) || 0,
+          growth: Number(pend.growth) || 0,
+          tickLeft: Math.max(0, (Number(st.nextReportTick) || 0) - d.tick),
+          expectPct: (() => {
+            const oldEps = Number(st.fundamentals?.eps) || 0;
+            return oldEps > 0 ? ((Number(pend.eps) || 0) / oldEps - 1) * 100 : 0;
+          })()
+        }
+        : null;
+    }
   }
   let me = null;
   if (forPlayerId && d.players[forPlayerId]) {
