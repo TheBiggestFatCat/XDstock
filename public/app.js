@@ -42,6 +42,8 @@ const state = {
   shopDir: 1,
   fakeNewsTargets: [],
   tradeTab: 'order',
+  tickBucket: null,
+  tickKey: '',
   eqFitted: false,
   eqLastCount: 0,
   eqLastTime: 0,
@@ -1428,6 +1430,10 @@ async function loadCandles() {
 
     state.candles = clean;
     state.candleSeries.setData(state.candles);
+
+    // 记下当前桶号：下一次 tick 落在同一根 K 线里就只更新它
+    state.tickKey = code + '|' + tf;
+    state.tickBucket = Math.floor((state.market?.tick || 0) / (TF_SECONDS[tf] || 12));
     renderMAs();
     state.plSig = null;
     updatePriceLines();
@@ -1538,28 +1544,34 @@ function updateMarkers() {
 function applyTickToChart(price) {
   if (!state.candleSeries) return;
   if (!Number.isFinite(price) || price <= 0) return;
+
   const group = TF_SECONDS[state.tf] || 12;
   const tickMs = state.market?.tickMs || 5000;
-  const tick = state.market?.tick || 0;
+  const tick = Number(state.market?.tick);
+  if (!Number.isFinite(tick) || tick < 0) return;
+
+  // 用「第几个 K 线桶」判断是不是新的一根：
+  // 不要自己用 startedAt 推算时间戳，客户端算出来的时间和服务器
+  // 真正记录的 tick 时间对不上，会导致最后一根永远更新不了
   const bucket = Math.floor(tick / group);
-  const base = state.market?.startedAt || 0;
-  const time = Math.floor((base + bucket * group * tickMs) / 1000);
-  // 时间戳不合理就别往序列里塞，否则时间乱序会让整块 K 线渲染失败
-  if (!Number.isFinite(time) || time <= 0 || !base) return;
+  const bucketSec = (group * tickMs) / 1000;
+  const key = state.code + '|' + state.tf;
+  if (state.tickKey !== key) {
+    state.tickKey = key;
+    state.tickBucket = bucket;
+  }
+
   const last = state.candles[state.candles.length - 1];
-  if (last && time < last.time - 1) return;
-  if (!last || last.time < time) {
-    const c = { time, open: price, high: price, low: price, close: price };
-    state.candles.push(c);
-    if (state.candles.length > 400) state.candles.shift();
-    state.candleSeries.update(c);
-    renderMAs();
-  } else {
+  const sameBucket = state.tickBucket === null
+    || state.tickBucket === undefined
+    || bucket <= state.tickBucket;
+
+  if (last && sameBucket) {
+    // 同一根 K 线里：更新收盘价和上下影线
     last.close = price;
     last.high = Math.max(last.high, price);
     last.low = Math.min(last.low, price);
     state.candleSeries.update(last);
-    // MA 只更新最后一个点
     for (const period of [5, 10, 30]) {
       if (!state.maVisible[period]) continue;
       const n = state.candles.length;
@@ -1568,7 +1580,19 @@ function applyTickToChart(price) {
       for (let i = n - period; i < n; i++) sum += state.candles[i].close;
       state.maSeries[period].update({ time: last.time, value: Number((sum / period).toFixed(4)) });
     }
+    state.tickBucket = bucket;
+    return;
   }
+
+  // 开始新的一根：时间必须严格大于上一根
+  const nowSec = Math.floor(Date.now() / 1000);
+  const time = last ? Math.max(last.time + bucketSec, nowSec) : nowSec;
+  const c = { time, open: price, high: price, low: price, close: price };
+  state.candles.push(c);
+  if (state.candles.length > 400) state.candles.shift();
+  state.candleSeries.update(c);
+  renderMAs();
+  state.tickBucket = bucket;
 }
 
 // ---------------- K 线上的止盈止损 ----------------
