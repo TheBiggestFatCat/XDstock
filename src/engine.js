@@ -468,6 +468,20 @@ export function runReports(db) {
     const diff = Number(st.fundamentals.growth) - expected;
     st.lastSurprise = Math.max(-0.3, Math.min(0.3, diff));
     st.expectedGrowth = expected;
+
+    // 财报历史（给前端的折线图用）
+    if (!Array.isArray(st.reportHistory)) st.reportHistory = [];
+    st.reportHistory.push({
+      period: Number(st.fundamentals.period) || 0,
+      revenue: Number(st.fundamentals.revenue) || 0,
+      netProfit: Number(st.fundamentals.netProfit) || 0,
+      eps: Number(st.fundamentals.eps) || 0,
+      growth: Number(st.fundamentals.growth) || 0,
+      margin: Number(st.fundamentals.margin) || 0
+    });
+    if (st.reportHistory.length > 24) {
+      st.reportHistory.splice(0, st.reportHistory.length - 24);
+    }
     st.nextReportTick = db.tick + interval;
 
     // 财报当期的价格冲击：超预期就上冲/下杀

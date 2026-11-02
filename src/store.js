@@ -174,6 +174,38 @@ function migrate(d) {
     }
     // 合理价跟着财报走
     st.fair = Number(fairFromReport(st).toFixed(4));
+
+    // 老存档没有财报历史，按当前这一期的数字往前倒推几期，图表才有东西看
+    if (!Array.isArray(st.reportHistory) || !st.reportHistory.length) {
+      const f = st.fundamentals || {};
+      const g = Number(f.growth) || 0;
+      const rev = Number(f.revenue) || 0;
+      const np = Number(f.netProfit) || 0;
+      const eps = Number(f.eps) || 0;
+      const period = Number(f.period) || 0;
+      const hist = [];
+      for (let k = 5; k >= 1; k--) {
+        const back = Math.pow(1 + g, -k);
+        hist.push({
+          period: Math.max(1, period - k),
+          revenue: rev * back * (1 + (Math.random() - 0.5) * 0.04),
+          netProfit: np * back * (1 + (Math.random() - 0.5) * 0.06),
+          eps: eps * back,
+          growth: g * (1 + (Math.random() - 0.5) * 0.3),
+          margin: Number(f.margin) || 0,
+          backfill: true
+        });
+      }
+      hist.push({
+        period,
+        revenue: rev,
+        netProfit: np,
+        eps,
+        growth: g,
+        margin: Number(f.margin) || 0
+      });
+      st.reportHistory = hist;
+    }
     if (typeof st.nextReportTick !== 'number') st.nextReportTick = 0;
   }
 

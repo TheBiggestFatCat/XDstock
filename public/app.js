@@ -371,6 +371,7 @@ function renderReport() {
       <div><span>ROE</span><b>${((r.roe || 0) * 100).toFixed(1)}%</b></div>
       <div><span>资产负债率</span><b>${((r.debt || 0) * 100).toFixed(0)}%</b></div>
     </div>
+    ${renderReportChart(r.history)}
     ${(st.preview && state.market?.me?.theme === 'tycoon') ? `
       <div class="preview-box">
         <div class="preview-head">
@@ -385,6 +386,80 @@ function renderReport() {
         </div>
       </div>` : ''}
   `;
+}
+
+
+/** 财报历史折线图（纯 SVG，不依赖图表库） */
+function renderReportChart(hist) {
+  const list = (hist || []).filter((h) => Number(h.revenue) > 0);
+  if (list.length < 2) {
+    return '<div class="rc-empty">财报记录还不够，再等一期就能画图了</div>';
+  }
+  const W = 560;
+  const H = 118;
+  const padL = 8;
+  const padR = 8;
+  const padT = 12;
+  const padB = 18;
+  const iw = W - padL - padR;
+  const ih = H - padT - padB;
+
+  const rev = list.map((h) => Number(h.revenue) || 0);
+  const np = list.map((h) => Number(h.netProfit) || 0);
+
+  // 营收和净利量级差太多（几千亿 vs 几百亿），各自拉满，看趋势而不是比大小
+  const scaleOf = (arr) => {
+    const hi = Math.max(...arr);
+    const lo = Math.min(...arr);
+    const pad = Math.max(1e-9, (hi - lo) * 0.15);
+    return { lo: lo - pad, hi: hi + pad };
+  };
+  const sRev = scaleOf(rev);
+  const sNp = scaleOf(np);
+
+  const x = (i) => padL + (list.length === 1 ? iw / 2 : (i / (list.length - 1)) * iw);
+  const yOf = (v, sc) => padT + ih - ((v - sc.lo) / Math.max(1e-9, sc.hi - sc.lo)) * ih;
+  const y = (v) => yOf(v, sRev);
+  const yNp = (v) => yOf(v, sNp);
+
+  const path = (arr) => arr.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const area = `${path(rev)} L${x(list.length - 1).toFixed(1)},${(padT + ih).toFixed(1)} L${x(0).toFixed(1)},${(padT + ih).toFixed(1)} Z`;
+
+  const last = list[list.length - 1];
+  const first = list[0];
+  const revChg = Number(first.revenue) > 0
+    ? (Number(last.revenue) / Number(first.revenue) - 1) * 100 : 0;
+  const npChg = Number(first.netProfit) > 0
+    ? (Number(last.netProfit) / Number(first.netProfit) - 1) * 100 : 0;
+
+  const npPath = np.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${yNp(v).toFixed(1)}`).join(' ');
+
+  const dots = list.map((h, i) => `
+    <circle cx="${x(i).toFixed(1)}" cy="${y(Number(h.revenue)).toFixed(1)}" r="2.6" class="rc-dot" />
+    <circle cx="${x(i).toFixed(1)}" cy="${yNp(Number(h.netProfit)).toFixed(1)}" r="2.2" class="rc-dot np" />`).join('');
+
+  return `
+    <div class="rc-wrap">
+      <div class="rc-head">
+        <span class="rc-title">财报趋势 · 共 ${list.length} 期</span>
+        <span class="rc-legend">
+          <i class="rc-l1"></i>营收
+          <i class="rc-l2"></i>净利
+        </span>
+      </div>
+      <svg class="rc-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+        <line x1="${padL}" y1="${padT + ih}" x2="${W - padR}" y2="${padT + ih}" class="rc-axis" />
+        <path d="${area}" class="rc-area" />
+        <path d="${path(rev)}" class="rc-line" />
+        <path d="${npPath}" class="rc-line np" />
+        ${dots}
+      </svg>
+      <div class="rc-foot">
+        <span>营收 ${revChg >= 0 ? '+' : ''}${revChg.toFixed(0)}%</span>
+        <span>净利 ${npChg >= 0 ? '+' : ''}${npChg.toFixed(0)}%</span>
+        <span>营收 ${money0(last.revenue)} · 净利 ${money0(last.netProfit)}</span>
+      </div>
+    </div>`;
 }
 
 function renderIndexWeights() {

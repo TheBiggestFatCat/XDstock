@@ -254,6 +254,14 @@ export function reportPayload(st) {
     period: Number(f.period) || 0,
     reportAt: Number(f.reportAt) || 0,
     lastSurprise: Number(st.lastSurprise) || 0,
-    expectedGrowth: Number(f.expectedGrowth) || 0
+    expectedGrowth: Number(f.expectedGrowth) || 0,
+    history: (Array.isArray(st.reportHistory) ? st.reportHistory : []).map((h) => ({
+      period: h.period,
+      revenue: h.revenue,
+      netProfit: h.netProfit,
+      eps: h.eps,
+      growth: h.growth,
+      margin: h.margin
+    }))
   };
 }
