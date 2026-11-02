@@ -474,18 +474,163 @@ input.tpsl-input {
   .market-grid { grid-template-columns: 260px minmax(0, 1fr); }
   .trade-panel { grid-column: 1 / -1; }
 }
+/* ============================================================
+   手机端：参考同花顺的布局
+   - 顶部只留指数和资产
+   - 底部固定标签栏
+   - 行情页分「列表」和「个股详情」两屏
+   - 主题配色全部走 CSS 变量，自动适配
+   ============================================================ */
 @media (max-width: 760px) {
-  .content { padding: 12px 12px 80px; }
-  .topbar { padding: 10px 12px; gap: 8px; }
-  .cash-box { display: none; }
-  .market-grid { grid-template-columns: 1fr; }
-  .stock-list { max-height: 260px; }
-  .chart-panel { min-height: 420px; }
-  .chart-canvas { min-height: 300px; }
-  .view { padding-bottom: 20px; }
-  .stat-grid { grid-template-columns: 1fr 1fr; }
-  .config-form { grid-template-columns: 1fr; }
+  html, body { -webkit-text-size-adjust: 100%; }
+
+  /* ---------- 顶部栏 ---------- */
+  .topbar {
+    padding: calc(6px + env(safe-area-inset-top)) 12px 6px;
+    gap: 8px;
+    min-height: 50px;
+  }
+  .logo-mini { display: none; }
+  .index-box { gap: 7px; }
   .index-label { display: none; }
+  .index-value { font-size: 16px; }
+  .index-change { font-size: 11px; }
+  .cash-box { display: flex; flex-direction: row; align-items: baseline; gap: 5px; }
+  .cash-label { font-size: 10px; }
+  .cash-value { font-size: 14px; }
+  .user-box { display: none; }
+  .avatar-btn { width: 30px; height: 30px; }
+
+  /* ---------- 底部标签栏 ---------- */
+  .tabs {
+    position: fixed;
+    left: 0; right: 0; bottom: 0; top: auto;
+    z-index: 60;
+    display: flex;
+    justify-content: space-around;
+    gap: 0;
+    padding: 5px 2px calc(5px + env(safe-area-inset-bottom));
+    background: var(--glass);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -6px 22px rgba(15, 42, 38, .07);
+    opacity: 1;
+    overflow: visible;
+  }
+  .tab {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    padding: 4px 0 3px;
+    font-size: 10px;
+    font-weight: 500;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--ink-3);
+  }
+  .tab::before { font-size: 17px; line-height: 1.15; }
+  .tab[data-view="market"]::before { content: '📈'; }
+  .tab[data-view="portfolio"]::before { content: '💼'; }
+  .tab[data-view="work"]::before { content: '💰'; }
+  .tab[data-view="shop"]::before { content: '🛒'; }
+  .tab[data-view="rank"]::before { content: '🏆'; }
+  .tab[data-view="admin"]::before { content: '⚙️'; }
+  .tab:hover { background: transparent; }
+  .tab.active {
+    background: transparent;
+    color: var(--accent-2);
+    font-weight: 700;
+    box-shadow: none;
+  }
+
+  /* ---------- 内容区 ---------- */
+  .content {
+    padding: 8px 10px calc(64px + env(safe-area-inset-bottom));
+  }
+  .panel { padding: 12px; border-radius: 14px; }
+  .view { padding-bottom: 8px; }
+
+  /* ---------- 行情页：列表 / 详情 两屏 ---------- */
+  .market-grid { grid-template-columns: 1fr; gap: 10px; }
+
+  body:not(.m-detail) .chart-panel,
+  body:not(.m-detail) .trade-panel { display: none; }
+  body.m-detail .news-panel,
+  body.m-detail .stock-list-panel,
+  body.m-detail .positions-panel { display: none; }
+
+  .stock-list { max-height: none; overflow: visible; }
+  .stock-item { padding: 11px 10px; }
+  .stock-icon { width: 38px; height: 38px; }
+  .stock-price { font-size: 15px; }
+  .stock-chg { font-size: 11px; }
+
+  /* 详情页：返回条 */
+  .m-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 4px 10px 4px 6px;
+    margin-right: 6px;
+    border: none;
+    border-radius: 8px;
+    background: var(--soft-2);
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  .chart-head { flex-wrap: wrap; gap: 6px; }
+  .chart-title { gap: 7px; }
+  .chart-title h2 { font-size: 16px; }
+  .big-price { font-size: 22px; }
+  .big-change { font-size: 12px; }
+  .chart-toolbar { flex-wrap: wrap; gap: 6px; }
+  .tf-group { gap: 2px; }
+  .tf { padding: 5px 10px; font-size: 12px; }
+  .ma-group { gap: 8px; font-size: 11px; }
+  .chart-canvas { min-height: 260px; height: 44vh; }
+  .chart-panel { min-height: 0; }
+
+  /* 交易面板在手机上排成紧凑的两列 */
+  .trade-panel { padding: 12px; }
+  .mode-switch, .side-switch { margin-bottom: 8px; }
+  .cost-box { padding: 9px 11px; font-size: 12px; }
+  .quick-qty button { padding: 7px 0; font-size: 11.5px; }
+  .order-hint, .field-hint { font-size: 10.5px; }
+
+  /* ---------- 表格横向滚动 ---------- */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table-wrap table { min-width: 560px; }
+
+  /* ---------- 其它页面 ---------- */
+  .stat-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-card { padding: 11px 12px; }
+  .config-form { grid-template-columns: 1fr; }
+  .admin-grid { grid-template-columns: 1fr; }
+  .shop-grid { grid-template-columns: 1fr; }
+  .rank-row { gap: 8px; padding: 9px 8px; }
+  .news-panel { margin-bottom: 10px; }
+  .news-feed { max-height: 148px; }
+
+  /* 指纹/刘海屏安全区 */
+  .login-wrap { padding: calc(20px + env(safe-area-inset-top)) 16px calc(20px + env(safe-area-inset-bottom)); }
+  .login-card { padding: 24px 18px 20px; border-radius: 20px; }
+}
+
+/* 手机横屏时图表可以矮一点 */
+@media (max-width: 760px) and (max-height: 480px) {
+  .chart-canvas { height: 60vh; min-height: 200px; }
+}
+
+/* 桌面端隐藏返回按钮 */
+@media (min-width: 761px) {
+  .m-back { display: none; }
 }
 
 

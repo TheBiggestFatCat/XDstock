@@ -62,7 +62,8 @@ const MIME = {
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon'
+  '.ico': 'image/x-icon',
+  '.webmanifest': 'application/manifest+json; charset=utf-8'
 };
 
 function serveStatic(res, filePath) {
@@ -73,7 +74,7 @@ function serveStatic(res, filePath) {
       return;
     }
     const ext = path.extname(filePath).toLowerCase();
-    const noCache = ['.html', '.js', '.css'].includes(ext);
+    const noCache = ['.html', '.js', '.css', '.webmanifest'].includes(ext);
     res.writeHead(200, {
       'Content-Type': MIME[ext] || 'application/octet-stream',
       'Cache-Control': noCache ? 'no-cache, must-revalidate' : 'public, max-age=3600'

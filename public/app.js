@@ -82,6 +82,11 @@ function stockChange(st) {
   return Number.isFinite(st.changePct) ? st.changePct : 0;
 }
 
+/** 当前是不是手机宽度 */
+function isMobile() {
+  return window.matchMedia('(max-width: 760px)').matches;
+}
+
 function toast(msg, type = '') {
   const el = $('#toast');
   el.textContent = msg;
@@ -1054,6 +1059,11 @@ function renderMyOrders() {
 
 function selectStock(code) {
   state.code = code;
+  // 手机上点列表进入个股详情页
+  if (isMobile()) {
+    document.body.classList.add('m-detail');
+    resizeChartNow();
+  }
   $$('.stock-item').forEach((el) => el.classList.toggle('active', el.dataset.code === code));
   const st = state.market.stocks[code];
   if (!st) return;
@@ -1188,11 +1198,29 @@ function buildChart() {
     });
   }
 
+  // 手机上初次创建时图表容器可能是隐藏的（宽高为 0），
+  // 给个兜底尺寸，等真正显示出来再由 ResizeObserver 校正
+  const safeW = el.clientWidth || 320;
+  const safeH = el.clientHeight || 300;
   const ro = new ResizeObserver(() => {
-    chart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
+    const w = el.clientWidth;
+    const h = el.clientHeight;
+    if (w > 0 && h > 0) chart.applyOptions({ width: w, height: h });
   });
   ro.observe(el);
-  chart.applyOptions({ width: el.clientWidth, height: el.clientHeight });
+  chart.applyOptions({ width: safeW, height: safeH });
+}
+
+/** 切换列表/详情后，手动触发一次图表尺寸校正 */
+function resizeChartNow() {
+  const el = $('#chart');
+  const chart = state.chart;
+  if (!el || !chart) return;
+  requestAnimationFrame(() => {
+    const w = el.clientWidth;
+    const h = el.clientHeight;
+    if (w > 0 && h > 0) chart.applyOptions({ width: w, height: h });
+  });
 }
 
 // ---------------- 下单卡片：下单 / 成交记录 切换 ----------------
@@ -2655,6 +2683,8 @@ function switchView(name) {
   if (name === 'work') renderWork();
   if (name === 'rank') loadRank(true);
   if (name === 'shop') renderShop();
+  // 切换标签时退回列表态（手机上从个股详情回到列表）
+  document.body.classList.remove('m-detail');
   if (name === 'admin') {
     if (state.adminToken) loadAdmin();
     else {
@@ -2813,6 +2843,10 @@ function bind() {
   });
   $('#fakeNewsBuy')?.addEventListener('click', buyFakeNews);
   $('#bodyguardBuy')?.addEventListener('click', buyBodyguard);
+  $('#mBackBtn')?.addEventListener('click', () => {
+    document.body.classList.remove('m-detail');
+    resizeChartNow();
+  });
   document.querySelectorAll('.theme-btn').forEach((b) => {
     b.addEventListener('click', () => chooseTheme(b.dataset.themeCode));
   });
@@ -2848,6 +2882,14 @@ async function boot() {
     }
   }
   showLogin();
+}
+
+// PWA：只在安全上下文（https/localhost）注册 Service Worker，
+// 用 http://IP 直接访问时浏览器会拒绝，这里静默跳过
+if ('serviceWorker' in navigator && window.isSecureContext) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
 }
 
 boot();
