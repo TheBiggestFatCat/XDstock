@@ -331,11 +331,7 @@ function renderReport() {
       <div><span>ROE</span><b>${((r.roe || 0) * 100).toFixed(1)}%</b></div>
       <div><span>资产负债率</span><b>${((r.debt || 0) * 100).toFixed(0)}%</b></div>
     </div>
-    <div class="rp-fair">
-      <div><span>价值回归线</span><b>$${Number(st.fair || 0).toFixed(2)}</b></div>
-      <div><span>现价</span><b>$${Number(st.price || 0).toFixed(2)}</b></div>
-      <div class="${cls2}">${word} <b>${prem >= 0 ? '+' : ''}${prem.toFixed(1)}%</b></div>
-    </div>`;
+  `;
 }
 
 function toggleReportPanel() {
