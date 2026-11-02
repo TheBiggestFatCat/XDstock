@@ -603,6 +603,22 @@ function renderShop() {
       }
     }
 
+    // 报名倒计时
+    const cdEl = $('#actCountdown');
+    if (cdEl) {
+      if (act.status === 'running' && act.joinLeftMs > 0) {
+        const m = Math.floor(act.joinLeftMs / 60000);
+        const sec = Math.floor((act.joinLeftMs % 60000) / 1000);
+        cdEl.classList.remove('hidden');
+        cdEl.innerHTML = `⏳ 报名时间还剩 <b>${m}:${String(sec).padStart(2, '0')}</b>，结束后随时可能开火`;
+      } else if (act.status === 'running' && (act.targets || []).some((t) => !t.raided)) {
+        cdEl.classList.remove('hidden');
+        cdEl.innerHTML = '🔴 <b>已进入开火状态</b>，随时可能瓜分';
+      } else {
+        cdEl.classList.add('hidden');
+      }
+    }
+
     const btn = $('#actJoinBtn');
     if (btn) {
       if (act.status === 'done') {
@@ -2836,7 +2852,8 @@ async function loadAdmin() {
       fields: [
         ['activityEnabled', '活动开关(1=开)'],
         ['activityThreshold', '触发阈值(资产)'],
-        ['activityReward', '平分总金额']
+        ['activityReward', '平分总金额'],
+        ['activityJoinMinutes', '报名时间(分钟)']
       ]
     },
     {

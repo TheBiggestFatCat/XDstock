@@ -5,7 +5,9 @@ const DEFAULT = () => ({
   participants: [],
   status: 'idle',
   results: [],
-  lastResult: null
+  lastResult: null,
+  startedAt: 0,   // 管理员点启动的时间
+  armsAt: 0       // 到这个时间点之后才可能触发（给玩家报名时间）
 });
 
 export function ensureActivity(db) {
@@ -15,6 +17,8 @@ export function ensureActivity(db) {
   if (!Array.isArray(a.results)) a.results = [];
   if (!a.status) a.status = 'idle';
   if (a.lastResult === undefined) a.lastResult = null;
+  if (typeof a.startedAt !== 'number') a.startedAt = 0;
+  if (typeof a.armsAt !== 'number') a.armsAt = 0;
   return a;
 }
 
@@ -62,6 +66,11 @@ export function activityPayload(db, viewer) {
     aliveCount: alive.length,
     totalEquity: alive.reduce((s, t) => s + t.equity, 0),
     participantCount: a.participants.length,
+    startedAt: a.startedAt,
+    armsAt: a.armsAt,
+    joinLeftMs: a.status === 'running' ? Math.max(0, a.armsAt - Date.now()) : 0,
+    joinMinutes: Number(cfg.activityJoinMinutes ?? 10),
+    armed: a.status === 'running' && Date.now() >= a.armsAt,
     joined: !!(viewer && a.participants.includes(viewer.id)),
     isTarget: !!(viewer && targets.some((p) => p.id === viewer.id)),
     results: a.results,
@@ -102,10 +111,14 @@ export function adminActivity(db, action, targets) {
     return { ok: true };
   }
   if (action === 'start') {
+    const mins = Math.max(0, Number(db.config.activityJoinMinutes ?? 10));
     a.participants = [];
     a.results = [];
     a.lastResult = null;
     a.status = 'running';
+    a.startedAt = Date.now();
+    // 启动后先给玩家这么多分钟报名，到点才可能开火
+    a.armsAt = Date.now() + mins * 60 * 1000;
     return { ok: true };
   }
   if (action === 'stop') {
@@ -129,6 +142,8 @@ export function checkActivity(db) {
   if (Number(cfg.activityEnabled ?? 1) === 0) return null;
   if (a.status !== 'running') return null;
   if (!a.participants.length) return null;
+  // 报名时间还没结束，先不开火
+  if (a.armsAt && Date.now() < a.armsAt) return null;
 
   const threshold = Number(cfg.activityThreshold ?? 500000);
   const reward = Math.max(0, Number(cfg.activityReward ?? 4000000));

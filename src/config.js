@@ -80,8 +80,9 @@ export const DEFAULT_CONFIG = {
   // 现时活动：打倒量化资本
   activityEnabled: 1,            // 1 = 活动进行中
   activityTargets: ['鹰角网络'],   // 被瓜分名单（玩家昵称数组）
-  activityThreshold: 500000,     // 总资产超过多少触发
+  activityThreshold: 5000000,    // 总资产超过多少触发（500 万）
   activityReward: 4000000,       // 平分给他的总金额
+  activityJoinMinutes: 10,       // 启动后给玩家多少分钟报名
 
   // 「红红的牛」技能：指数处于上升趋势时平仓，额外返 1% 成交额
   redBonusRate: 0.01,

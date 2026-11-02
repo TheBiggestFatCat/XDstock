@@ -2074,3 +2074,14 @@ body[data-theme="dark"] .fee-bonus { color: var(--down); }
 .act-admin-results { display: flex; flex-direction: column; gap: 4px; }
 .chip-toggle.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .chip-toggle.active i { opacity: .85; }
+
+.act-countdown {
+  font-size: 12px;
+  color: var(--ink-2);
+  margin: 6px 0 8px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: var(--hl-warm);
+  border: 1px solid var(--bd-warn);
+}
+.act-countdown b { color: var(--up); font-variant-numeric: tabular-nums; }
