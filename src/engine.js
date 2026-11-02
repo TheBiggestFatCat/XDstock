@@ -269,6 +269,14 @@ export function stepMarket(db) {
   // 3.5 生成市场噪声成交（反映本轮的随机波动）
   genMarketTrades(db);
 
+  // 3.6 种业：市场提前向天气预期靠拢
+  for (const s2 of stocks) {
+    if (s2.isIndex || s2.trait?.id !== 'weather') continue;
+    if (!(Number(s2.weatherTarget) > 0)) continue;
+    const rate = Math.max(0, Math.min(0.05, Number(s2.trait?.anticipate) || 0.004));
+    s2.fair = Number((s2.fair + (s2.weatherTarget - s2.fair) * rate).toFixed(4));
+  }
+
   // 4. 生成新新闻
   spawnNews(db);
 
@@ -461,7 +469,9 @@ export function runReports(db) {
     const fxNow = Number(db.fx?.rate) || 0;
     const fxBase = Number(db.fx?.reportBase) || fxNow;
     const fxReturn = fxBase > 0 ? fxNow / fxBase - 1 : 0;
-    st.fundamentals = st.pendingReport || genNextReport(st, { volumeFactor, fxFactor, fxReturn });
+    st.fundamentals = st.pendingReport || genNextReport(st, {
+      volumeFactor, fxFactor, fxReturn, weather: st.weather?.score || 0
+    });
     // 这一期结束后，汇率基准往前推
     if (db.fx) db.fx.reportBase = fxNow;
     st.pendingReport = null;
@@ -480,6 +490,16 @@ export function runReports(db) {
 
     // 财报历史（给前端的折线图用）
     if (!Array.isArray(st.reportHistory)) st.reportHistory = [];
+    // 种业：掷下一期天气（公开），并算出市场会靠拢的目标价
+    if (st.trait?.id === 'weather') {
+      const score = Math.max(-1, Math.min(1, gauss() * 0.55));
+      const label = score > 0.45 ? '大丰收' : score > 0.12 ? '风调雨顺'
+        : score > -0.12 ? '平平无奇' : score > -0.45 ? '略有减产' : '灾害歉收';
+      st.weather = { score, label };
+      const swing = Math.max(0.1, Number(st.trait?.swing) || 0.5);
+      st.weatherTarget = Math.max(0.5, Number(st.fair) * (1 + score * swing));
+    }
+
     st.reportHistory.push({
       period: Number(st.fundamentals.period) || 0,
       revenue: Number(st.fundamentals.revenue) || 0,

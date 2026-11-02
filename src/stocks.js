@@ -138,6 +138,27 @@ export const STOCK_SEED = {
       track: 0.06       // 每轮向目标价靠拢的比例
     }
   },
+  PVZ: {
+    code: 'PVZ',
+    name: '戴夫种业',
+    icon: '/assets/stocks/PVZ.png',
+    industry: '农业种业',
+    shares: 400000000,   // 总股本 4 亿股
+    freeFloat: 0.55,
+    desc: '种子研发、作物种植、农业科技',
+    initialPrice: 60,
+    trait: {
+      id: 'weather',
+      name: '靠天吃饭',
+      desc: '看天吃饭：天气好就是大丰收，天气差就颗粒无收；所有人都提前知道天气',
+      volMult: 0.9,
+      revMult: 1.0,
+      // 天气对营收增速的影响幅度（±50%）
+      swing: 0.5,
+      // 市场提前靠拢预期的速度（每轮）
+      anticipate: 0.004
+    }
+  },
   XD: {
     code: 'XD',
     name: '小灯证券',

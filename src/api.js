@@ -170,6 +170,13 @@ function marketPayload(db, me) {
       freeCap: report ? report.freeCap : 0,
       fair: Number(st.fair) || 0,
       nextReportTick: Number(st.nextReportTick) || 0,
+      weather: st.weather
+        ? {
+          score: Number(st.weather.score) || 0,
+          label: st.weather.label || '',
+          target: Number(st.weatherTarget) || 0
+        }
+        : null,
       report,
       // 金融大鳄：提前看到金融板块的下一期财报
       preview: (me && me.theme === 'tycoon' && st.pendingReport)

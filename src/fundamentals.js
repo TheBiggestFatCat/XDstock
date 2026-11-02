@@ -151,6 +151,13 @@ export function genNextReport(st, ctx = {}) {
   }
 
   // 市场预期 = 这家公司按当前规模本该有的增速（不含随机噪声）
+  // 种业：营收完全由天气决定（天气全程公开，大家都知道）
+  if (trait === 'weather') {
+    const w = clamp(Number(ctx.weather) || 0, -1, 1);
+    const swing = Math.max(0.1, Number(st.trait?.swing) || 0.5);
+    growth = w * swing;
+  }
+
   const expectedGrowth = clamp(growth, -0.35, 0.9);
 
   growth += rand(-0.08, 0.08);
