@@ -9,6 +9,7 @@ import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, positionPnl, logTrade } from './src/trading.js';
 import { processOrders } from './src/orders.js';
 import { checkDelist } from './src/delist.js';
+import { fetchAudJpy } from './src/fx.js';
 import { handleApi } from './src/api.js';
 import { NEWS_POOL } from './src/news.js';
 
@@ -257,6 +258,13 @@ function tickPayload(forPlayerId) {
     closed: d.config.marketOpen === false,
     index: d.index.value,
     indexChanges: changesFor(d.index.series, TIMEFRAMES),
+    fx: {
+      rate: Number(d.fx?.rate) || 0,
+      prevRate: Number(d.fx?.prevRate) || 0,
+      base: Number(d.fx?.base) || 0,
+      at: d.fx?.at || 0,
+      stale: !!d.fx?.stale
+    },
     stocks,
     config: {
       minLeverage: d.config.minLeverage,
@@ -515,11 +523,43 @@ function loop() {
   lastTickAt = now();
 }
 
+// ---------------- 实时汇率（留美外汇的驱动）----------------
+async function refreshFx() {
+  const d = getDb();
+  if (!d.fx) d.fx = { rate: 0, base: 0, prevRate: 0, at: 0, source: '' };
+  const r = await fetchAudJpy();
+  if (!r) {
+    d.fx.stale = true;
+    return;
+  }
+  d.fx.prevRate = d.fx.rate || r.rate;
+  d.fx.rate = r.rate;
+  d.fx.at = r.at;
+  d.fx.source = r.source;
+  d.fx.stale = false;
+  // 第一次抓到的汇率作为基准点，之后股价按相对它涨跌
+  if (!d.fx.base) d.fx.base = r.rate;
+}
+
+let fxTimer = null;
+function startFxLoop() {
+  const d = getDb();
+  if (Number(d.config.fxEnabled ?? 1) === 0) return;
+  const ms = Math.max(15000, Number(d.config.fxRefreshMs ?? 60000));
+  refreshFx().catch((e) => console.error('[fx] 初始化失败:', e.message));
+  fxTimer = setInterval(() => {
+    refreshFx().catch((e) => console.error('[fx] 抓取失败:', e.message));
+  }, ms);
+  if (fxTimer.unref) fxTimer.unref();
+}
+
 const timer = setInterval(loop, Math.max(1000, db.config.tickMs || 5000));
 
 // 启动时先备份一次，之后每 30 分钟一份
 backupDb('boot');
 setInterval(() => backupDb(), 30 * 60 * 1000);
+
+startFxLoop();
 
 server.listen(PORT, () => {
   console.log(`\n  小灯证券 · 网页版`);

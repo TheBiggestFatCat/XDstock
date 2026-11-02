@@ -224,6 +224,41 @@ function renderTopbar() {
 const ST_DEFAULT_PRICE = 3;
 
 /** 图表上方的 ST / 退市提示条 */
+/** 留美外汇专用的汇率信息条 */
+function renderChartSub(st) {
+  const el = $('#chartSub');
+  if (!el) return;
+  if (!st || st.trait?.id !== 'fx') {
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+  const fx = state.market?.fx || {};
+  const cfg = state.market?.config || {};
+  const rate = Number(fx.rate) || 0;
+  const base = Number(fx.base) || rate || 0;
+  const coef = Number(st.trait?.coef ?? cfg.fxCoef ?? 1);
+  const lev = Number(st.trait?.lev ?? cfg.fxLeverage ?? 8);
+
+  if (!rate) {
+    el.classList.remove('hidden');
+    el.innerHTML = '<span class="cs-tag">FX</span> 汇率数据暂不可用，股价按自身波动走';
+    return;
+  }
+  const chg = base ? (rate / base - 1) * 100 : 0;
+  const target = Number(st.fxTarget) || 0;
+  const cls = chg > 0 ? 'up' : chg < 0 ? 'down' : 'flat';
+  el.classList.remove('hidden');
+  el.innerHTML = `
+    <span class="cs-tag">AUD/JPY</span>
+    <b>${rate.toFixed(3)}</b>
+    <span class="${cls}">${chg >= 0 ? '+' : ''}${chg.toFixed(3)}%</span>
+    <span class="cs-sep">·</span>
+    <span>系数 ×${coef} 杠杆 ×${lev}</span>
+    ${target > 0 ? `<span class="cs-sep">·</span><span>目标价 <b>${target.toFixed(2)}</b></span>` : ''}
+    ${fx.stale ? '<span class="cs-warn">（数据延迟）</span>' : ''}`;
+}
+
 function renderStBanner(st) {
   let el = $('#stBanner');
   if (!el) {
@@ -1017,6 +1052,7 @@ function selectStock(code) {
     : '';
   $('#chartName').innerHTML = stBadge + escapeHtml(st.name);
   renderStBanner(st);
+  renderChartSub(st);
   $('#chartCode').textContent = st.code;
   $('#chartIcon').src = st.icon || '';
   $('#chartPrice').textContent = st.price.toFixed(2);
@@ -1433,6 +1469,7 @@ function onTick(d) {
   m.index.value = d.index;
   // 指数的各周期涨跌幅也要跟着更新，否则顶部读数会一直停在进页面时那一刻
   if (d.indexChanges) m.index.changes = d.indexChanges;
+  if (d.fx) m.fx = d.fx;
   m.index.series.push(d.index);
   if (m.index.series.length > 600) m.index.series.shift();
   m.events = d.events || [];
@@ -1452,6 +1489,7 @@ function onTick(d) {
     if (s.changes) m.stocks[code].changes = s.changes;
     if (s.st !== undefined) m.stocks[code].st = s.st;
     if (s.stTicks !== undefined) m.stocks[code].stTicks = s.stTicks;
+    if (s.fxTarget !== undefined) m.stocks[code].fxTarget = s.fxTarget;
   }
   if (d.me) {
     m.me = { ...m.me, ...d.me };
@@ -1487,6 +1525,7 @@ function onTick(d) {
   // ST 进度每轮都在变，刷一下标题区和列表徽章
   const curSt = state.market?.stocks?.[state.code];
   if (curSt && curSt.st !== undefined) renderStBanner(curSt);
+  if (curSt) renderChartSub(curSt);
 
   if ($('#view-work').classList.contains('active')) renderWork();
   if ($('#view-shop').classList.contains('active')) renderShop();
@@ -2347,6 +2386,17 @@ async function loadAdmin() {
         ['playerImpactFlowMax', '压力上限'],
         ['impactCostCoef', '冲击成本系数(0=不收)'],
         ['impactCostMax', '冲击成本封顶(0.06=6%)']
+      ]
+    },
+    {
+      title: '实时汇率',
+      desc: '留美外汇的股价由 AUD/JPY 驱动',
+      fields: [
+        ['fxEnabled', '汇率驱动(1=开 0=关)'],
+        ['fxCoef', '放大系数'],
+        ['fxLeverage', '杠杆倍数'],
+        ['fxRefreshMs', '抓取间隔(毫秒)'],
+        ['fxTrack', '每轮靠拢比例']
       ]
     },
     {

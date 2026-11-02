@@ -103,6 +103,24 @@ export const STOCK_SEED = {
       floorBoost: 0.025
     }
   },
+  LMFX: {
+    code: 'LMFX',
+    name: '留美外汇',
+    icon: '/assets/stocks/LMFX.jpeg',
+    industry: '金融',
+    desc: '外汇自营、套息交易、高杠杆',
+    initialPrice: 100,
+    trait: {
+      id: 'fx',
+      name: '汇率杠杆',
+      desc: '拿自营盘加杠杆押注澳元兑日元，汇率一动它就剧烈反应',
+      volMult: 0.35,
+      revMult: 0,
+      // 股价 = 初始价 × (1 + 汇率涨跌 × 系数 × 杠杆)
+      coef: 1,
+      lev: 8
+    }
+  },
   XD: {
     code: 'XD',
     name: '小灯证券',

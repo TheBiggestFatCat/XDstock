@@ -55,6 +55,13 @@ export const DEFAULT_CONFIG = {
 
   // ---- ST 与退市 ----
   stPrice: 3,          // 股价跌破这个值进入 ST
+
+  // ---- 实时汇率（留美外汇的驱动）----
+  fxEnabled: 1,        // 1=开启 0=纯随机
+  fxRefreshMs: 60000,  // 多久抓一次汇率
+  fxCoef: 1,           // 汇率涨跌放大系数
+  fxLeverage: 8,       // 杠杆倍数（和系数相乘）
+  fxTrack: 0.06,       // 每轮向目标价靠拢的比例
   stDelistTicks: 100,  // 连续这么多轮低于该值就退市
 
   // ---- 商城 ----

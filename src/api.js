@@ -160,8 +160,12 @@ function marketPayload(db, me) {
       dayChangePct: ((st.price - st.initialPrice) / st.initialPrice) * 100,
       status: st.status,
       initialPrice: st.initialPrice,
+      // 标的性格（涨跌特征），前端用来显示特质说明
+      trait: st.trait || {},
+      traitName: st.trait?.name || '',
       st: !!st.st,
       stTicks: st.stTicks || 0,
+      fxTarget: st.fxTarget || 0,
       stPrice: db.config.stPrice ?? 3,
       stDelistTicks: db.config.stDelistTicks ?? 100
     };
@@ -194,7 +198,19 @@ function marketPayload(db, me) {
       .filter((n) => now() - n.at < 24 * 3600 * 1000)
       .map((n) => ({ id: n.id, text: n.text, at: n.at, kind: n.kind || null })),
     me: me ? publicPlayer(me, db) : null,
+    fx: {
+      rate: Number(db.fx?.rate) || 0,
+      prevRate: Number(db.fx?.prevRate) || 0,
+      base: Number(db.fx?.base) || 0,
+      at: db.fx?.at || 0,
+      source: db.fx?.source || '',
+      stale: !!db.fx?.stale
+    },
     config: {
+      fxEnabled: db.config.fxEnabled ?? 1,
+      fxCoef: db.config.fxCoef ?? 1,
+      fxLeverage: db.config.fxLeverage ?? 8,
+      fxRefreshMs: db.config.fxRefreshMs ?? 60000,
       stPrice: db.config.stPrice ?? 3,
       stDelistTicks: db.config.stDelistTicks ?? 100,
       playerImpactTail: db.config.playerImpactTail ?? 1,
@@ -548,6 +564,7 @@ export async function handleApi(ctx) {
       'shopFakeNewsPrice', 'shopFakeNewsChance',
       'shopBodyguardPrice', 'shopBodyguardTicks', 'shopThemePrice',
       'stPrice', 'stDelistTicks',
+      'fxEnabled', 'fxCoef', 'fxLeverage', 'fxRefreshMs', 'fxTrack',
       'impactCostCoef', 'impactCostMax', 'playerImpactTail',
       'maxOrdersPerTick', 'maxFillNotionalPerTick',
       'limitOrderEnabled', 'orderTtlTicks', 'maxPendingOrders',

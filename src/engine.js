@@ -24,7 +24,7 @@ function uniform(lo, hi) {
 }
 
 /** 单只股票走一步 */
-function stepStock(st, cfg, events, brokerDrift) {
+function stepStock(st, cfg, events, brokerDrift, fxData) {
   const t = st.trait || {};
   const sigma = cfg.baseVolatility * (t.volMult ?? 1);
   let logRet = gauss() * sigma;
@@ -67,6 +67,27 @@ function stepStock(st, cfg, events, brokerDrift) {
   // 护盘：跌破合理估值的比例就有买盘
   if (t.id === 'backstop' && t.floorRatio) {
     if (p < st.fair * t.floorRatio) p *= 1 + (t.floorBoost ?? 0.025);
+  }
+
+  // 汇率杠杆：股价被 AUD/JPY 牵着走
+  let fxTarget = 0;
+  if (t.id === 'fx') {
+    const fx = fxData || {};
+    const rate = Number(fx.rate) || 0;
+    const base = Number(fx.base) || rate || 0;
+    const coef = Number(t.coef ?? cfg.fxCoef ?? 1);
+    const lev = Number(t.lev ?? cfg.fxLeverage ?? 8);
+    if (rate > 0 && base > 0 && Number(cfg.fxEnabled ?? 1) !== 0) {
+      // 汇率涨跌 × 系数 × 杠杆 = 股价应有的涨跌
+      const implied = 1 + (rate / base - 1) * coef * lev;
+      fxTarget = st.initialPrice * Math.max(0.1, implied);
+      st.fxTarget = fxTarget;
+      // 每轮朝目标靠一点，汇率更新时不会一根直线跳完
+      const track = Math.max(0, Math.min(1, Number(cfg.fxTrack ?? 0.06)));
+      if (track > 0 && fxTarget > 0) {
+        p *= Math.exp(track * Math.log(fxTarget / p));
+      }
+    }
   }
 
   // 均值回归（对数空间）
@@ -213,7 +234,7 @@ export function stepMarket(db) {
   for (const st of stocks) {
     if (st.status !== 'normal') continue;
     if (st.isIndex) continue;   // 指数不自己走，等下面按成分算
-    stepStock(st, cfg, db.events, st.trait?.id === 'broker' ? brokerDrift : 0);
+    stepStock(st, cfg, db.events, st.trait?.id === 'broker' ? brokerDrift : 0, db.fx);
 
     st.series.push(Number(st.price.toFixed(4)));
     const cap = cfg.historyTicks ?? 3600;

@@ -65,6 +65,8 @@ export function createDb() {
     tickMs: DEFAULT_CONFIG.tickMs,
     config: { ...DEFAULT_CONFIG },
     stocks,
+  // 实时汇率：留美外汇的股价由它驱动
+  fx: { rate: 0, prevRate: 0, base: 0, at: 0, source: '', stale: true },
     index: { value: INDEX_BASE, series: [INDEX_BASE] },
     players: {},
     sessions: {},
@@ -125,6 +127,11 @@ function migrate(d) {
     };
   }
   merged.stocks[INDEX_STOCK.code].isIndex = true;
+
+  // 老存档补上汇率缓存
+  if (!merged.fx || typeof merged.fx !== 'object') {
+    merged.fx = { rate: 0, prevRate: 0, base: 0, at: 0, source: '', stale: true };
+  }
 
   // 老存档补上 ST 字段
   for (const s2 of Object.values(merged.stocks)) {
