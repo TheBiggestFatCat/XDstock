@@ -10,3 +10,8 @@ package-lock.json
 _chrome_profile*/
 _*.mjs
 deploy_pkg.tar.gz
+_chrome_profile*/
+_cp*/
+_shots/
+_*.py
+_*.mjs
