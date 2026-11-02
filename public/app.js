@@ -911,13 +911,19 @@ function renderBanList() {
         ${p.banReason ? `<span class="ban-reason">${escapeHtml(p.banReason)}</span>` : ''}
         <span class="ban-money">${money0(p.equity)}</span>
       </div>
-      <button class="ban-btn ${p.banned ? 'unban' : ''}" data-ban-id="${p.id}" data-ban-action="${p.banned ? 'unban' : 'ban'}">
-        ${p.banned ? '解封' : '封禁'}
-      </button>
+      <div class="ban-actions">
+        <button class="ban-btn ${p.banned ? 'unban' : ''}" data-ban-id="${p.id}" data-ban-action="${p.banned ? 'unban' : 'ban'}">
+          ${p.banned ? '解封' : '封禁'}
+        </button>
+        ${p.banned ? `<button class="ban-btn del" data-del-id="${p.id}" data-del-name="${escapeHtml(p.nickname)}">删号</button>` : ''}
+      </div>
     </div>`).join('');
 
   box.querySelectorAll('[data-ban-id]').forEach((b) => {
     b.addEventListener('click', () => banPlayer(b.dataset.banId, b.dataset.banAction));
+  });
+  box.querySelectorAll('[data-del-id]').forEach((b) => {
+    b.addEventListener('click', () => deletePlayer(b.dataset.delId, b.dataset.delName));
   });
 }
 
@@ -931,6 +937,20 @@ async function banPlayer(id, action) {
     toast(action === 'ban'
       ? `已封禁${r.kicked ? `，踢下线 ${r.kicked} 个会话` : ''}`
       : '已解封', 'ok');
+    loadAdminPlayers();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
+async function deletePlayer(id, name) {
+  const ok1 = confirm(`确定要删除「${name}」的账号吗？\n\n现金、持仓、订单、交易记录会全部消失，无法恢复。`);
+  if (!ok1) return;
+  const ok2 = confirm(`再确认一次：真的要永久删除「${name}」？`);
+  if (!ok2) return;
+  try {
+    await adminApi('/api/admin/player', { id, action: 'delete' });
+    toast(`已删除账号「${name}」`, 'ok');
     loadAdminPlayers();
   } catch (e) {
     toast(e.message, 'err');

@@ -512,6 +512,26 @@ export async function handleApi(ctx) {
       saveDb();
       return json(res, 200, { ok: true, banned: false });
     }
+    if (action === 'delete') {
+      // 删号是不可逆的，必须已经封禁过
+      if (!p.banned) return json(res, 400, { error: '请先封禁再删号' });
+      const gone = id;
+      const nick = p.nickname;
+      delete db.players[gone];
+      for (const [tk, sess] of Object.entries(db.sessions || {})) {
+        if (sess.playerId === gone) delete db.sessions[tk];
+      }
+      // 从活动报名和冷却记录里清掉
+      const act = db.activity;
+      if (act) {
+        if (Array.isArray(act.participants)) {
+          act.participants = act.participants.filter((x) => x !== gone);
+        }
+        if (act.lastHitAt) delete act.lastHitAt[gone];
+      }
+      saveDb();
+      return json(res, 200, { ok: true, deleted: true, nickname: nick });
+    }
     return json(res, 400, { error: '未知操作' });
   }
 

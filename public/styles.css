@@ -2197,3 +2197,9 @@ body[data-theme="dark"] .fee-bonus { color: var(--down); }
 .iw-bar > i { display: block; height: 100%; background: var(--accent); border-radius: 5px; }
 .iw-pct { color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; }
 .iw-cap { color: var(--ink-3); font-variant-numeric: tabular-nums; text-align: right; }
+
+.ban-actions { display: flex; gap: 6px; flex: none; }
+.ban-btn.del {
+  border-color: #b91c1c; color: #b91c1c;
+}
+.ban-btn.del:hover { background: #b91c1c; color: #fff; }
