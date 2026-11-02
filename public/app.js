@@ -741,7 +741,7 @@ async function loadAdminPlayers() {
     const rows = d.players || [];
     box.innerHTML = rows.map((p) => (
       `<button type="button" class="chip-toggle${active.has(p.nickname) ? ' active' : ''}" data-act-name="${escapeHtml(p.nickname)}">`
-      + `${escapeHtml(p.nickname)}<i>${money0(p.equity)}</i></button>`
+      + `${rankAvatar(p)}<span class="chip-name">${escapeHtml(p.nickname)}</span><i>${money0(p.equity)}</i></button>`
     )).join('');
     box.querySelectorAll('[data-act-name]').forEach((b) => {
       b.addEventListener('click', () => b.classList.toggle('active'));
@@ -780,6 +780,7 @@ function renderBanList() {
   box.innerHTML = list.map((p) => `
     <div class="ban-row${p.banned ? ' banned' : ''}">
       <div class="ban-main">
+        ${rankAvatar(p)}
         <b>${escapeHtml(p.nickname)}</b>
         ${p.banned ? '<span class="ban-tag">已封禁</span>' : ''}
         ${p.banReason ? `<span class="ban-reason">${escapeHtml(p.banReason)}</span>` : ''}

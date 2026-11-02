@@ -495,6 +495,7 @@ export async function handleApi(ctx) {
       .map((p) => ({
         id: p.id,
         nickname: p.nickname,
+        avatar: p.avatar || null,
         equity: playerEquity(db, p),
         cash: p.cash || 0,
         banned: !!p.banned,

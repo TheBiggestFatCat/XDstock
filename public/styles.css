@@ -2124,3 +2124,15 @@ body[data-theme="dark"] .fee-bonus { color: var(--down); }
 .ban-btn:hover { background: var(--up); color: #fff; }
 .ban-btn.unban { border-color: var(--accent); color: var(--accent); }
 .ban-btn.unban:hover { background: var(--accent); color: #fff; }
+
+/* 玩家管理 / 活动名单里的头像 */
+.ban-main .rank-avatar {
+  width: 26px; height: 26px; font-size: 12px;
+  flex: none;
+}
+.chip-toggle .rank-avatar {
+  width: 18px; height: 18px; font-size: 10px;
+  margin-right: 5px; flex: none;
+}
+.chip-toggle { display: inline-flex; align-items: center; }
+.chip-toggle .chip-name { margin-right: 4px; }
