@@ -81,6 +81,7 @@ export function backDerive(st, targetFair) {
   return {
     period: 0,
     revenue,
+    baseRevenue: revenue,   // 基准营收：用来压制无限复利
     netProfit: eps * shares,
     eps,
     bps,
@@ -98,21 +99,46 @@ export function backDerive(st, targetFair) {
  * 生成下一期财报。
  * 营收按增速滚动，净利率小幅漂移，EPS 由净利润 / 股本算出。
  */
-export function genNextReport(st) {
+export function genNextReport(st, ctx = {}) {
   const ind = industryOf(st);
   const f = st.fundamentals || {};
   const shares = Number(st.shares) || 1;
+  const midG = (ind.growth[0] + ind.growth[1]) / 2;
+  const trait = st.trait?.id;
 
-  // 增速均值回归 + 噪声
-  let growth = (Number(f.growth) || 0.1) * 0.75 + rand(ind.growth[0], ind.growth[1]) * 0.25;
+  // 增速：向行业中枢回归（50% 上期 + 50% 中枢）
+  let growth = (Number(f.growth) || midG) * 0.5 + midG * 0.5;
+
+  // 规模衰减：营收已经是基准的 N 倍时，增速按 1/(1+(N-1)*0.8) 收缩，
+  // 不然高成长股每期 30% 复利，几期就涨到天上去
+  const baseRev = Number(f.baseRevenue) || Number(f.revenue) || 1;
+  const multiple = Math.max(0.2, (Number(f.revenue) || baseRev) / baseRev);
+  const decay = 1 / (1 + Math.max(0, multiple - 1) * 1.5);
+  growth *= decay;
+
   growth += rand(-0.08, 0.08);
+
+  // ----- 业务联动 -----
+  // 券商：全市场成交越活跃，佣金收入越高，增速越快
+  if (trait === 'broker') {
+    const vf = clamp(Number(ctx.volumeFactor) || 1, 0.2, 4);
+    growth += clamp(vf - 1, -1, 1) * 0.10 * decay;
+  }
+  // 外汇：汇率波动越大，点差收入越高
+  if (trait === 'fx') {
+    const ff = clamp(Number(ctx.fxFactor) || 1, 0.2, 4);
+    growth += clamp(ff - 1, -1, 1) * 0.08 * decay;
+  }
+
   growth = clamp(growth, -0.35, 0.9);
 
-  const margin = clamp(
-    (Number(f.margin) || (ind.margin[0] + ind.margin[1]) / 2) + rand(-0.02, 0.02),
-    ind.margin[0] * 0.7,
-    ind.margin[1] * 1.2
-  );
+  let margin = (Number(f.margin) || (ind.margin[0] + ind.margin[1]) / 2) + rand(-0.02, 0.02);
+  // 券商成交火爆时净利率也会抬一点
+  if (trait === 'broker') {
+    const vf = clamp(Number(ctx.volumeFactor) || 1, 0.2, 4);
+    margin += clamp(vf - 1, -1, 1) * 0.02;
+  }
+  margin = clamp(margin, ind.margin[0] * 0.7, ind.margin[1] * 1.2);
 
   const revenue = (Number(f.revenue) || 1) * (1 + growth);
   const netProfit = revenue * margin;
@@ -123,6 +149,7 @@ export function genNextReport(st) {
   return {
     period: (Number(f.period) || 0) + 1,
     revenue,
+    baseRevenue: baseRev,
     netProfit,
     eps,
     bps,

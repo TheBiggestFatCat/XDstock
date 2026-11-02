@@ -224,6 +224,17 @@ export function stepMarket(db) {
   // 2. 券商活跃度中枢
   const trades = db.tradesThisTick || 0;
   db.tradesThisTick = 0;
+  // 成交活跃度 EMA（给券商的财报用）
+  const alphaV = 0.02;
+  db.volumeAvg = (db.volumeAvg || trades) * (1 - alphaV) + trades * alphaV;
+  // 汇率波动 EMA（给外汇的财报用）
+  {
+    const fx = db.fx || {};
+    const r = Number(fx.rate) || 0;
+    const prev = Number(fx.prevRate) || r;
+    const vol = (r > 0 && prev > 0) ? Math.abs(r / prev - 1) : 0;
+    db.fxVolAvg = (db.fxVolAvg || vol) * (1 - 0.1) + vol * 0.1;
+  }
   const stocks = Object.values(db.stocks);
   const xd = stocks.find((s) => s.trait?.id === 'broker');
   let brokerDrift = 0;
@@ -421,9 +432,15 @@ export function runReports(db) {
     if (db.tick < st.nextReportTick) continue;
 
     const before = Number(st.fair) || 0;
-    st.fundamentals = genNextReport(st);
-    st.lastSurprise = before > 0 ? (fairFromReport(st) - before) / before : 0;
-    st.fair = Number(fairFromReport(st).toFixed(4));
+    const volumeFactor = (Number(db.volumeAvg) || 0) / 2;          // 2 笔/轮算正常
+    const fxFactor = (Number(db.fxVolAvg) || 0) / 0.004;           // 0.4% 波动算正常
+    st.fundamentals = genNextReport(st, { volumeFactor, fxFactor });
+
+    // 合理价：新财报算出来的值 70% + 上期 30%，避免一次财报把线拉到天上
+    const computed = fairFromReport(st);
+    const smoothed = before > 0 ? computed * 0.7 + before * 0.3 : computed;
+    st.lastSurprise = before > 0 ? (smoothed - before) / before : 0;
+    st.fair = Number(smoothed.toFixed(4));
     st.nextReportTick = db.tick + interval;
 
     // 财报当期的价格冲击：超预期就上冲/下杀
