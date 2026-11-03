@@ -210,7 +210,9 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
     }
     if (db.tick >= Number(st.sentiment.nextApply || 0)) {
       const swing = st.sentiment.v * strength * (Math.random() * 2 - 1);
-      logRet += swing;
+      // 注意：p 在上面的 `st.price * Math.exp(logRet)` 就算好了，
+      // 这里改 logRet 没用（历史 bug），必须直接作用在 p 上
+      p *= Math.exp(swing);
       st.sentiment.nextApply = db.tick + every;
       st.sentiment.lastSwing = swing;
     }
