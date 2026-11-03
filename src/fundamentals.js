@@ -33,6 +33,24 @@ const TRAIT_BIAS = {
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
+/**
+ * 掷一次天气（-1 ~ 1），农业股共用。
+ *
+ * 传上期分数会做均值回归：好天气不会一直好，坏天气也不会一直坏，
+ * 否则一次掷骰就能决定这两只票这辈子的走向（历史 bug）。
+ * 传 0 就是全新的随机天气（老存档迁移用）。
+ */
+export function rollWeather(prevScore = 0) {
+  const u = Math.random() || 1e-9;
+  const v = Math.random();
+  const g = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  const base = Number(prevScore) || 0;
+  const score = clamp(base * 0.5 + g * 0.55, -1, 1);
+  const label = score > 0.45 ? '大丰收' : score > 0.12 ? '风调雨顺'
+    : score > -0.12 ? '平平无奇' : score > -0.45 ? '略有减产' : '灾害歉收';
+  return { score, label };
+}
+
 /** 行业名归一化：种子里的名字更花哨，这里映射到 5 个大类 */
 const ALIAS = [
   ['消费', '消费'],
@@ -155,7 +173,8 @@ export function genNextReport(st, ctx = {}) {
   if (trait === 'weather') {
     const w = clamp(Number(ctx.weather) || 0, -1, 1);
     const swing = Math.max(0.1, Number(st.trait?.swing) || 0.5);
-    growth = w * swing;
+    // 天气决定增速，但仍然要吃规模衰减：大公司涨不快，也跌不快
+    growth = w * swing * decay;
   }
 
   const expectedGrowth = clamp(growth, -0.35, 0.9);

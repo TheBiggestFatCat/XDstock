@@ -156,8 +156,9 @@ export const STOCK_SEED = {
       revMult: 1.0,
       // 天气对营收增速的影响幅度（±50%）
       swing: 0.5,
-      // 市场提前靠拢预期的速度（每轮）
-      anticipate: 0.004
+      // 市场提前靠拢预期的速度（每轮）。别开太大：
+      // 0.004 会让合理价在两次财报之间被拖低 27%，相当于天气影响算了两遍
+      anticipate: 0.001
     }
   },
   HJF: {
@@ -176,7 +177,7 @@ export const STOCK_SEED = {
       volMult: 1.0,
       revMult: 1.0,
       swing: 0.5,
-      anticipate: 0.004,
+      anticipate: 0.001,
       // 抽奖：每轮概率触发一次暴涨或暴跌
       lottery: 1,
       lotteryChance: 0.0006,

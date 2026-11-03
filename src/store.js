@@ -248,6 +248,25 @@ function migrate(d) {
     if (typeof s2.stTicks !== 'number') s2.stTicks = 0;
     if (typeof s2.st !== 'boolean') s2.st = false;
   }
+
+  // 天气老存档：以前只掷一次骰子就永远冻住（PVZ/HJF 会连续几年负增长）。
+  // 解冻时先归零（平平无奇），不用一次随机结果决定这两只票的命运；
+  // 从下一期财报开始由引擎正常重掷。
+  if (merged.weather && !Number.isFinite(Number(merged.weather.rollTick))) {
+    merged.weather = { score: 0, label: '平平无奇', rollTick: Number(merged.tick) || 0 };
+    for (const s2 of Object.values(merged.stocks)) {
+      if (s2.trait?.id !== 'weather') continue;
+      s2.weather = merged.weather;
+      s2.weatherTarget = 0;   // 让引擎按新天气重算目标价
+    }
+  }
+  // 天气股：以前「提前靠拢」摆幅太大，两期财报之间会把合理价拖低 27%
+  for (const s2 of Object.values(merged.stocks)) {
+    if (s2.trait?.id !== 'weather') continue;
+    if (typeof s2.trait.anticipate !== 'number' || Math.abs(s2.trait.anticipate - 0.004) < 1e-9) {
+      s2.trait.anticipate = 0.001;
+    }
+  }
   // 指数标的的历史用指数序列补全，否则各周期涨跌幅会算成同一个数
   const idxStock = merged.stocks[INDEX_STOCK.code];
   const idxSeries = merged.index?.series || [];

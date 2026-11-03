@@ -1,5 +1,5 @@
 import { INDEX_BASE, SMALL_INDEX_STOCK } from './stocks.js';
-import { genNextReport, fairFromReport, impactFactor, industryMidGrowth } from './fundamentals.js';
+import { genNextReport, fairFromReport, impactFactor, industryMidGrowth, rollWeather } from './fundamentals.js';
 import { genMarketTrades } from './marketTrades.js';
 import { now } from './store.js';
 
@@ -364,19 +364,23 @@ export function stepMarket(db) {
     let first = null;
     for (const st of stocks) {
       if (st.isIndex || st.trait?.id !== 'weather') continue;
-      if (!first) { first = st; continue; }
-      // 天气共用
-      if (db.weather) st.weather = db.weather;
-      else if (first.weather) st.weather = first.weather;
-      // 发报轮次对齐（取更早的那个，保证同时公布）
-      const a = Number(first.nextReportTick) || 0;
-      const b = Number(st.nextReportTick) || 0;
-      const same = Math.min(a || b, b || a);
-      if (same > 0) {
-        first.nextReportTick = same;
-        st.nextReportTick = same;
+      if (!first) {
+        first = st;
+      } else {
+        // 天气共用
+        if (db.weather) st.weather = db.weather;
+        else if (first.weather) st.weather = first.weather;
+        // 发报轮次对齐（取更早的那个，保证同时公布）
+        const a = Number(first.nextReportTick) || 0;
+        const b = Number(st.nextReportTick) || 0;
+        const same = Math.min(a || b, b || a);
+        if (same > 0) {
+          first.nextReportTick = same;
+          st.nextReportTick = same;
+        }
       }
-      // 目标价也要跟着算出来，否则不会提前靠拢
+      // 目标价每只天气股都要算（第一只以前被 continue 跳过，迁移清空后就一直没目标价）
+      if (!st.weather && db.weather) st.weather = db.weather;
       if (st.weather && !(Number(st.weatherTarget) > 0)) {
         const swing = Math.max(0.1, Number(st.trait?.swing) || 0.5);
         st.weatherTarget = Math.max(0.5, Number(st.fair) * (1 + st.weather.score * swing));
@@ -687,11 +691,15 @@ export function runReports(db) {
     if (!Array.isArray(st.reportHistory)) st.reportHistory = [];
     // 种业：天气是全局的，所有农业股共用同一片天
     if (st.trait?.id === 'weather') {
-      if (!db.weather || !Number.isFinite(Number(db.weather.score))) {
-        const sc = Math.max(-1, Math.min(1, gauss() * 0.55));
-        const lb = sc > 0.45 ? '大丰收' : sc > 0.12 ? '风调雨顺'
-          : sc > -0.12 ? '平平无奇' : sc > -0.45 ? '略有减产' : '灾害歉收';
-        db.weather = { score: sc, label: lb };
+      // 每期财报重新观测一次天气（同一轮只掷一次，兄弟股共用）。
+      // 老存档的 db.weather 没有 rollTick，说明它被「一次定终身」冻住过：
+      // 解冻时先归零，别用一次随机结果决定这两只票的命运。
+      const w0 = db.weather;
+      const legacy = !w0 || !Number.isFinite(Number(w0.rollTick));
+      if (legacy) {
+        db.weather = { score: 0, label: '平平无奇', rollTick: db.tick };
+      } else if (Number(w0.rollTick) !== db.tick || !Number.isFinite(Number(w0.score))) {
+        db.weather = { ...rollWeather(Number(w0.score)), rollTick: db.tick };
       }
       st.weather = db.weather;
       const swing = Math.max(0.1, Number(st.trait?.swing) || 0.5);
