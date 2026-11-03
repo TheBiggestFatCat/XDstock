@@ -52,6 +52,15 @@ export function placeLimitOrder(db, player, body) {
   if (!(limit > 0)) return { ok: false, error: '限价必须大于 0' };
 
   if (!Array.isArray(player.orders)) player.orders = [];
+  // 同一只票同时只能有一张挂单（开仓或平仓都算）
+  const dup = (player.orders || []).find((o) => o.code === code);
+  if (dup) {
+    return {
+      ok: false,
+      error: `${st.name} 已经有一张${dup.action === 'close' ? '平仓' : '开仓'}挂单了，先撤掉再挂`
+    };
+  }
+
   const maxPending = Math.max(1, num(cfg.maxPendingOrders, 5));
   if (player.orders.length >= maxPending) {
     return { ok: false, error: `最多同时挂 ${maxPending} 笔单，先撤掉一些` };
