@@ -189,6 +189,14 @@ function migrate(d) {
   }
 
   // 老存档补上股本与财报（按现价倒推，让 fair ≈ 现价）
+  // 每只股票补上「散户情绪」参数（管理面板个股里可直接改）
+  for (const st of Object.values(merged.stocks)) {
+    if (st.isIndex || !st.trait) continue;
+    if (!Number.isFinite(Number(st.trait.sentStrength))) st.trait.sentStrength = 0.004;
+    if (!Number.isFinite(Number(st.trait.sentTicks))) st.trait.sentTicks = 12;
+    if (!Number.isFinite(Number(st.trait.sentRollTicks))) st.trait.sentRollTicks = 720;
+  }
+
   for (const st of Object.values(merged.stocks)) {
     if (st.isIndex) continue;
     const seed = STOCK_SEED[st.code];

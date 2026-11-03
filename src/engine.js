@@ -26,7 +26,7 @@ function uniform(lo, hi) {
 }
 
 /** 单只股票走一步 */
-function stepStock(st, cfg, events, brokerDrift, fxData) {
+function stepStock(st, cfg, events, brokerDrift, fxData, db) {
   const t = st.trait || {};
   const sigma = cfg.baseVolatility * (t.volMult ?? 1);
   let logRet = gauss() * sigma;
@@ -100,6 +100,30 @@ function stepStock(st, cfg, events, brokerDrift, fxData) {
   const k = (cfg.meanReversion ?? 0) * (t.revMult ?? 1);
   if (k > 0 && st.fair > 0 && p > 0) {
     p *= Math.exp(k * Math.log(st.fair / p));
+  }
+
+  // 散户情绪：每小时重掷方向，按固定间隔施加随机偏移（每只票独立）
+  if (db && Number(cfg.sentimentEnabled ?? 1) !== 0) {
+    const t2 = st.trait || {};
+    const strength = Math.max(0, Number(t2.sentStrength ?? cfg.sentimentStrength ?? 0.004));
+    const every = Math.max(1, Math.floor(Number(t2.sentTicks ?? cfg.sentimentTicks ?? 12)));
+    const rollEvery = Math.max(60, Math.floor(Number(t2.sentRollTicks ?? cfg.sentimentRollTicks ?? 720)));
+    if (!st.sentiment || typeof st.sentiment !== 'object') {
+      st.sentiment = { v: 0, nextRoll: 0, nextApply: 0 };
+    }
+    if (!(Number(st.sentiment.nextRoll) > 0) || db.tick >= Number(st.sentiment.nextRoll)) {
+      st.sentiment = {
+        v: Math.random() * 2 - 1,
+        nextRoll: db.tick + rollEvery,
+        nextApply: db.tick
+      };
+    }
+    if (db.tick >= Number(st.sentiment.nextApply || 0)) {
+      const swing = st.sentiment.v * strength * (Math.random() * 2 - 1);
+      logRet += swing;
+      st.sentiment.nextApply = db.tick + every;
+      st.sentiment.lastSwing = swing;
+    }
   }
 
   // 玩家资金冲击：短时间内的大额净买入/净卖出会推着价格走
@@ -259,7 +283,7 @@ export function stepMarket(db) {
   for (const st of stocks) {
     if (st.status !== 'normal') continue;
     if (st.isIndex) continue;   // 指数不自己走，等下面按成分算
-    stepStock(st, cfg, db.events, st.trait?.id === 'broker' ? brokerDrift : 0, db.fx);
+    stepStock(st, cfg, db.events, st.trait?.id === 'broker' ? brokerDrift : 0, db.fx, db);
 
     st.series.push(Number(st.price.toFixed(4)));
     const cap = cfg.historyTicks ?? 3600;

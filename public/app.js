@@ -3311,6 +3311,16 @@ async function loadAdmin() {
       ]
     },
     {
+      title: '散户情绪',
+      desc: '每只票独立，个股面板可单独调',
+      fields: [
+        ['sentimentEnabled', '开关(1=开 0=关)'],
+        ['sentimentStrength', '基准偏移(0.004=0.4%)'],
+        ['sentimentTicks', '每多少轮施加一次'],
+        ['sentimentRollTicks', '多少轮重掷(720=1h)']
+      ]
+    },
+    {
       title: '哈基蜂业抽奖',
       desc: '低概率瞬间暴涨暴跌',
       fields: [
