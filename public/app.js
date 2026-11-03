@@ -1093,6 +1093,33 @@ function fillTpSlInputs(force = false) {
   if (canWrite(qEl)) qEl.value = (pos?.tpQty || pos?.slQty) ? String(pos.tpQty || pos.slQty) : '';
 }
 
+/** 止盈止损页的状态摘要 */
+function renderTpSlStatus() {
+  const box = $('#tpslStatus');
+  if (!box) return;
+  const pos = state.market?.me?.positions?.[state.code];
+  const st = state.market?.stocks?.[state.code];
+  if (!pos) {
+    box.innerHTML = '<span class="ts-empty">这只票没有持仓，止盈止损无处可设</span>';
+    return;
+  }
+  const rows = [];
+  if (pos.tp) {
+    rows.push(`<div><span>止盈</span><b class="up">${Number(pos.tp).toFixed(2)}</b>`
+      + `<i>${pos.tpQty ? `平 ${pos.tpQty} 股` : '全平'}</i></div>`);
+  }
+  if (pos.sl) {
+    rows.push(`<div><span>止损</span><b class="down">${Number(pos.sl).toFixed(2)}</b>`
+      + `<i>${pos.slQty ? `平 ${pos.slQty} 股` : '全平'}</i></div>`);
+  }
+  if (!rows.length) {
+    box.innerHTML = `<span class="ts-empty">当前持仓 ${pos.qty} 股 · 还没设置止盈止损（现价 ${(st?.price || 0).toFixed(2)}）</span>`;
+    return;
+  }
+  box.innerHTML = `<div class="ts-title">当前持仓 ${pos.qty} 股 · ${pos.side === 'long' ? '做多' : '做空'}</div>`
+    + rows.join('');
+}
+
 async function applyTpSl() {
   const pos = state.market?.me?.positions?.[state.code];
   if (!pos) { toast('没有持仓', 'err'); return; }
@@ -1129,6 +1156,7 @@ async function applyTpSl() {
     state.tpslEdited = false;
     fillTpSlInputs(true);
     updatePriceLines();
+    renderTpSlStatus();
     toast('止盈止损已更新' + (qtyV > 0 ? `（触发平 ${qtyV} 股）` : '（触发全平）'), 'ok');
   } catch (e) {
     toast(e.message, 'err');
@@ -1583,7 +1611,12 @@ function switchTradeTab(name) {
   });
   $('#orderPane')?.classList.toggle('hidden', name !== 'order');
   $('#logPane')?.classList.toggle('hidden', name !== 'log');
+  $('#tpslPane')?.classList.toggle('hidden', name !== 'tpsl');
   if (name === 'log') loadStockTrades();
+  if (name === 'tpsl') {
+    fillTpSlInputs(true);
+    renderTpSlStatus();
+  }
 }
 
 // 当天只显示时分秒，跨天带上月日
