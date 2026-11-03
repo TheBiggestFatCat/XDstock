@@ -2566,3 +2566,34 @@ body[data-theme="bear"] .brand-logo {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* 标的管理：横排（名字 + 价格 + 按钮 一行） */
+.admin-stocks { gap: 6px; }
+.admin-stock {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  flex-wrap: wrap;
+}
+.admin-stock > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 320px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.admin-stock .book-meta {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.admin-stock .as-actions {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.admin-stock .as-price {
+  width: 96px;
+}
