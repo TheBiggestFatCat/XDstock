@@ -328,7 +328,7 @@ function marketPayload(db, me) {
       shopRenameCooldown: db.config.shopRenameCooldown ?? 2000,
       levelBaseAsset: db.config.levelBaseAsset ?? 10000000,
       levelGrowth: db.config.levelGrowth ?? 2,
-      levelUpRatio: db.config.levelUpRatio ?? 0.9,
+      levelUpRatio: db.config.levelUpRatio ?? 0.6,
       shopChannelBasePrice: db.config.shopChannelBasePrice ?? 300000,
       shopChannelRatio: db.config.shopChannelRatio ?? 1.5,
       shopChannelStep: db.config.shopChannelStep ?? 100000,
@@ -1053,7 +1053,7 @@ export async function handleApi(ctx) {
         error: `升级需要总资产达到 ${Math.round(need).toLocaleString('en-US')}，你现在 ${Math.round(equity).toLocaleString('en-US')}`
       });
     }
-    const ratio = Math.min(0.99, Math.max(0, Number(db.config.levelUpRatio ?? 0.9)));
+    const ratio = Math.min(0.99, Math.max(0, Number(db.config.levelUpRatio ?? 0.6)));
     const cost = Math.floor(equity * ratio);
     if (Number(me.cash) < cost) {
       return json(res, 400, {

@@ -682,7 +682,7 @@ function renderLevelCard() {
   const base = Number(cfg.levelBaseAsset ?? 10000000);
   const growth = Math.max(1, Number(cfg.levelGrowth ?? 2));
   const need = base * Math.pow(growth, lv - 1);
-  const ratio = Number(cfg.levelUpRatio ?? 0.9);
+  const ratio = Number(cfg.levelUpRatio ?? 0.6);
   const equity = Number(me.equity) || 0;
   const cost = Math.floor(equity * ratio);
 
@@ -3249,6 +3249,18 @@ async function loadAdmin() {
         ['globalEventScale', '全市场新闻折扣(0.2=20%)'],
         ['marketTradesEnabled', '随机成交开关(1=开)'],
         ['marketTradesRate', '随机成交倍率(3=三倍)']
+      ]
+    },
+    {
+      title: '账号等级 / 商店',
+      desc: '升级门槛与花费',
+      fields: [
+        ['levelBaseAsset', '升级门槛基数(1000万)'],
+        ['levelGrowth', '每级门槛倍数(2=翻倍)'],
+        ['levelUpRatio', '升级花费比例(0.6=60%)'],
+        ['shopBgPrice', '自定义背景价格'],
+        ['shopRenamePrice', '改名卡价格'],
+        ['shopRenameCooldown', '改名冷却(轮)']
       ]
     },
     {
