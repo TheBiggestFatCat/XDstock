@@ -2933,7 +2933,7 @@ async function loadRank(force = false) {
     const d = await api('/api/leaderboard');
     const wrap = $('#rankTable');
     const sig = d.rows
-      .map((r) => `${r.id}:${Math.round(r.equity)}:${r.cash.toFixed(0)}`)
+      .map((r) => `${r.id}:${Math.round(r.equity)}:${r.cash.toFixed(0)}:${r.level || 1}:${r.nickname}`)
       .join('|');
     if (!force && sig === state.rankSig && wrap.querySelector('table')) {
       const t = $('#rankTime');
@@ -2975,6 +2975,7 @@ async function loadRank(force = false) {
             return `<tr class="${mine}">
               <td><span class="rank-medal">${medal || i + 1}</span></td>
               <td><span class="rank-user">${rankAvatar(r)}<span class="rank-name">${escapeHtml(r.nickname)}</span></span></td>
+              <td>${lvCell}</td>
               <td class="${cls(r.equity - 100000)}">${money(r.equity)}</td>
               <td>${money(r.cash)}</td>
               <td>${actionCell}</td>
