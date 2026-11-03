@@ -2355,3 +2355,8 @@ body[data-theme="hermit"] .brand-logo {
   font-variant-numeric: tabular-nums;
 }
 .rc-empty { margin-top: 12px; font-size: 12px; color: var(--ink-3); }
+
+.tpsl-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 8px; }
+.tpsl-row .field { margin: 0; }
+.tpsl-row .field span { font-size: 11px; color: var(--ink-3); }
+#tpslApply { margin-top: 8px; margin-bottom: 8px; }

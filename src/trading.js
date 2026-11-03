@@ -367,6 +367,13 @@ export function checkPositions(db) {
       );
       if (already) continue;
 
+      // 止盈/止损可以只平一部分：用玩家预先设好的数量
+      const presetQty = Number(hit === 'tp' ? pos.tpQty : pos.slQty);
+      const orderQty = Math.max(1, Math.min(
+        pos.qty,
+        Number.isFinite(presetQty) && presetQty > 0 ? Math.floor(presetQty) : pos.qty
+      ));
+
       if (!Array.isArray(player.orders)) player.orders = [];
       const ttl = Math.max(1, Number(db.config.orderTtlTicks ?? 720));
       const slip = 0.004;
@@ -379,7 +386,7 @@ export function checkPositions(db) {
         name: st.name,
         action: 'close',
         side: pos.side,
-        qty: pos.qty,
+        qty: orderQty,
         limit,
         reserve: 0,
         createdAt: Date.now(),

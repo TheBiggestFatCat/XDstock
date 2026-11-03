@@ -65,13 +65,17 @@ export function placeLimitOrder(db, player, body) {
     if (!pos) return { ok: false, error: '你没有这只票的持仓' };
     if (pos.side !== side) return { ok: false, error: '方向和持仓不一致' };
 
+    // 允许只平一部分：body.qty 有值就按它来，否则全平
+    const wantQty = Math.floor(num(body.qty, 0));
+    const closeQty = wantQty > 0 ? Math.min(pos.qty, wantQty) : pos.qty;
+
     const order = {
       id: uid(),
       code,
       name: st.name,
       action,
       side,
-      qty: pos.qty,
+      qty: closeQty,
       limit,
       leverage: pos.leverage || 1,
       reserve: 0,

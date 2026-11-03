@@ -1146,6 +1146,8 @@ export async function handleApi(ctx) {
     // 只改请求里出现的字段，没传的保持原样（避免并发编辑互相覆盖）
     let tp = pos.tp ?? null;
     let sl = pos.sl ?? null;
+    let tpQty = pos.tpQty ?? null;
+    let slQty = pos.slQty ?? null;
 
     if (has('tp')) {
       const v = parse(body.tp);
@@ -1175,6 +1177,15 @@ export async function handleApi(ctx) {
 
     pos.tp = tp;
     pos.sl = sl;
+    // 触发时只平这么多股（留空 = 全平）
+    const toQty = (v) => {
+      const n = Math.floor(Number(v));
+      return Number.isFinite(n) && n > 0 ? Math.min(pos.qty, n) : null;
+    };
+    if (body.tpQty !== undefined) tpQty = toQty(body.tpQty);
+    if (body.slQty !== undefined) slQty = toQty(body.slQty);
+    pos.tpQty = tpQty;
+    pos.slQty = slQty;
     saveDb();
     return json(res, 200, { ok: true, position: pos });
   }

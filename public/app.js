@@ -1171,6 +1171,60 @@ function applyDrawPrice(price, { commit = false } = {}) {
 }
 
 /** 真正写入止盈/止损（只提交被改的那一项，另一项由服务端保留） */
+
+/** 手动输入止盈止损 + 触发时平仓数量 */
+
+/** 把持仓上已有的止盈止损回填到输入框 */
+function fillTpSlInputs() {
+  const pos = state.market?.me?.positions?.[state.code];
+  const tpEl = $('#tpPrice');
+  const slEl = $('#slPrice');
+  const qEl = $('#tpslQty');
+  if (tpEl) tpEl.value = pos?.tp ? Number(pos.tp).toFixed(2) : '';
+  if (slEl) slEl.value = pos?.sl ? Number(pos.sl).toFixed(2) : '';
+  if (qEl) qEl.value = (pos?.tpQty || pos?.slQty) ? String(pos.tpQty || pos.slQty) : '';
+}
+
+async function applyTpSl() {
+  const pos = state.market?.me?.positions?.[state.code];
+  if (!pos) { toast('没有持仓', 'err'); return; }
+  const tpV = Number($('#tpPrice')?.value);
+  const slV = Number($('#slPrice')?.value);
+  const qtyV = Math.floor(Number($('#tpslQty')?.value) || 0);
+  if (!(tpV > 0) && !(slV > 0)) { toast('止盈和止损至少要填一个', 'err'); return; }
+
+  // 方向校验：做多时止盈必须高于现价、止损低于现价
+  const px = Number(state.market?.stocks?.[state.code]?.price) || 0;
+  const long = pos.side === 'long';
+  if (tpV > 0 && ((long && tpV <= px) || (!long && tpV >= px))) {
+    toast(long ? '做多的止盈价要高于现价' : '做空的止盈价要低于现价', 'err');
+    return;
+  }
+  if (slV > 0 && ((long && slV >= px) || (!long && slV <= px))) {
+    toast(long ? '做多的止损价要低于现价' : '做空的止损价要高于现价', 'err');
+    return;
+  }
+  if (qtyV > 0 && qtyV > pos.qty) { toast(`最多 ${pos.qty} 股`, 'err'); return; }
+
+  const body = { code: state.code };
+  if (tpV > 0) { body.tp = tpV; body.tpQty = qtyV || null; }
+  if (slV > 0) { body.sl = slV; body.slQty = qtyV || null; }
+  try {
+    const r = await api('/api/tpsl', { method: 'POST', body: JSON.stringify(body) });
+    if (r?.position && state.market?.me?.positions?.[state.code]) {
+      const local = state.market.me.positions[state.code];
+      local.tp = r.position.tp ?? null;
+      local.sl = r.position.sl ?? null;
+      local.tpQty = r.position.tpQty ?? null;
+      local.slQty = r.position.slQty ?? null;
+    }
+    updatePriceLines();
+    toast('止盈止损已更新' + (qtyV > 0 ? `（触发平 ${qtyV} 股）` : '（触发全平）'), 'ok');
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
 async function commitTpSl(target, price, pos) {
   const body = { code: state.code };
   body[target === 'tp' ? 'tp' : 'sl'] = price;
@@ -1381,7 +1435,12 @@ async function placeLimit() {
   let payload;
   if (mode === 'close') {
     if (!pos) { toast('这只票没有持仓可平', 'err'); return; }
-    payload = { code: st.code, action: 'close', side: pos.side, limit };
+    const closeQty = Math.floor(Number($('#orderQty').value) || 0);
+    if (closeQty > 0 && closeQty > pos.qty) {
+      toast(`最多平 ${pos.qty} 股`, 'err');
+      return;
+    }
+    payload = { code: st.code, action: 'close', side: pos.side, limit, qty: closeQty > 0 ? closeQty : undefined };
   } else {
     payload = {
       code: st.code,
@@ -1965,6 +2024,7 @@ function renderChartLegend(pos) {
 }
 
 function updatePriceLines() {
+  fillTpSlInputs();
   if (!state.candleSeries) return;
   if (!Array.isArray(state.priceLines)) state.priceLines = [];
   const pos = state.market?.me?.positions?.[state.code];
@@ -3385,6 +3445,8 @@ function bind() {
     state.limitAuto = false;
     updateLimitLine(Number($('#orderLimit').value));
   });
+  // 手动输入止盈止损
+  $('#tpslApply')?.addEventListener('click', applyTpSl);
   $('#drawLineBtn')?.addEventListener('click', () => toggleDrawMode());
   $('#reportBtn')?.addEventListener('click', toggleReportPanel);
   document.querySelectorAll('.dt-btn').forEach((b) => {

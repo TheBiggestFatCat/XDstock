@@ -220,6 +220,21 @@
               <input id="orderLimit" type="number" step="0.01" placeholder="填价格" />
               <button id="drawLineBtn" class="draw-btn" type="button" title="在 K 线上拖动设置价格">✏️ 划线</button>
             </div>
+            <div class="tpsl-row">
+              <label class="field">
+                <span>止盈价</span>
+                <input id="tpPrice" type="number" step="0.01" placeholder="不到不填" />
+              </label>
+              <label class="field">
+                <span>止损价</span>
+                <input id="slPrice" type="number" step="0.01" placeholder="不到不填" />
+              </label>
+              <label class="field">
+                <span>触发平仓量</span>
+                <input id="tpslQty" type="number" step="1" min="1" placeholder="留空=全平" />
+              </label>
+            </div>
+            <button id="tpslApply" class="btn btn-ghost btn-block" type="button">应用止盈止损</button>
             <div id="drawTargets" class="draw-targets hidden">
               <button class="dt-btn active" data-target="limit" type="button">挂单价</button>
               <button class="dt-btn" data-target="tp" type="button">止盈</button>
