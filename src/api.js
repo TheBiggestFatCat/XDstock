@@ -891,10 +891,8 @@ export async function handleApi(ctx) {
       .map((t) => {
       const owner = db.players[t.playerId];
       // 「暗黑大手」主题技能：别人看到的成交方向是随机的（自己看自己是真的）
-      const isStealth = owner && owner.theme === 'dark' && (!me || me.id !== t.playerId);
-      const shownSide = isStealth && Math.random() < 0.5
-        ? (t.side === 'long' ? 'short' : 'long')
-        : t.side;
+      // 暗黑大手不再伪装方向，成交方向如实显示
+      const shownSide = t.side;
       const buy = t.action === 'open' ? shownSide === 'long' : shownSide === 'short';
       const notional = Number(t.qty) * Number(t.price);
       return {
