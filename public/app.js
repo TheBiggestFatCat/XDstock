@@ -757,6 +757,10 @@ function renderLevelCard() {
   const ratio = Number(cfg.levelUpRatio ?? 0.6);
   const ratioEl = $('#levelRatio');
   if (ratioEl) ratioEl.textContent = `${Math.round(ratio * 100)}%`;
+  // 每个等级多给多少「每轮单笔成交上限」
+  const fillBonus = Math.max(0, Number(cfg.levelFillBonus ?? 1000000));
+  const fillEl = $('#levelFillText');
+  if (fillEl) fillEl.textContent = `+${fillBonus.toLocaleString('en-US')}`;
   const equity = Number(me.equity) || 0;
   const cost = Math.floor(equity * ratio);
 
@@ -1105,8 +1109,9 @@ function renderShop() {
   const baseCap = Number(cfg.maxFillNotionalPerTick ?? 300000);
   const chLevel = Math.max(0, Number(state.market?.me?.channelLevel || 0));
   const chPrice = Math.round(chBase * Math.pow(chRatio, chLevel));
-  const capNow = baseCap + chStep * chLevel;
-  const capNext = baseCap + chStep * (chLevel + 1);
+  // 当前上限已经包含「基础 + 等级加成 + 已买通道」，以服务端下发为准
+  const capNow = Number(state.market?.me?.fillCap ?? (baseCap + chStep * chLevel));
+  const capNext = capNow + chStep;
 
   const chPriceEl = $('#channelPrice');
   if (chPriceEl) chPriceEl.textContent = money0(chPrice);
@@ -1732,7 +1737,7 @@ function switchOrderMode(mode) {
   if (hint) {
     hint.classList.toggle('hidden', !isClose);
     if (isClose) {
-      const perTick = Number(state.market?.config?.maxFillNotionalPerTick ?? 150000);
+      const perTick = Number(state.market?.me?.fillCap ?? state.market?.config?.maxFillNotionalPerTick ?? 150000);
       const estQty = pos ? Math.max(1, Math.floor(perTick / Math.max(pos.price || pos.entry, 0.01))) : 0;
       hint.textContent = pos
         ? `当前持仓：${pos.side === 'long' ? '多' : '空'} ${pos.qty} 股 · ${(pos.leverage || 1).toFixed(0)}x · 成本 ${pos.entry.toFixed(2)}；每轮最多成交约 ${estQty} 股（${money(perTick)}）`
@@ -3449,6 +3454,7 @@ async function loadAdmin() {
         ['levelBaseAsset', '升级门槛基数(1000万)'],
         ['levelGrowth', '每级门槛倍数(2=翻倍)'],
         ['levelUpRatio', '升级花费比例(0.6=60%)'],
+        ['levelFillBonus', '每级成交上限加成'],
         ['shopBgPrice', '自定义背景价格'],
         ['shopRenamePrice', '改名卡价格'],
         ['shopRenameCooldown', '改名冷却(轮)']

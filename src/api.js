@@ -5,7 +5,7 @@ import { candlesFromSeries, changesFor, timeOfTick, pushNotice, noticeAlive } fr
 import { TIMEFRAMES } from './config.js';
 import { getBuild } from './build.js';
 import { playerEquity, positionPnl } from './trading.js';
-import { placeLimitOrder, cancelOrder, orderLimitBlocked, consumeOrderSlot } from './orders.js';
+import { placeLimitOrder, cancelOrder, orderLimitBlocked, consumeOrderSlot, fillCapFor } from './orders.js';
 import { reportPayload } from './fundamentals.js';
 
 const TOKEN_TTL = 30 * 24 * 3600 * 1000;
@@ -90,6 +90,8 @@ function publicPlayer(p, db) {
     themeChangedTick: p.themeChangedTick || 0,
     themes: Array.isArray(p.themes) ? p.themes : [],
     frozen: Math.round((p.orders || []).reduce((a, o) => a + (Number(o.reserve) || 0), 0) * 100) / 100,
+    // 这个玩家本轮的「单笔成交上限」（基础 + 商城通道 + 账号等级）
+    fillCap: fillCapFor(db, p),
     orders: (p.orders || []).map((o) => ({
       id: o.id,
       code: o.code,
@@ -379,6 +381,7 @@ function marketPayload(db, me) {
       levelBaseAsset: db.config.levelBaseAsset ?? 10000000,
       levelGrowth: db.config.levelGrowth ?? 2,
       levelUpRatio: db.config.levelUpRatio ?? 0.6,
+      levelFillBonus: db.config.levelFillBonus ?? 1000000,
       shopChannelBasePrice: db.config.shopChannelBasePrice ?? 300000,
       shopChannelRatio: db.config.shopChannelRatio ?? 1.5,
       shopChannelStep: db.config.shopChannelStep ?? 100000,
@@ -812,6 +815,7 @@ export async function handleApi(ctx) {
       'maxOrdersPerTick', 'maxFillNotionalPerTick',
       'limitOrderEnabled', 'orderTtlTicks', 'maxPendingOrders',
       'investigateCooldownTicks',
+      'levelBaseAsset', 'levelGrowth', 'levelUpRatio', 'levelFillBonus',
       'playerImpactEnabled', 'playerImpactRef', 'playerImpactStrength', 'impactRefFreeCap',
       'playerImpactDecay', 'playerImpactMax', 'playerImpactFlowMax',
       'brokerMidpoint', 'brokerMidFloor', 'brokerSensitivity', 'brokerCap', 'brokerAlpha',

@@ -78,6 +78,9 @@ export const DEFAULT_CONFIG = {
   levelBaseAsset: 10000000,    // 升到 lv2 需要的资产（之后每级 ×10）
   levelGrowth: 2,              // 每升一级资产门槛翻几倍
   levelUpRatio: 0.6,           // 升级花掉自身资产的百分比
+  // 账号等级对「每轮单笔成交上限」的加成：每个等级 +100 万。
+  // 和商城「交易专属通道」叠乘——等级给底子，通道继续买。
+  levelFillBonus: 1000000,
   shopThemeCooldown: 100,      // 换主题后的冷却轮数
 
   // 交易专属通道：每次 +10 万单笔成交上限，价格指数增长

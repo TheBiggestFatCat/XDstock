@@ -7,7 +7,7 @@ import { getBuild } from './src/build.js';
 import { stepMarket, seedHistory, changesFor, noticeAlive } from './src/engine.js';
 import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, positionPnl, logTrade } from './src/trading.js';
-import { processOrders } from './src/orders.js';
+import { processOrders, fillCapFor } from './src/orders.js';
 import { checkDelist } from './src/delist.js';
 import { fetchAudJpy } from './src/fx.js';
 import { handleApi } from './src/api.js';
@@ -265,6 +265,7 @@ function tickPayload(forPlayerId) {
       redBonusEarned: p.redBonusEarned || 0,
       bearBonusEarned: p.bearBonusEarned || 0,
       frozen: Math.round((p.orders || []).reduce((a, o) => a + (Number(o.reserve) || 0), 0) * 100) / 100,
+      fillCap: fillCapFor(d, p),
       orders: (p.orders || []).map((o) => ({
         id: o.id,
         code: o.code,

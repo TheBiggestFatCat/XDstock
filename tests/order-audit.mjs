@@ -8,7 +8,7 @@
 import { createDb } from '../src/store.js';
 import {
   placeLimitOrder, processOrders, cancelOrder, estimateReserve,
-  orderLimitBlocked, consumeOrderSlot
+  orderLimitBlocked, consumeOrderSlot, fillCapFor
 } from '../src/orders.js';
 import { openPosition, closePosition, checkPositions, playerEquity } from '../src/trading.js';
 
@@ -35,6 +35,8 @@ function newDb(patch = {}) {
     maxOrdersPerTick: 5,
     liquidationBuffer: 0,
     limitOrderEnabled: 1,
+    // 默认关掉等级加成，免得把「小额限额」的用例顶穿；需要时用例自己开
+    levelFillBonus: 0,
     marketOpen: true
   }, patch);
   for (const st of Object.values(db.stocks)) { st.price = 100; st.fair = 100; }
@@ -315,6 +317,39 @@ log('=== 15 成交失败不会整单撤销（重试计数）===');
   const ev = nextTickOrders(db);
   check('方向不一致 → 撤单而不是每轮刷失败', ev.some((e) => e.type === 'cancel'), JSON.stringify(ev.map((e) => e.type)));
   check('挂单已清除', p.orders.length === 0);
+}
+
+// ---------------------------------------------------------------- 16
+log('');
+log('=== 16 账号等级提供额外的单笔成交上限 ===');
+{
+  const db = newDb({ levelFillBonus: 1000000 });
+  const base = Number(db.config.maxFillNotionalPerTick);
+  const bonus = Number(db.config.levelFillBonus);
+  const step = Number(db.config.shopChannelStep);
+  check('配置里有每级加成', bonus === 1000000, `bonus=${bonus}`);
+
+  const a = mkPlayer(db, 'lv1', 1e7);
+  a.level = 1;
+  const b = mkPlayer(db, 'lv3', 1e7);
+  b.level = 3;
+  check('Lv.1 = 基础 + 1×100万', fillCapFor(db, a) === base + bonus, `${fillCapFor(db, a)}`);
+  check('Lv.3 = 基础 + 3×100万', fillCapFor(db, b) === base + 3 * bonus, `${fillCapFor(db, b)}`);
+  b.channelLevel = 2;
+  check('商城通道与等级加成叠加', fillCapFor(db, b) === base + 3 * bonus + 2 * step, `${fillCapFor(db, b)}`);
+
+  // 实际撮合：同一张 30000 股的单，等级越高一轮吃得越多
+  const mk = (name, level, patch) => {
+    const d = newDb(patch);
+    const p = mkPlayer(d, name, 1e8);
+    p.level = level;
+    placeLimitOrder(d, p, { code: 'TGW', action: 'open', side: 'long', qty: 30000, leverage: 1, limit: 100 });
+    nextTickOrders(d);
+    return p.positions.TGW?.qty || 0;
+  };
+  check('关掉加成：一轮只吃 1,000,000（10000 股）', mk('no-bonus', 1, { levelFillBonus: 0 }) === 10000);
+  check('Lv.1：一轮吃 2,000,000（20000 股）', mk('lv1', 1, { levelFillBonus: 1000000 }) === 20000);
+  check('Lv.3：一轮吃满 4,000,000（30000 股）', mk('lv3', 3, { levelFillBonus: 1000000 }) === 30000);
 }
 
 console.log(out.join('\n'));

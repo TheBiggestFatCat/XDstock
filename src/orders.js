@@ -209,6 +209,22 @@ function removeOrder(player, order) {
 }
 
 /**
+ * 每个玩家的「每轮单笔成交上限」（金额）：
+ *   基础 maxFillNotionalPerTick
+ *   + 商城「交易专属通道」等级 × shopChannelStep
+ *   + 账号等级 × levelFillBonus（每个等级 +100 万，Lv.1 就有一份）
+ */
+export function fillCapFor(db, player) {
+  const cfg = (db && db.config) || {};
+  const base = Math.max(1, num(cfg.maxFillNotionalPerTick, 300000));
+  const chLevel = Math.max(0, Math.floor(num(player && player.channelLevel, 0)));
+  const chStep = Math.max(0, num(cfg.shopChannelStep, 100000));
+  const lv = Math.max(1, Math.floor(num(player && player.level, 1)));
+  const lvBonus = Math.max(0, num(cfg.levelFillBonus, 1000000));
+  return base + chLevel * chStep + lv * lvBonus;
+}
+
+/**
  * 每个 tick 撮合一次（价格更新之后调用）
  * 返回成交/撤单事件列表，用于推送提示
  */
@@ -247,9 +263,7 @@ export function processOrders(db) {
 
   // ---------- 2. 每个「玩家 + 标的 + 方向」每轮的成交金额预算 ----------
   const budget = new Map();
-  const capOf = (player) => Math.max(1, num(db.config.maxFillNotionalPerTick, 300000))
-    + Math.max(0, Math.floor(num(player.channelLevel, 0)))
-    * Math.max(0, num(db.config.shopChannelStep, 100000));
+  const capOf = (player) => fillCapFor(db, player);
 
   for (const { player, order, st } of items) {
     const code = order.code;
