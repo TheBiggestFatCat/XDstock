@@ -682,15 +682,28 @@ function renderLevelCard() {
   if (priceEl) priceEl.textContent = money0(cost);
   const hint = $('#levelHint');
   if (hint) {
-    hint.textContent = equity >= need
-      ? `达成条件 · 升级后变成 Lv.${lv + 1}，扣掉 ${money0(cost)} 现金`
-      : `还差 ${money0(need - equity)} 总资产才能升到 Lv.${lv + 1}`;
+    const cashNow = Number(me.cash) || 0;
+    if (equity < need) {
+      hint.textContent = `还差 ${money0(need - equity)} 总资产才能升到 Lv.${lv + 1}`;
+    } else if (cashNow < cost) {
+      hint.textContent = `资产达标 · 但要付 ${money0(cost)} 现金，你只有 ${money0(cashNow)}（卖掉部分持仓换现金）`;
+    } else {
+      hint.textContent = `达成条件 · 升级后变成 Lv.${lv + 1}，扣掉 ${money0(cost)} 现金`;
+    }
   }
   const btn = $('#levelUpBtn');
   if (btn) {
-    const can = equity >= need && Number(me.cash) >= cost;
-    btn.disabled = !can;
-    btn.textContent = can ? `升级到 Lv.${lv + 1}` : '条件不足';
+    const cash = Number(me.cash) || 0;
+    const assetOk = equity >= need;
+    const cashOk = cash >= cost;
+    btn.disabled = !(assetOk && cashOk);
+    if (!assetOk) {
+      btn.textContent = `总资产还差 ${money0(need - equity)}`;
+    } else if (!cashOk) {
+      btn.textContent = `现金不足（差 ${money0(cost - cash)}）`;
+    } else {
+      btn.textContent = `升级到 Lv.${lv + 1}`;
+    }
   }
 }
 
