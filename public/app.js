@@ -314,10 +314,15 @@ function renderReport() {
     }
     if (capEl) capEl.textContent = '';
     const leftRb = (Number(idx.nextRebalanceTick) || 0) - tick;
+    // 调仓规则说明，跟着倒计时一起显示
+    const rule = st.code === 'DENGS'
+      ? '每 3 小时换一次，只留市值最小的 7 家，按市值加权'
+      : '每 3 小时重算一次，全市场按市值加权';
     if (nextEl) {
-      nextEl.innerHTML = leftRb > 0
+      nextEl.innerHTML = (leftRb > 0
         ? `距下次调仓 <b>${fmtAgo(leftRb, tickMs)}</b>`
-        : '<b>即将调仓</b>';
+        : '<b>即将调仓</b>')
+        + `　·　${rule}`;
     }
     if (panel && !panel.classList.contains('hidden')) renderIndexWeights();
     return;
