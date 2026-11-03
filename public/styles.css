@@ -2617,3 +2617,12 @@ body[data-theme="bear"] .brand-logo {
   width: 92px;
   flex: none;
 }
+
+/* 卡片宽度自适应 */
+.panel {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+.admin-grid > .panel { min-width: 0; }
+.admin-grid > .panel-wide { grid-column: 1 / -1; }
