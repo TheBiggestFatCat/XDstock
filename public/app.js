@@ -230,6 +230,15 @@ function renderClosed() {
 function renderTopbar() {
   const m = state.market;
   if (!m) return;
+
+  // 等级牌：顶栏每轮都更新，切不切商店都要变
+  const lvNow = Math.max(1, Math.floor(Number(m.me?.level) || 1));
+  const lvEl = $('#lvBadge');
+  if (lvEl) {
+    const c = LV_COLORS[Math.min(lvNow - 1, LV_COLORS.length - 1)];
+    lvEl.textContent = `Lv.${lvNow}`;
+    lvEl.style.setProperty('--lv', c);
+  }
   $('#indexValue').textContent = m.index.value.toFixed(2);
   const idxSeries = m.index.series;
   const prevIdx = idxSeries.length > 1 ? idxSeries[idxSeries.length - 2] : m.index.value;
