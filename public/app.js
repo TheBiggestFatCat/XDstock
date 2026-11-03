@@ -3152,48 +3152,6 @@ async function loadAdmin() {
   }
 
   // 标的
-  $('#adminStocks').innerHTML = d.stocks.map((s) => `
-    <div class="admin-stock">
-      <div>
-        <b>${s.name}</b> <span class="stock-code">${s.code}</span>
-        <span class="pill ${s.status === 'normal' ? 'gray' : 'short'}">${s.status === 'normal' ? '正常' : s.status === 'suspended' ? '停牌' : '退市'}</span>
-        <div class="book-meta">$${s.price.toFixed(2)} · ${s.traitName}</div>
-      </div>
-      <div class="as-actions">
-        <input class="as-price" type="number" step="0.01" min="0.01"
-          data-price-for="${s.code}" value="${s.price.toFixed(2)}" title="直接改这只票的价格" />
-        <button class="mini-btn" data-act="set" data-code="${s.code}">设置价</button>
-        <button class="mini-btn" data-act="suspend" data-code="${s.code}">停牌</button>
-        <button class="mini-btn" data-act="resume" data-code="${s.code}">复牌</button>
-        <button class="mini-btn danger" data-act="delist" data-code="${s.code}">退市</button>
-      </div>
-    </div>`).join('');
-  $$('#adminStocks [data-act]').forEach((b) => {
-    b.addEventListener('click', async () => {
-      const payload = { action: b.dataset.act, code: b.dataset.code, hours: 1 };
-      if (b.dataset.act === 'set') {
-        const inp = document.querySelector(`.as-price[data-price-for="${b.dataset.code}"]`);
-        const v = Number(inp && inp.value);
-        if (!(v > 0)) { toast('先填一个大于 0 的价格', 'err'); return; }
-        payload.price = v;
-      }
-      try {
-        await adminApi('/api/admin/stock', payload);
-        toast(payload.price ? `价格已设为 $${payload.price}` : '操作成功', 'ok');
-        loadAdmin();
-        refreshMarket();
-      } catch (e) { toast(e.message, 'err'); }
-    });
-  });
-  // 输入框里按回车也能提交
-  $$('#adminStocks .as-price').forEach((inp) => {
-    inp.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return;
-      const btn = document.querySelector(`#adminStocks [data-act="set"][data-code="${inp.dataset.priceFor}"]`);
-      if (btn) btn.click();
-    });
-  });
-
   // 市场控制
   const isOpen = d.marketOpen !== false;
   const ms = $('#marketState');
@@ -3474,6 +3432,16 @@ function renderTraitForm(stocks) {
     }).join('');
 
     return `<section class="trait-card">
+      <div class="stock-admin-row">
+        <span class="sa-label">标的管理</span>
+        <input class="as-price" type="number" step="0.01" min="0.01"
+          data-price-for="${st.code}" value="${Number(st.price).toFixed(2)}" title="直接改这只票的价格" />
+        <button class="mini-btn" data-act="set" data-code="${st.code}">设置价</button>
+        <button class="mini-btn" data-act="suspend" data-code="${st.code}">停牌</button>
+        <button class="mini-btn" data-act="resume" data-code="${st.code}">复牌</button>
+        <button class="mini-btn danger" data-act="delist" data-code="${st.code}">退市</button>
+        <span class="pill ${st.status === 'normal' ? 'gray' : 'short'}">${st.status === 'normal' ? '正常' : st.status === 'suspended' ? '停牌中' : '已退市'}</span>
+      </div>
       <div class="trait-head">
         <img class="stock-icon-sm" src="${st.icon
           || state.market?.stocks?.[st.code]?.icon
@@ -3485,6 +3453,33 @@ function renderTraitForm(stocks) {
       ${fields ? `<div class="cfg-grid">${fields}</div>` : '<div class="trait-empty">这只票没有可调参数</div>'}
     </section>`;
   }).join('');
+
+  // 个股卡片里的「设置价 / 停牌 / 复牌 / 退市」
+  $$('#traitForm [data-act]').forEach((b) => {
+    b.addEventListener('click', async () => {
+      const payload = { action: b.dataset.act, code: b.dataset.code, hours: 1 };
+      if (b.dataset.act === 'set') {
+        const inp = document.querySelector(`.as-price[data-price-for="${b.dataset.code}"]`);
+        const v = Number(inp && inp.value);
+        if (!(v > 0)) { toast('先填一个大于 0 的价格', 'err'); return; }
+        payload.price = v;
+      }
+      try {
+        await adminApi('/api/admin/stock', payload);
+        toast(payload.price ? `价格已设为 $${payload.price}` : '操作成功', 'ok');
+        loadAdmin();
+        refreshMarket();
+      } catch (e) { toast(e.message, 'err'); }
+    });
+  });
+  $$('#traitForm .as-price').forEach((inp) => {
+    inp.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const btn = document.querySelector(
+        `#traitForm [data-act="set"][data-code="${inp.dataset.priceFor}"]`);
+      if (btn) btn.click();
+    });
+  });
 }
 
 async function saveTraits() {

@@ -2597,3 +2597,23 @@ body[data-theme="bear"] .brand-logo {
 .admin-stock .as-price {
   width: 96px;
 }
+
+/* 个股卡片里的标的管理行 */
+.stock-admin-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 1px dashed var(--line);
+}
+.stock-admin-row .sa-label {
+  font-size: 11px;
+  color: var(--ink-3);
+  flex: none;
+}
+.stock-admin-row .as-price {
+  width: 92px;
+  flex: none;
+}
