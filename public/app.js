@@ -1544,7 +1544,7 @@ function setLimitPrice(price, { manual = true } = {}) {
 // 自动定价：在这个方向稍微让一点价，保证下一轮能成交
 //   买入/平空 → 限价挂在现价上方（愿意多付一点）
 //   卖出/平多 → 限价挂在现价下方（愿意少收一点）
-const AUTO_LIMIT_SLIP = 0.005;   // 让价 0.5%
+const AUTO_LIMIT_SLIP = getSlipPct() / 100;   // 玩家自填的让利
 
 /** 当前真正要下的方向：开仓看 state.side，平仓看持仓方向 */
 function effectiveSide() {
@@ -1560,6 +1560,26 @@ function isBuySide() {
   const side = effectiveSide();
   if ((state.orderMode || 'open') === 'close') return side === 'short'; // 平空 = 买回
   return side === 'long';
+}
+
+/** 挂单让利百分比（0~3），默认 0.5%，存在本地长期有效 */
+function getSlipPct() {
+  const v = Number(localStorage.getItem('xd_slip'));
+  if (Number.isFinite(v) && v >= 0 && v <= 3) return v;
+  return 0.5;
+}
+
+function setSlipPct(v) {
+  const n = Math.max(0, Math.min(3, Number(v) || 0));
+  localStorage.setItem('xd_slip', String(n));
+  const inp = $('#slipInput');
+  if (inp && Number(inp.value) !== n) inp.value = String(n);
+  syncLimitPrice(true);
+}
+
+function initSlipInput() {
+  const el = $('#slipInput');
+  if (el) el.value = String(getSlipPct());
 }
 
 function autoLimitPrice() {
@@ -3761,6 +3781,7 @@ try { window.__xd = { state, priceAtY, updateLimitLine, autoLimitPrice, setLimit
 // ---------------- 启动 ----------------
 async function boot() {
   applyCachedTheme();
+  initSlipInput();
   bind();
   if (state.token) {
     try {

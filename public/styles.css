@@ -2638,3 +2638,12 @@ body[data-theme="bear"] .brand-logo {
 @media (max-width: 760px) {
   .admin-grid { grid-template-columns: 1fr; }
 }
+
+/* 挂单让利 */
+.slip-row {
+  display: flex; align-items: center; gap: 6px;
+  margin: 6px 0 2px; font-size: 12px; color: var(--ink-3);
+}
+.slip-row .slip-label { flex: none; }
+.slip-row #slipInput { width: 68px; flex: none; padding: 5px 8px; font-size: 12px; }
+.slip-row .slip-unit { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
