@@ -616,6 +616,7 @@ input.tpsl-input {
   .tab[data-view="portfolio"]::before { content: '💼'; }
   .tab[data-view="work"]::before { content: '💰'; }
   .tab[data-view="shop"]::before { content: '🛒'; }
+  .tab[data-view="bank"]::before { content: '🏦'; }
   .tab[data-view="rank"]::before { content: '🏆'; }
   .tab[data-view="admin"]::before { content: '⚙️'; }
   .tab:hover { background: transparent; }
