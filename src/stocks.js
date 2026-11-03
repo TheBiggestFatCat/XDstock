@@ -162,7 +162,7 @@ export const STOCK_SEED = {
   HJF: {
     code: 'HJF',
     name: '哈基蜂业',
-    icon: '/assets/stocks/HJF.png',
+    icon: '/assets/stocks/HJF.jpg',
     industry: '农业种业',
     shares: 260000000,   // 总股本 2.6 亿股
     freeFloat: 0.5,
