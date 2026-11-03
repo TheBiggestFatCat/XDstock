@@ -9,28 +9,52 @@ import { playerEquity } from './trading.js';
 /** 银行规则（管理面板里可改） */
 export function bankRules(db) {
   const cfg = (db && db.config) || {};
+  let rateMin = Number(cfg.bankWithdrawRateMin ?? 0.01);
+  let rateMax = Number(cfg.bankWithdrawRateMax ?? 0.20);
+  if (!Number.isFinite(rateMin) || rateMin < 0) rateMin = 0.01;
+  if (!Number.isFinite(rateMax) || rateMax < 0) rateMax = 0.20;
+  if (rateMax < rateMin) {
+    const tmp = rateMin;
+    rateMin = rateMax;
+    rateMax = tmp;
+  }
   return {
     poorThreshold: Math.max(0, Number(cfg.bankPoorThreshold ?? 100000)),
-    withdrawAmount: Math.max(1, Number(cfg.bankWithdrawAmount ?? 100000))
+    rateMin: Math.min(1, rateMin),
+    rateMax: Math.min(1, rateMax),
+    floor: Math.max(1, Number(cfg.bankWithdrawFloor ?? 100000))
   };
+}
+
+/** 这一次能取的区间（给前端显示，实际金额在取款时才掷） */
+export function withdrawRange(db, bank) {
+  const { rateMin, rateMax, floor } = bankRules(db);
+  const money = Math.max(0, Number(bank) || 0);
+  const low = Math.min(money, Math.max(floor, Math.floor(money * rateMin)));
+  const high = Math.min(money, Math.max(floor, Math.floor(money * rateMax)));
+  return { low, high, rateMin, rateMax, floor };
 }
 
 /** 给前端看的银行状态 */
 export function bankStatus(db, player) {
-  const { poorThreshold, withdrawAmount } = bankRules(db);
+  const { poorThreshold, rateMin, rateMax, floor } = bankRules(db);
   const equity = playerEquity(db, player);
   const bank = Math.max(0, Number(player.bank) || 0);
   const poor = equity < poorThreshold;
+  const range = withdrawRange(db, bank);
   return {
     bank,
     deposited: Math.max(0, Number(player.bankDeposited) || 0),
     equity,
     poorThreshold,
-    withdrawAmount,
-    // 现在能不能取、能取多少
+    rateMin,
+    rateMax,
+    floor,
+    // 现在能不能取、大概能取多少
     poor,
     canWithdraw: poor && bank > 0,
-    withdrawable: poor ? Math.min(withdrawAmount, bank) : 0
+    withdrawMin: poor ? range.low : 0,
+    withdrawMax: poor ? range.high : 0
   };
 }
 
@@ -69,10 +93,11 @@ export function levelUpPlayer(db, player) {
 }
 
 /**
- * 取钱救急：总资产低于阈值时才允许，一次取 min(配置金额, 银行存款)
+ * 取钱救急：总资产低于阈值时才允许。
+ * 金额 = 存款 × 随机(rateMin ~ rateMax)，但不少于 floor；存款不足就取全部。
  */
 export function withdrawFromBank(db, player) {
-  const { poorThreshold, withdrawAmount } = bankRules(db);
+  const { poorThreshold, rateMin, rateMax, floor } = bankRules(db);
   const equity = playerEquity(db, player);
   if (!(equity < poorThreshold)) {
     return {
@@ -85,8 +110,9 @@ export function withdrawFromBank(db, player) {
   if (bank < 1) {
     return { ok: false, status: 400, error: '银行里没有存款，先升级账号才会存钱进来' };
   }
-  const amount = Math.min(withdrawAmount, bank);
+  const rate = rateMin + Math.random() * (rateMax - rateMin);
+  const amount = Math.min(bank, Math.max(floor, Math.floor(bank * rate)));
   player.bank = bank - amount;
   player.cash = (Number(player.cash) || 0) + amount;
-  return { ok: true, amount, bank: player.bank, cash: player.cash };
+  return { ok: true, amount, rate, bank: player.bank, cash: player.cash };
 }

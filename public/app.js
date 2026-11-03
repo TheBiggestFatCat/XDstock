@@ -3122,10 +3122,15 @@ function renderBank() {
   const deposited = Math.max(0, Number(me.bankDeposited) || 0);
   const equity = Math.max(0, Number(me.equity) || 0);
   const threshold = Math.max(0, Number(cfg.bankPoorThreshold ?? 100000));
-  const perWithdraw = Math.max(1, Number(cfg.bankWithdrawAmount ?? 100000));
+  const rateMin = Math.max(0, Math.min(1, Number(cfg.bankWithdrawRateMin ?? 0.01)));
+  const rateMax = Math.max(rateMin, Math.min(1, Number(cfg.bankWithdrawRateMax ?? 0.20)));
+  const floor = Math.max(1, Number(cfg.bankWithdrawFloor ?? 100000));
   const poor = equity < threshold;
   const canWithdraw = poor && bank > 0;
-  const amount = Math.min(perWithdraw, bank);
+  // 实际金额取款时才掷，这里只显示区间
+  const low = Math.min(bank, Math.max(floor, Math.floor(bank * rateMin)));
+  const high = Math.min(bank, Math.max(floor, Math.floor(bank * rateMax)));
+  const pctText = `${Math.round(rateMin * 100)}%~${Math.round(rateMax * 100)}%`;
 
   const amtEl = $('#bankAmount');
   if (amtEl) amtEl.textContent = money(bank);
@@ -3135,8 +3140,8 @@ function renderBank() {
   if (eqEl) eqEl.textContent = money(equity);
   const ruleEl = $('#bankRuleText');
   if (ruleEl) ruleEl.textContent = money0(threshold);
-  const waEl = $('#bankWithdrawAmount');
-  if (waEl) waEl.textContent = money0(perWithdraw);
+  const rateEl = $('#bankWithdrawRate');
+  if (rateEl) rateEl.textContent = pctText;
 
   const st = $('#bankState');
   if (st) {
@@ -3166,7 +3171,7 @@ function renderBank() {
     } else if (bank <= 0) {
       hint.textContent = '银行里还没有存款：升级账号时交的钱会自动存进来';
     } else {
-      hint.textContent = `这次可以取 ${money(amount)}，取完银行还剩 ${money(bank - amount)}`;
+      hint.textContent = `这次能取 ${money(low)} ~ ${money(high)}（存款的 ${pctText}，最低 ${money0(floor)}）`;
     }
   }
 }
@@ -3631,6 +3636,16 @@ async function loadAdmin() {
         ['workRatePerTick', '每轮积累'],
         ['workOnlineMultiplier', '在线倍率(2=双倍)'],
         ['workBankTicks', '钱袋上限(轮)']
+      ]
+    },
+    {
+      title: '银行',
+      desc: '升级费用存这里，破产时可取',
+      fields: [
+        ['bankPoorThreshold', '取钱门槛(总资产低于)'],
+        ['bankWithdrawRateMin', '取款比例下限(0.01=1%)'],
+        ['bankWithdrawRateMax', '取款比例上限(0.2=20%)'],
+        ['bankWithdrawFloor', '单次取款下限']
       ]
     },
     {

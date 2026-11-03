@@ -95,7 +95,10 @@ export const DEFAULT_CONFIG = {
   // ---- 丰川银行 ----
   // 账号升级交的钱会存进银行；总资产低于阈值时可以取一笔救急
   bankPoorThreshold: 100000,     // 总资产低于这个数才允许取钱
-  bankWithdrawAmount: 100000,    // 每次取多少（银行余额不足就取全部）
+  // 每次取「存款 × 随机(rateMin ~ rateMax)」，但不少于 floor（存款不足就取全部）
+  bankWithdrawRateMin: 0.01,     // 1%
+  bankWithdrawRateMax: 0.20,     // 20%
+  bankWithdrawFloor: 100000,     // 下限 10 万
 
   // 暗中调查（Lv.2 主题技能）：查别人一个随机持仓的冷却轮数
   investigateCooldownTicks: 30,
