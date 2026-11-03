@@ -681,13 +681,12 @@ function renderShopTiers() {
     b.classList.toggle('active', need === cur);
   });
 
-  // 只显示当前这一档
-  let shown = 0;
+  // 只显示当前这一档（display 用 inline style 兜底，避免被 .shop-grid 的 grid 覆盖）
   document.querySelectorAll('.shop-grid[data-tier]').forEach((el) => {
     const need = Number(el.dataset.tier) || 1;
     const on = need === cur && lv >= need;
     el.classList.toggle('hidden', !on);
-    if (on) shown += 1;
+    el.style.display = on ? '' : 'none';
   });
 
   // 等级不够：显示提示，不显示任何商品
