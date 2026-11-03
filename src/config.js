@@ -81,6 +81,7 @@ export const DEFAULT_CONFIG = {
 
   // 市场噪声成交：每轮编几笔「散户」成交，让成交列表看着像有人在交易
   marketTradesEnabled: 1,
+  marketTradesRate: 3,        // 噪声成交数量倍率（3 = 三倍）
 
   // 全市场新闻的冲击折扣（1 = 不打折）
   globalEventScale: 0.2,

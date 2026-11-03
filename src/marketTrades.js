@@ -31,11 +31,15 @@ export function genMarketTrades(db, maxTrades = 2) {
   const cfg = db.config || {};
   if (Number(cfg.marketTradesEnabled ?? 1) === 0) return [];
 
-  const list = Object.values(db.stocks).filter((s) => !s.isIndex && s.status === 'normal');
+  // 指数也算（DENG / DENGS 也要有散户在交易）
+  const list = Object.values(db.stocks).filter((s) => s.status === 'normal');
   if (!list.length) return [];
 
+  // 倍率：1 = 原始数量，3 = 现在三倍
+  const rate = Math.max(0, Number(cfg.marketTradesRate ?? 3));
+  const base = Math.max(1, Math.round(rand(1, maxTrades) * rate));
   const out = [];
-  const n = Math.max(1, Math.round(rand(1, maxTrades)));
+  const n = base;
 
   for (let i = 0; i < n; i++) {
     const st = pick(list);
