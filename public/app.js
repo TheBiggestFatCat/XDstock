@@ -1040,6 +1040,12 @@ function renderShop() {
   }
 
   // ---- 主题 ----
+  // 账号等级 / 分级商店
+  renderShopTiers();
+  renderLevelCard();
+  renderBgCard();
+  renderRenameHint();
+
   const ownedThemes = state.market?.me?.themes || [];
   const curTheme = state.theme || state.market?.me?.theme || 'default';
   const themePrice = Number(cfg.shopThemePrice ?? 2000000);
