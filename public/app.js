@@ -989,6 +989,7 @@ function renderBanList() {
         <button class="ban-btn ${p.banned ? 'unban' : ''}" data-ban-id="${p.id}" data-ban-action="${p.banned ? 'unban' : 'ban'}">
           ${p.banned ? '解封' : '封禁'}
         </button>
+        <button class="ban-btn logout" data-logout-id="${p.id}" data-logout-name="${escapeHtml(p.nickname)}">登出</button>
         ${p.banned ? `<button class="ban-btn del" data-del-id="${p.id}" data-del-name="${escapeHtml(p.nickname)}">删号</button>` : ''}
       </div>
     </div>`).join('');
@@ -996,9 +997,23 @@ function renderBanList() {
   box.querySelectorAll('[data-ban-id]').forEach((b) => {
     b.addEventListener('click', () => banPlayer(b.dataset.banId, b.dataset.banAction));
   });
+  box.querySelectorAll('[data-logout-id]').forEach((b) => {
+    b.addEventListener('click', () => logoutPlayer(b.dataset.logoutId, b.dataset.logoutName));
+  });
   box.querySelectorAll('[data-del-id]').forEach((b) => {
     b.addEventListener('click', () => deletePlayer(b.dataset.delId, b.dataset.delName));
   });
+}
+
+async function logoutPlayer(id, name) {
+  if (!confirm(`让「${name}」强制下线？\n\n账号不会被封，重新登录就能继续玩。`)) return;
+  try {
+    const r = await adminApi('/api/admin/player', { id, action: 'logout' });
+    toast(r.kicked > 0 ? `已让「${name}」下线（${r.kicked} 个会话）` : `「${name}」当前不在线`, 'ok');
+    loadAdminPlayers();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
 }
 
 async function banPlayer(id, action) {

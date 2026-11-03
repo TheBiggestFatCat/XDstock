@@ -580,6 +580,15 @@ export async function handleApi(ctx) {
       saveDb();
       return json(res, 200, { ok: true, banned: false });
     }
+    if (action === 'logout') {
+      // 只踢下线，不封号：清掉这个玩家的所有会话
+      let killed = 0;
+      for (const [tk, sess] of Object.entries(db.sessions || {})) {
+        if (sess && sess.playerId === id) { delete db.sessions[tk]; killed += 1; }
+      }
+      saveDb();
+      return json(res, 200, { ok: true, kicked: killed });
+    }
     if (action === 'delete') {
       // 删号是不可逆的，必须已经封禁过
       if (!p.banned) return json(res, 400, { error: '请先封禁再删号' });

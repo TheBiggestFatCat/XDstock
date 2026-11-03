@@ -2460,3 +2460,6 @@ body[data-theme="bear"] .brand-logo {
 .tp-bear-1 { background: #eaf6ec; color: #14532d; }
 .tp-bear-2 { background: #15803d; color: #fff; }
 .tp-bear-3 { background: #f8fdf9; color: #3f6b4e; border: 1px solid #d5e9db; }
+
+.ban-btn.logout { border-color: var(--line); color: var(--ink-2); }
+.ban-btn.logout:hover { background: var(--soft-3); }
