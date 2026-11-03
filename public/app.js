@@ -2187,7 +2187,8 @@ function handleAlerts(list) {
 function handleCloses(list) {
   for (const c of list) {
     if (c && c.bonus > 0) {
-      toast(`🐂 牛市加成 +${money(c.bonus)}`, 'ok');
+      const isBear = state.market?.me?.theme === 'bear';
+      toast(`${isBear ? '🐻 熊市加成' : '🐂 牛市加成'} +${money(c.bonus)}`, 'ok');
     }
     if (c && c.autoOrder && !c.qty) {
       toast(

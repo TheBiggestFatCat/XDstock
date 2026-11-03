@@ -80,6 +80,7 @@ function publicPlayer(p, db) {
     fakeNewsReadyAt: p.fakeNewsReadyAt || 0,
     channelLevel: p.channelLevel || 0,
     redBonusEarned: p.redBonusEarned || 0,
+    bearBonusEarned: p.bearBonusEarned || 0,
     theme: p.theme || 'default',
     themeChangedTick: p.themeChangedTick || 0,
     themes: Array.isArray(p.themes) ? p.themes : [],
