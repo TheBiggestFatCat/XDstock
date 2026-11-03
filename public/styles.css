@@ -273,13 +273,22 @@ textarea { resize: vertical; }
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr) 300px;
   gap: 16px;
-  align-items: start;
+  /* 三栏等高：左侧行情卡片和右侧下单卡片上下对齐 */
+  align-items: stretch;
 }
+.market-grid > .panel { min-height: 0; }
 
 /* ---------- 股票列表 ---------- */
+/* 行情卡片：标题固定，列表撑满剩余高度并在内部滚动 */
+.stock-list-panel {
+  display: flex;
+  flex-direction: column;
+}
 .stock-list {
   display: flex; flex-direction: column; gap: 6px;
-  max-height: 620px;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
   /* 保留纵向滚动条，只禁掉横向 */
   overflow-y: auto;
   overflow-x: hidden;
