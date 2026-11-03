@@ -464,51 +464,17 @@ export async function handleApi(ctx) {
   }
 
   if (pathname === '/api/leaderboard' && method === 'GET') {
-    const viewer = auth(ctx)?.player;
-    const rows = Object.values(db.players).map((p) => {
-      const equity = playerEquity(db, p);
-      // 暗黑大手：别人看到的持仓方向也是随机的
-      const stealth = p.theme === 'dark' && (!viewer || viewer.id !== p.id);
-      // 隐世仙人：别人看不到他的持仓（成交记录照旧可见）
-      const hermit = p.theme === 'hermit' && (!viewer || viewer.id !== p.id);
-      if (hermit) {
-        return {
-          id: p.id,
-          nickname: p.nickname,
-          avatar: p.avatar || null,
-          cash: p.cash,
-          equity,
-          guardUntil: p.guardUntil || 0,
-          positions: [],
-          theme: p.theme,
-          hidden: true
-        };
-      }
-      const positions = Object.entries(p.positions || {}).map(([code, pos]) => {
-        const st = db.stocks[code];
-        return {
-          code,
-          name: st?.name || code,
-          side: stealth && Math.random() < 0.5
-            ? (pos.side === 'long' ? 'short' : 'long')
-            : pos.side,
-          qty: pos.qty,
-          entry: pos.entry,
-          price: st?.price ?? 0,
-          leverage: pos.leverage,
-          pnl: st ? positionPnl(pos, st.price) : 0
-        };
-      });
-      return {
-        id: p.id,
-        nickname: p.nickname,
-        avatar: p.avatar || null,
-        cash: p.cash,
-        equity,
-        guardUntil: p.guardUntil || 0,
-        positions
-      };
-    });
+    // 排行榜只公开资产，不再公开任何人的持仓
+    const rows = Object.values(db.players).map((p) => ({
+      id: p.id,
+      nickname: p.nickname,
+      avatar: p.avatar || null,
+      cash: p.cash,
+      equity: playerEquity(db, p),
+      guardUntil: p.guardUntil || 0,
+      theme: p.theme || 'default',
+      positions: []
+    }));
     rows.sort((a, b) => b.equity - a.equity);
     return json(res, 200, { rows });
   }
@@ -905,9 +871,20 @@ export async function handleApi(ctx) {
     if (!db.stocks[code]) return json(res, 404, { error: '没有这个标的' });
     const limit = Math.min(120, Math.max(1, Number(query.limit) || 40));
 
+    // 隐世仙人：每笔成交有 50% 概率不出现在别人的成交记录里
+    const hideHalf = (t) => {
+      const owner = db.players[t.playerId];
+      if (!owner || owner.theme !== 'hermit') return false;
+      if (me && me.id === t.playerId) return false;          // 自己看得到自己的
+      // 用单号做哈希，保证同一笔每次请求结果一致，不会闪
+      let h = 0;
+      const id = String(t.id || '');
+      for (let k = 0; k < id.length; k++) h = (h * 31 + id.charCodeAt(k)) | 0;
+      return (Math.abs(h) % 2) === 0;
+    };
     const all = (db.trades || []).filter(
       (t) => t.code === code && (t.action === 'open' || t.action === 'close')
-    );
+    ).filter((t) => !hideHalf(t));
     const rows = all
       .slice(-limit)
       .reverse()

@@ -190,11 +190,13 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
 
   player.cash -= cost;
   // 开多 = 买入推高；开空 = 卖出压低
+  // 暗黑大手：自己的成交对市场冲击额外多 5%
+  const impactMult = player.theme === 'dark' ? 1.05 : 1;
   if (st.isIndex) {
     // 指数：按权重把冲击分摊给成分股
-    distributeIndexFlow(db, side === 'long' ? notional : -notional);
+    distributeIndexFlow(db, (side === 'long' ? notional : -notional) * impactMult);
   } else {
-    addFlow(st, cfg, side === 'long' ? notional : -notional);
+    addFlow(st, cfg, (side === 'long' ? notional : -notional) * impactMult);
   }
   db.tradesThisTick = (db.tradesThisTick || 0) + 1;
   logTrade(db, {
@@ -301,10 +303,11 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
 
   player.cash += back;
   // 平多 = 卖出压低；平空 = 买回推高
+  const impactMult2 = player.theme === 'dark' ? 1.05 : 1;
   if (st.isIndex) {
-    distributeIndexFlow(db, pos.side === 'long' ? -notional : notional);
+    distributeIndexFlow(db, (pos.side === 'long' ? -notional : notional) * impactMult2);
   } else {
-    addFlow(st, cfg, pos.side === 'long' ? -notional : notional);
+    addFlow(st, cfg, (pos.side === 'long' ? -notional : notional) * impactMult2);
   }
 
   if (closeQty >= pos.qty) {

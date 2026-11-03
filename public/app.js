@@ -2763,7 +2763,7 @@ async function loadRank(force = false) {
     const d = await api('/api/leaderboard');
     const wrap = $('#rankTable');
     const sig = d.rows
-      .map((r) => `${r.id}:${Math.round(r.equity)}:${r.cash.toFixed(0)}:${r.positions.length}`)
+      .map((r) => `${r.id}:${Math.round(r.equity)}:${r.cash.toFixed(0)}`)
       .join('|');
     if (!force && sig === state.rankSig && wrap.querySelector('table')) {
       const t = $('#rankTime');
@@ -2773,12 +2773,12 @@ async function loadRank(force = false) {
     state.rankSig = sig;
     wrap.innerHTML = `
       <table>
-        <thead><tr><th>#</th><th>玩家</th><th>总资产</th><th>现金</th><th>持仓</th><th>操作</th></tr></thead>
+        <thead><tr><th>#</th><th>玩家</th><th>总资产</th><th>现金</th><th>操作</th></tr></thead>
         <tbody>
           ${d.rows.map((r, i) => {
             const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
             const mine = r.id === state.market?.me?.id ? 'rank-row-me' : '';
-            const hold = r.positions.length
+            const _unusedHold = r.positions.length
               ? r.positions.map((p) => `<span class="pill ${p.side}">${p.name} ${p.side === 'long' ? '多' : '空'} ×${p.qty} @${(p.leverage || 1).toFixed(0)}x</span>`).join(' ')
               : '<span class="stock-code">空仓</span>';
             const cfg = state.market?.config || {};
@@ -2806,7 +2806,6 @@ async function loadRank(force = false) {
               <td><span class="rank-user">${rankAvatar(r)}<span class="rank-name">${escapeHtml(r.nickname)}</span></span></td>
               <td class="${cls(r.equity - 100000)}">${money(r.equity)}</td>
               <td>${money(r.cash)}</td>
-              <td style="text-align:left">${hold}</td>
               <td>${actionCell}</td>
             </tr>`;
           }).join('')}
