@@ -586,6 +586,50 @@ export function timeOfTick(db, absTick) {
   return (db.startedAt || 0) + absTick * (db.config.tickMs || 5000);
 }
 
+/**
+ * 服务端记的真实时间轴，但把「停机造成的空洞」压掉。
+ *
+ * db.tickTimes 存的是每轮的真实时间戳，服务器重启/停机期间没有 tick，
+ * 于是相邻两个 tick 的时间差可能是几小时。直接拿它当 K 线横轴，
+ * 图上就会出现「一大段空白 + 线跳过去」的假缺口。
+ *
+ * 这里从最新一轮往回走，把每个间隔夹在 [0.25×tickMs, 3×tickMs] 之间：
+ * 最新一根仍然是真实时间，历史空洞被压缩成正常的几格。
+ *
+ * @returns {{start:number, times:number[]}} times[i] 对应绝对 tick = start + i
+ */
+export function tickTimeAxis(db) {
+  const times = Array.isArray(db.tickTimes) ? db.tickTimes : [];
+  const start = Number(db.tickTimesStart) || 0;
+  const step = Math.max(1000, Number(db.config?.tickMs) || 5000);
+  const maxGap = step * 3;
+  const minGap = Math.max(1, Math.floor(step * 0.25));
+  const out = new Array(times.length);
+  if (!times.length) return { start, times: out };
+
+  let t = Number(times[times.length - 1]) || Date.now();
+  out[times.length - 1] = t;
+  for (let i = times.length - 2; i >= 0; i--) {
+    const real = (Number(times[i + 1]) || t) - (Number(times[i]) || t);
+    const gap = Math.min(Math.max(real, minGap), maxGap);
+    t -= gap;
+    out[i] = t;
+  }
+  return { start, times: out };
+}
+
+/** 时间轴查表：超出记录范围就用最后一轮 + 步长外推 */
+export function timeFromAxis(axis, absTick, db) {
+  const times = axis.times || [];
+  const idx = Number(absTick) - Number(axis.start || 0);
+  if (idx >= 0 && idx < times.length) return times[idx];
+  const step = Math.max(1000, Number(db?.config?.tickMs) || 5000);
+  const lastIdx = times.length - 1;
+  if (lastIdx < 0) return (Number(db?.startedAt) || 0) + absTick * step;
+  const lastAbs = Number(axis.start || 0) + lastIdx;
+  return times[lastIdx] + (absTick - lastAbs) * step;
+}
+
 export function candlesFromSeries(series, group, tickMs, tickStart, maxCandles = 1200, baseMs = 0, timeOf = null) {
   const out = [];
   if (!series || !series.length) return out;

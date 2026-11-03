@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
-import { candlesFromSeries, changesFor, timeOfTick, pushNotice, noticeAlive } from './engine.js';
+import { candlesFromSeries, changesFor, timeFromAxis, tickTimeAxis, pushNotice, noticeAlive } from './engine.js';
 import { TIMEFRAMES } from './config.js';
 import { getBuild } from './build.js';
 import { playerEquity, positionPnl } from './trading.js';
@@ -530,10 +530,12 @@ export async function handleApi(ctx) {
     const isIndex = code === 'INDEX';
     const src = isIndex ? db.index : db.stocks[code];
     if (!src) return json(res, 404, { error: '标的不存在' });
+    // 时间轴：真实时间，但把停机空洞压掉（否则 K 线会出现大段空白）
+    const axis = tickTimeAxis(db);
     const candles = candlesFromSeries(
       src.series, group, db.config.tickMs ?? 5000,
       Math.max(0, db.tick - src.series.length), 1200, db.startedAt || 0,
-      (absTick) => timeOfTick(db, absTick)
+      (absTick) => timeFromAxis(axis, absTick, db)
     );
     return json(res, 200, { code, tf, candles });
   }
@@ -1033,10 +1035,12 @@ export async function handleApi(ctx) {
   }
 
   if (pathname === '/api/equity-curve' && method === 'GET') {
+    // 和 K 线用同一条归一化时间轴，避免停机空洞把收益曲线拉断
+    const axis = tickTimeAxis(db);
     const points = (me.eq || []).map((p) => ({
       // [tick, 总资产, 累计外部收入]
       tick: p[0],
-      time: Math.floor(timeOfTick(db, p[0]) / 1000),
+      time: Math.floor(timeFromAxis(axis, p[0], db) / 1000),
       equity: p[1],
       income: p[2],
       trading: p[1] - p[2]

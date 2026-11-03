@@ -2186,9 +2186,21 @@ async function loadMyTrades() {
   updateMarkers();
 }
 
-async function loadCandles() {
+/** 漏 tick 之后重新对齐：静默重拉一次 K 线，不动用户当前的缩放位置 */
+let resyncTimer = null;
+function resyncCandles() {
+  if (state.resyncing) return;
+  if (resyncTimer) return;
+  resyncTimer = setTimeout(() => {
+    resyncTimer = null;
+    loadCandles({ keepRange: true });
+  }, 800);
+}
+
+async function loadCandles(opts = {}) {
   const code = state.code;
   const tf = state.tf;
+  state.resyncing = true;
   try {
     const d = await api(`/api/candles?code=${encodeURIComponent(code)}&tf=${tf}`);
     // 防竞态：切股票/切周期时前一个请求可能后到，直接把新数据覆盖成旧股票
@@ -2215,6 +2227,10 @@ async function loadCandles() {
     }
     clean.sort((a, b) => a.time - b.time);
 
+    const before = opts.keepRange && state.chart
+      ? state.chart.timeScale().getVisibleLogicalRange()
+      : null;
+
     state.candles = clean;
     state.candleSeries.setData(state.candles);
 
@@ -2226,16 +2242,27 @@ async function loadCandles() {
     updatePriceLines();
     updateMarkers();
     updateLimitLine(Number($('#orderLimit')?.value));
-    // 只显示最近一段，K 线不至于挤成一条线
-    const n = state.candles.length;
-    if (n > 12) {
-      state.chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, n - 70), to: n + 3 });
+    if (before) {
+      // 重同步：保持用户原来的视野，只把缺的数据补上
+      const maxIdx = state.candles.length + 3;
+      state.chart.timeScale().setVisibleLogicalRange({
+        from: Math.min(Math.max(0, before.from), maxIdx),
+        to: Math.min(Math.max(1, before.to), maxIdx)
+      });
     } else {
-      state.chart.timeScale().fitContent();
+      // 只显示最近一段，K 线不至于挤成一条线
+      const n = state.candles.length;
+      if (n > 12) {
+        state.chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, n - 70), to: n + 3 });
+      } else {
+        state.chart.timeScale().fitContent();
+      }
     }
     $('#chartEmpty').classList.toggle('hidden', state.candles.length > 0);
   } catch (e) {
     toast('K 线加载失败：' + e.message, 'err');
+  } finally {
+    state.resyncing = false;
   }
 }
 
@@ -2346,6 +2373,15 @@ function applyTickToChart(price) {
   if (state.tickKey !== key) {
     state.tickKey = key;
     state.tickBucket = bucket;
+  }
+
+  // 中间整整漏掉了一根以上（SSE 掉线、手机切后台被挂起、切页面期间没收到 tick）：
+  // 只补一根会让图上出现「缺失一段 + 线大幅跳开」，直接从服务端重新拉一次对齐
+  const prevBucket = state.tickBucket;
+  if (Number.isFinite(prevBucket) && prevBucket !== null && bucket - prevBucket > 1) {
+    resyncCandles();
+    state.tickBucket = bucket;
+    return;
   }
 
   const last = state.candles[state.candles.length - 1];
@@ -4018,6 +4054,8 @@ function switchView(name) {
   if (name === 'rank') loadRank(true);
   if (name === 'shop') renderShop();
   if (name === 'bank') renderBank();
+  // 切回行情时图表容器可能刚从 display:none 恢复，补一次尺寸校正
+  if (name === 'market') resizeChartNow();
   // 切换标签时退回列表态（手机上从个股详情回到列表）
   document.body.classList.remove('m-detail');
   if (name === 'admin') {
