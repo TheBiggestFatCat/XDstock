@@ -3392,7 +3392,9 @@ function renderTraitForm(stocks) {
 
     return `<section class="trait-card">
       <div class="trait-head">
-        <img class="stock-icon-sm" src="${st.icon || '/assets/stocks/' + st.code + '.png'}" alt="" />
+        <img class="stock-icon-sm" src="${st.icon
+          || state.market?.stocks?.[st.code]?.icon
+          || '/assets/stocks/' + st.code + '.png'}" alt="" onerror="this.style.visibility='hidden'" />
         <b>${st.name}</b>
         <span class="stock-code">${st.code}</span>
         <span class="trait-tag">${st.traitName || '—'}</span>
