@@ -2222,6 +2222,8 @@ function onTick(d) {
   m.index.series.push(d.index);
   if (m.index.series.length > 600) m.index.series.shift();
   m.events = d.events || [];
+  // 公告也要跟着每轮更新，否则管理员发的公告只有刷新页面才看得到
+  if (Array.isArray(d.notices)) m.notices = d.notices;
 
   checkBuild(d.build);
   if (d.closed !== undefined) m.marketOpen = !d.closed;
