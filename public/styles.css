@@ -2064,7 +2064,6 @@ body[data-theme="dark"] .fee-bonus { color: var(--down); }
 .chart-sub .up { color: var(--up); font-weight: 700; }
 .chart-sub .down { color: var(--down); font-weight: 700; }
 .chart-sub .flat { color: var(--ink-3); }
-.chart-sub .cs-hint { font-size: 10.5px; color: var(--ink-3); margin-left: auto; }
 .cs-tag {
   font-size: 10px;
   font-weight: 800;
@@ -2327,19 +2326,6 @@ body[data-theme="dark"] .fee-bonus { color: var(--down); }
 .rp-grid > div { display: flex; flex-direction: column; gap: 2px; }
 .rp-grid span { font-size: 11px; color: var(--ink-3); }
 .rp-grid b { font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; }
-
-/* 财报面板里的天气条（农业股） */
-.rp-weather {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
-  margin: -2px 0 10px; padding: 7px 10px;
-  font-size: 12px; color: var(--ink-2);
-  background: var(--soft-2); border-radius: 10px;
-}
-.rp-weather b { color: var(--ink); font-variant-numeric: tabular-nums; }
-.rp-weather .up { color: var(--up); }
-.rp-weather .down { color: var(--down); }
-.rp-weather .flat { color: var(--ink-3); }
-.rp-weather-hint { margin-left: auto; font-size: 11px; color: var(--ink-3); }
 
 .rp-fair {
   display: flex; gap: 16px; align-items: center;

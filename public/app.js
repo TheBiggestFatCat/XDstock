@@ -273,20 +273,6 @@ const ST_DEFAULT_PRICE = 3;
 function renderChartSub(st) {
   const el = $('#chartSub');
   if (!el) return;
-  // 天气股：把天气和它对营收的影响摆出来，不然玩家只看到「每次财报都跌」
-  if (st && st.trait?.id === 'weather' && st.weather) {
-    const sc = Number(st.weather.score) || 0;
-    const swing = Math.max(0.1, Number(st.trait.swing) || 0.5);
-    const impact = sc * swing * 100;
-    const c2 = impact > 0.05 ? 'up' : impact < -0.05 ? 'down' : 'flat';
-    el.classList.remove('hidden');
-    el.innerHTML = `
-      <span class="cs-tag">🌾 天气</span>
-      <b>${escapeHtml(st.weather.label || '—')}</b>
-      <span class="${c2}" title="对营收增速的影响（天气 ${(sc * 100).toFixed(0)} × 摆幅 ${(swing * 100).toFixed(0)}%）">营收 ${impact >= 0 ? '+' : ''}${impact.toFixed(1)}%</span>
-      <span class="cs-hint">每期财报重新观测</span>`;
-    return;
-  }
   if (!st || st.trait?.id !== 'fx') {
     el.classList.add('hidden');
     el.innerHTML = '';
@@ -408,7 +394,6 @@ function renderReport() {
       <span class="rp-period">第 ${r.period} 期</span>
       <span class="rp-cap">总市值 <b>${fmtMoney(r.marketCap || 0)}</b></span>
     </div>
-    ${weatherLine(st)}
     <div class="rp-grid">
       <div><span>营业收入</span><b>${fmtMoney(r.revenue || 0)}</b></div>
       <div><span>净利润</span><b>${fmtMoney(r.netProfit || 0)}</b></div>
@@ -436,18 +421,6 @@ function renderReport() {
   `;
 }
 
-
-/** 财报面板里的天气说明（只对农业股） */
-function weatherLine(st) {
-  if (!st || st.trait?.id !== 'weather' || !st.weather) return '';
-  const sc = Number(st.weather.score) || 0;
-  const swing = Math.max(0.1, Number(st.trait.swing) || 0.5);
-  const impact = sc * swing * 100;
-  const c2 = impact > 0.05 ? 'up' : impact < -0.05 ? 'down' : 'flat';
-  return `<div class="rp-weather">🌾 天气 <b>${escapeHtml(st.weather.label || '—')}</b>
-    <span>营收影响 <b class="${c2}">${impact >= 0 ? '+' : ''}${impact.toFixed(1)}%</b></span>
-    <span class="rp-weather-hint">每期财报重新观测</span></div>`;
-}
 
 /** 财报历史折线图（纯 SVG，不依赖图表库） */
 function renderReportChart(hist) {
