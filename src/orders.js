@@ -52,15 +52,6 @@ export function placeLimitOrder(db, player, body) {
   if (!(limit > 0)) return { ok: false, error: '限价必须大于 0' };
 
   if (!Array.isArray(player.orders)) player.orders = [];
-  // 同一只票同时只能有一张挂单（开仓或平仓都算）
-  const dup = (player.orders || []).find((o) => o.code === code);
-  if (dup) {
-    return {
-      ok: false,
-      error: `${st.name} 已经有一张${dup.action === 'close' ? '平仓' : '开仓'}挂单了，先撤掉再挂`
-    };
-  }
-
   const maxPending = Math.max(1, num(cfg.maxPendingOrders, 5));
   if (player.orders.length >= maxPending) {
     return { ok: false, error: `最多同时挂 ${maxPending} 笔单，先撤掉一些` };
@@ -165,12 +156,16 @@ export function cancelOrder(db, player, orderId, reason = '手动撤单') {
 export function processOrders(db) {
   const events = [];
 
+  // 本轮已经成交过的股票：一只票一 tick 只吃一张单，其余排队等下一轮
+  const filledCodes = new Set();
+
   for (const player of Object.values(db.players)) {
     const orders = player.orders;
     if (!Array.isArray(orders) || !orders.length) continue;
 
     for (const order of [...orders]) {
       const st = db.stocks[order.code];
+      if (st && filledCodes.has(order.code)) continue;   // 排队中
 
       // 标的没了 / 退市 → 撤单退款
       if (!st || st.status === 'delisted') {
@@ -247,6 +242,7 @@ export function processOrders(db) {
           leverage: order.leverage
         });
 
+        if (r.ok) filledCodes.add(order.code);   // 本轮这只票已经成交过，其余排队
         if (!r.ok) {
           // 成交失败：押金退回去，单子留着下一轮再试
           player.cash = num(player.cash, 0) - portion;
@@ -314,6 +310,7 @@ export function processOrders(db) {
           continue;
         }
 
+        filledCodes.add(order.code);   // 本轮这只票已经成交过，其余排队
         order.qty -= closeQtyNow;
         if (order.qty < 1 || !player.positions[order.code]) {
           const idx = orders.indexOf(order);
