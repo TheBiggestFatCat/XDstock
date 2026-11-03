@@ -159,6 +159,30 @@ export const STOCK_SEED = {
       anticipate: 0.004
     }
   },
+  HJF: {
+    code: 'HJF',
+    name: '哈基蜂业',
+    icon: '/assets/stocks/HJF.png',
+    industry: '农业种业',
+    shares: 260000000,   // 总股本 2.6 亿股
+    freeFloat: 0.5,
+    desc: '蜂蜜、蜂产品、授粉服务',
+    initialPrice: 45,
+    trait: {
+      id: 'weather',
+      name: '靠天吃饭',
+      desc: '和戴夫种业共用同一片天；蜜蜂脾气不定，偶尔突然疯涨暴跌',
+      volMult: 1.0,
+      revMult: 1.0,
+      swing: 0.5,
+      anticipate: 0.004,
+      // 抽奖：每轮概率触发一次暴涨或暴跌
+      lottery: 1,
+      lotteryChance: 0.0006,
+      lotteryLo: 0.12,
+      lotteryHi: 0.40
+    }
+  },
   XD: {
     code: 'XD',
     name: '小灯证券',

@@ -84,6 +84,11 @@ export const DEFAULT_CONFIG = {
   // 全市场新闻的冲击折扣（1 = 不打折）
   globalEventScale: 0.2,
 
+  // 哈基蜂业抽奖：每轮触发概率 / 涨跌幅区间
+  weatherLotteryChance: 0.0006,
+  weatherLotteryLo: 0.12,
+  weatherLotteryHi: 0.40,
+
   // 财报：每多少轮发一期（720 轮 = 1 小时）
   reportIntervalTicks: 720,
 

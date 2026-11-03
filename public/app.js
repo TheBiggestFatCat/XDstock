@@ -3000,6 +3000,15 @@ async function loadAdmin() {
       ]
     },
     {
+      title: '哈基蜂业抽奖',
+      desc: '低概率瞬间暴涨暴跌',
+      fields: [
+        ['weatherLotteryChance', '触发概率/轮(0.0006≈每28分钟)'],
+        ['weatherLotteryLo', '最小涨跌幅(0.12=12%)'],
+        ['weatherLotteryHi', '最大涨跌幅(0.40=40%)']
+      ]
+    },
+    {
       title: '打工',
       desc: '自动积累的钱袋',
       fields: [

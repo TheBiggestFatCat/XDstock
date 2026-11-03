@@ -284,6 +284,9 @@ function marketPayload(db, me) {
       feeRate: db.config.feeRate,
       stampDuty: db.config.stampDuty,
       maxOrdersPerTick: db.config.maxOrdersPerTick,
+      weatherLotteryChance: db.config.weatherLotteryChance ?? 0.0006,
+      weatherLotteryLo: db.config.weatherLotteryLo ?? 0.12,
+      weatherLotteryHi: db.config.weatherLotteryHi ?? 0.40,
       globalEventScale: db.config.globalEventScale ?? 0.2,
 
       maxFillNotionalPerTick: db.config.maxFillNotionalPerTick ?? 150000,
@@ -739,7 +742,7 @@ export async function handleApi(ctx) {
       'shopBodyguardPrice', 'shopBodyguardTicks', 'shopThemePrice',
       'shopChannelBasePrice', 'shopChannelRatio', 'shopChannelStep',
       'stPrice', 'stDelistTicks',
-      'marketTradesEnabled', 'redBonusRate', 'redBonusMinTicks', 'bearBonusRate', 'bearBonusMinTicks',
+      'marketTradesEnabled', 'weatherLotteryChance', 'weatherLotteryLo', 'weatherLotteryHi', 'redBonusRate', 'redBonusMinTicks', 'bearBonusRate', 'bearBonusMinTicks',
       'fxEnabled', 'fxCoef', 'fxLeverage', 'fxRefreshMs', 'fxTrack',
       'impactCostCoef', 'impactCostMax', 'playerImpactTail',
       'maxOrdersPerTick', 'maxFillNotionalPerTick',

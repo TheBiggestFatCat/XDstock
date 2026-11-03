@@ -269,6 +269,57 @@ export function stepMarket(db) {
   // 3.5 生成市场噪声成交（反映本轮的随机波动）
   genMarketTrades(db);
 
+  // 3.55 蜜蜂脾气：低概率突然暴力拉升或砸盘
+  for (const st of stocks) {
+    if (st.isIndex || !st.trait?.lottery) continue;
+    // 面板参数优先，没配就用股票特质里的
+    const chance = Math.max(0, Math.min(1,
+      Number(cfg.weatherLotteryChance ?? st.trait.lotteryChance) || 0));
+    if (!(chance > 0) || Math.random() >= chance) continue;
+    const lo = Math.max(0.01, Number(cfg.weatherLotteryLo ?? st.trait.lotteryLo) || 0.12);
+    const hi = Math.max(lo, Number(cfg.weatherLotteryHi ?? st.trait.lotteryHi) || 0.40);
+    const pct = lo + Math.random() * (hi - lo);
+    const up = Math.random() < 0.5;
+    st.price = Number((st.price * (1 + (up ? pct : -pct))).toFixed(4));
+    st.lotteryAt = db.tick;
+    st.lastLottery = { pct, up, tick: db.tick };
+    db.notices = db.notices || [];
+    db.notices.push({
+      id: 'n_' + Math.random().toString(36).slice(2, 10),
+      text: `${st.name}盘面异动，${up ? '直线拉升' : '闪崩下杀'} ${(pct * 100).toFixed(0)}%，全场哗然`,
+      at: Date.now(),
+      tick: db.tick,
+      kind: up ? 'up' : 'down'
+    });
+    if (db.notices.length > 20) db.notices.splice(0, db.notices.length - 20);
+  }
+
+  // 3.58 天气股对齐（共用天气、同时发报）
+  {
+    let first = null;
+    for (const st of stocks) {
+      if (st.isIndex || st.trait?.id !== 'weather') continue;
+      if (!first) { first = st; continue; }
+      // 天气共用
+      if (db.weather) st.weather = db.weather;
+      else if (first.weather) st.weather = first.weather;
+      // 发报轮次对齐（取更早的那个，保证同时公布）
+      const a = Number(first.nextReportTick) || 0;
+      const b = Number(st.nextReportTick) || 0;
+      const same = Math.min(a || b, b || a);
+      if (same > 0) {
+        first.nextReportTick = same;
+        st.nextReportTick = same;
+      }
+      // 目标价也要跟着算出来，否则不会提前靠拢
+      if (st.weather && !(Number(st.weatherTarget) > 0)) {
+        const swing = Math.max(0.1, Number(st.trait?.swing) || 0.5);
+        st.weatherTarget = Math.max(0.5, Number(st.fair) * (1 + st.weather.score * swing));
+      }
+    }
+    if (!db.weather && first?.weather) db.weather = first.weather;
+  }
+
   // 3.6 种业：市场提前向天气预期靠拢
   for (const s2 of stocks) {
     if (s2.isIndex || s2.trait?.id !== 'weather') continue;
@@ -489,15 +540,26 @@ export function runReports(db) {
     st.expectedGrowth = expected;
 
     // 财报历史（给前端的折线图用）
-    if (!Array.isArray(st.reportHistory)) st.reportHistory = [];
-    // 种业：掷下一期天气（公开），并算出市场会靠拢的目标价
+    // 同一片天下的农业股，财报同时发布
     if (st.trait?.id === 'weather') {
-      const score = Math.max(-1, Math.min(1, gauss() * 0.55));
-      const label = score > 0.45 ? '大丰收' : score > 0.12 ? '风调雨顺'
-        : score > -0.12 ? '平平无奇' : score > -0.45 ? '略有减产' : '灾害歉收';
-      st.weather = { score, label };
+      for (const sib of Object.values(db.stocks)) {
+        if (sib === st || sib.isIndex || sib.trait?.id !== 'weather') continue;
+        sib.nextReportTick = st.nextReportTick;
+      }
+    }
+
+    if (!Array.isArray(st.reportHistory)) st.reportHistory = [];
+    // 种业：天气是全局的，所有农业股共用同一片天
+    if (st.trait?.id === 'weather') {
+      if (!db.weather || !Number.isFinite(Number(db.weather.score))) {
+        const sc = Math.max(-1, Math.min(1, gauss() * 0.55));
+        const lb = sc > 0.45 ? '大丰收' : sc > 0.12 ? '风调雨顺'
+          : sc > -0.12 ? '平平无奇' : sc > -0.45 ? '略有减产' : '灾害歉收';
+        db.weather = { score: sc, label: lb };
+      }
+      st.weather = db.weather;
       const swing = Math.max(0.1, Number(st.trait?.swing) || 0.5);
-      st.weatherTarget = Math.max(0.5, Number(st.fair) * (1 + score * swing));
+      st.weatherTarget = Math.max(0.5, Number(st.fair) * (1 + db.weather.score * swing));
     }
 
     st.reportHistory.push({
