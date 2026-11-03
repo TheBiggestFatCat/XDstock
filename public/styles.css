@@ -937,6 +937,48 @@ input.tpsl-input {
 .work-stats b { font-size: 17px; color: var(--ink); font-variant-numeric: tabular-nums; }
 .work-stats b.down { color: var(--down) !important; }
 
+/* ---------- 丰川银行 ---------- */
+.bank-wrap {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px; padding: 56px 20px 80px; text-align: center;
+}
+.bank-title { font-size: 32px; font-weight: 800; letter-spacing: 6px; color: var(--ink); }
+.bank-desc { font-size: 14px; line-height: 1.9; color: var(--ink-2); margin: 0; }
+.bank-desc b { color: var(--accent); font-size: 15px; }
+.bank-card {
+  width: min(420px, 100%);
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r);
+  box-shadow: var(--shadow); padding: 22px 24px;
+}
+.bank-card-label { font-size: 12px; color: var(--ink-3); letter-spacing: 2px; }
+.bank-card-amount {
+  font-size: 40px; font-weight: 800; margin: 6px 0 4px; color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.bank-card-sub { font-size: 12px; color: var(--ink-3); }
+.bank-btn {
+  width: 240px; height: 64px; border-radius: 18px; border: none; cursor: pointer;
+  font-family: inherit; font-size: 16px; font-weight: 700; color: #fff;
+  background: linear-gradient(135deg, #e0a35c, #b4713a);
+  box-shadow: 0 12px 28px rgba(180, 113, 58, .35);
+  transition: transform .15s, box-shadow .15s, filter .15s;
+}
+.bank-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 16px 34px rgba(180, 113, 58, .42); }
+.bank-btn:active:not(:disabled) { transform: scale(.97); }
+.bank-btn:disabled, .bank-btn.is-off {
+  filter: grayscale(1); opacity: .55; cursor: not-allowed; box-shadow: none;
+}
+.bank-hint { font-size: 12.5px; color: var(--ink-3); margin: 0; max-width: 420px; line-height: 1.7; }
+.bank-stats { display: flex; gap: 34px; margin-top: 6px; font-size: 12.5px; color: var(--ink-3); }
+.bank-stats > div { display: flex; flex-direction: column; gap: 4px; }
+.bank-stats b { font-size: 17px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.bank-stats b.up { color: var(--up); }
+@media (max-width: 760px) {
+  .bank-wrap { padding: 36px 16px 60px; }
+  .bank-card-amount { font-size: 32px; }
+  .bank-btn { width: 100%; max-width: 320px; }
+}
+
 @media (max-width: 760px) {
   .work-wrap { padding: 40px 16px 60px; }
   .work-btn { width: 190px; height: 190px; }

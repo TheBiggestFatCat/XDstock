@@ -92,6 +92,11 @@ export const DEFAULT_CONFIG = {
   shopAutoDcaPrice: 5000000,     // 售价
   shopAutoDcaPremium: 0.03,      // 挂单价 = 现价 ×(1+3%)，保证下一轮能成交
 
+  // ---- 丰川银行 ----
+  // 账号升级交的钱会存进银行；总资产低于阈值时可以取一笔救急
+  bankPoorThreshold: 100000,     // 总资产低于这个数才允许取钱
+  bankWithdrawAmount: 100000,    // 每次取多少（银行余额不足就取全部）
+
   // 暗中调查（Lv.2 主题技能）：查别人一个随机持仓的冷却轮数
   investigateCooldownTicks: 30,
 

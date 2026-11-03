@@ -772,10 +772,11 @@ function renderLevelCard() {
 async function levelUp() {
   try {
     const r = await api('/api/shop/level-up', { method: 'POST' });
-    toast(`升级成功！现在是 Lv.${r.level}`, 'ok');
+    toast(`升级成功！现在是 Lv.${r.level}，${money0(r.cost)} 已存进银行`, 'ok');
     await refreshMarket();
     renderShopTiers();
     renderLevelCard();
+    if ($('#view-bank')?.classList.contains('active')) renderBank();
   } catch (e) {
     toast(e.message, 'err');
   }
@@ -2502,6 +2503,7 @@ function onTick(d) {
 
   if ($('#view-work').classList.contains('active')) renderWork();
   if ($('#view-shop').classList.contains('active')) renderShop();
+  if ($('#view-bank').classList.contains('active')) renderBank();
   if (state.tradeTab === 'log' && $('#logPane') && !$('#logPane').classList.contains('hidden')) {
     loadStockTrades();
   }
@@ -3112,6 +3114,84 @@ function checkBuild(build) {
 }
 
 // ---------------- 打工（自动积累） ----------------
+// ---------------- 丰川银行 ----------------
+function renderBank() {
+  const me = state.market?.me || {};
+  const cfg = state.market?.config || {};
+  const bank = Math.max(0, Number(me.bank) || 0);
+  const deposited = Math.max(0, Number(me.bankDeposited) || 0);
+  const equity = Math.max(0, Number(me.equity) || 0);
+  const threshold = Math.max(0, Number(cfg.bankPoorThreshold ?? 100000));
+  const perWithdraw = Math.max(1, Number(cfg.bankWithdrawAmount ?? 100000));
+  const poor = equity < threshold;
+  const canWithdraw = poor && bank > 0;
+  const amount = Math.min(perWithdraw, bank);
+
+  const amtEl = $('#bankAmount');
+  if (amtEl) amtEl.textContent = money(bank);
+  const depEl = $('#bankDepositLine');
+  if (depEl) depEl.textContent = `累计存入 ${money(deposited)}`;
+  const eqEl = $('#bankEquity');
+  if (eqEl) eqEl.textContent = money(equity);
+  const ruleEl = $('#bankRuleText');
+  if (ruleEl) ruleEl.textContent = money0(threshold);
+  const waEl = $('#bankWithdrawAmount');
+  if (waEl) waEl.textContent = money0(perWithdraw);
+
+  const st = $('#bankState');
+  if (st) {
+    if (canWithdraw) {
+      st.textContent = '可以取钱';
+      st.className = 'up';
+    } else if (poor) {
+      st.textContent = '银行没钱';
+      st.className = '';
+    } else {
+      st.textContent = '未到门槛';
+      st.className = '';
+    }
+  }
+
+  const btn = $('#bankWithdrawBtn');
+  if (btn) {
+    btn.disabled = !canWithdraw;
+    btn.classList.toggle('is-off', !canWithdraw);
+  }
+
+  const hint = $('#bankHint');
+  if (hint) {
+    if (!poor) {
+      const gap = equity - threshold;
+      hint.textContent = `总资产要低于 ${money0(threshold)} 才能取钱（现在还高出 ${money0(gap)}）`;
+    } else if (bank <= 0) {
+      hint.textContent = '银行里还没有存款：升级账号时交的钱会自动存进来';
+    } else {
+      hint.textContent = `这次可以取 ${money(amount)}，取完银行还剩 ${money(bank - amount)}`;
+    }
+  }
+}
+
+async function withdrawBank() {
+  const btn = $('#bankWithdrawBtn');
+  if (btn && btn.disabled) return;
+  try {
+    const r = await api('/api/bank/withdraw', { method: 'POST' });
+    if (state.market?.me) {
+      state.market.me.cash = r.cash;
+      state.market.me.bank = r.bank;
+      if (r.status) {
+        state.market.me.equity = r.status.equity;
+        state.market.me.bankDeposited = r.status.deposited;
+      }
+    }
+    toast(`从银行取出 ${money(r.amount)}`, 'ok');
+    renderBank();
+    refreshMarket();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
 function renderWork() {
   const me = state.market?.me;
   const cfg = state.market?.config || {};
@@ -3838,6 +3918,7 @@ function switchView(name) {
   if (name === 'work') renderWork();
   if (name === 'rank') loadRank(true);
   if (name === 'shop') renderShop();
+  if (name === 'bank') renderBank();
   // 切换标签时退回列表态（手机上从个股详情回到列表）
   document.body.classList.remove('m-detail');
   if (name === 'admin') {
@@ -3994,6 +4075,7 @@ function bind() {
   $('#newsBtn').addEventListener('click', publishNews);
   $('#noticeBtn')?.addEventListener('click', publishNotice);
   $('#workBtn')?.addEventListener('click', collectWork);
+  $('#bankWithdrawBtn')?.addEventListener('click', withdrawBank);
   document.querySelectorAll('.trade-tab').forEach((b) => {
     b.addEventListener('click', () => switchTradeTab(b.dataset.ttab));
   });

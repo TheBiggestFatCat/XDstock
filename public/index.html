@@ -101,6 +101,7 @@
     <button class="tab" data-view="portfolio">我的</button>
     <button class="tab" data-view="work">打工</button>
     <button class="tab" data-view="shop">商城</button>
+    <button class="tab" data-view="bank">银行</button>
     <button class="tab" data-view="rank">排行榜</button>
     <button class="tab" data-view="admin">管理</button>
   </nav>
@@ -452,6 +453,7 @@
               <h3>账号等级 <span id="levelNow" class="lv-badge">Lv.1</span></h3>
               <p class="shop-sub">升级能解锁更高级的商店<br />
                 <b class="perk">费用 = 你当前总资产的 <span id="levelRatio">60%</span></b><br />
+                <b class="perk">这笔钱会存进丰川银行，总资产低于门槛时可以取出来</b><br />
                 <b class="perk">每个等级提供 <span id="levelFillText">+1,000,000</span> 单笔成交上限</b>
               </p>
             </div>
@@ -642,6 +644,31 @@
           </div>
         </div>
 
+      </div>
+    </div>
+
+    <!-- ---------- 丰川银行 ---------- -->
+    <div class="view" id="view-bank">
+      <div class="bank-wrap">
+        <div class="bank-title">🏦 丰川银行</div>
+        <p class="bank-desc">
+          账号升级交的钱会存进这里，<b>不会凭空消失</b><br />
+          总资产低于 <span id="bankRuleText">$100,000</span> 时，可以取一笔钱救急
+        </p>
+
+        <div class="bank-card">
+          <div class="bank-card-label">银行存款</div>
+          <div id="bankAmount" class="bank-card-amount">$0.00</div>
+          <div id="bankDepositLine" class="bank-card-sub">累计存入 $0.00</div>
+        </div>
+
+        <button id="bankWithdrawBtn" class="bank-btn">取出 <span id="bankWithdrawAmount">$100,000</span></button>
+        <p id="bankHint" class="bank-hint">还没有存款，升级账号时会自动存进来</p>
+
+        <div class="bank-stats">
+          <div><span>总资产（不含存款）</span><b id="bankEquity">$0.00</b></div>
+          <div><span>当前状态</span><b id="bankState">—</b></div>
+        </div>
       </div>
     </div>
 

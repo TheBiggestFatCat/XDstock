@@ -269,6 +269,8 @@ function tickPayload(forPlayerId) {
       fillCap: fillCapFor(d, p),
       autoDca: !!p.autoDca,
       autoDcaOn: p.autoDcaOn !== false,
+      bank: Math.round((Number(p.bank) || 0) * 100) / 100,
+      bankDeposited: Math.round((Number(p.bankDeposited) || 0) * 100) / 100,
       orders: (p.orders || []).map((o) => ({
         id: o.id,
         code: o.code,

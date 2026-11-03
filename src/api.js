@@ -5,6 +5,7 @@ import { candlesFromSeries, changesFor, timeOfTick, pushNotice, noticeAlive } fr
 import { TIMEFRAMES } from './config.js';
 import { getBuild } from './build.js';
 import { playerEquity, positionPnl } from './trading.js';
+import { levelUpPlayer, withdrawFromBank, bankStatus } from './bank.js';
 import { placeLimitOrder, cancelOrder, orderLimitBlocked, consumeOrderSlot, fillCapFor } from './orders.js';
 import { reportPayload } from './fundamentals.js';
 
@@ -95,6 +96,9 @@ function publicPlayer(p, db) {
     // 自动定投：autoDca = 买过这件道具，autoDcaOn = 当前是否开着
     autoDca: !!p.autoDca,
     autoDcaOn: p.autoDcaOn !== false,
+    // 丰川银行：bank = 余额（不算进总资产），bankDeposited = 累计存入
+    bank: Math.round((Number(p.bank) || 0) * 100) / 100,
+    bankDeposited: Math.round((Number(p.bankDeposited) || 0) * 100) / 100,
     orders: (p.orders || []).map((o) => ({
       id: o.id,
       code: o.code,
@@ -387,6 +391,8 @@ function marketPayload(db, me) {
       shopChannelStep: db.config.shopChannelStep ?? 100000,
       shopAutoDcaPrice: db.config.shopAutoDcaPrice ?? 5000000,
       shopAutoDcaPremium: db.config.shopAutoDcaPremium ?? 0.03,
+      bankPoorThreshold: db.config.bankPoorThreshold ?? 100000,
+      bankWithdrawAmount: db.config.bankWithdrawAmount ?? 100000,
       investigateCooldownTicks: db.config.investigateCooldownTicks ?? 30,
       maxFillNotionalPerTick: db.config.maxFillNotionalPerTick ?? 300000,
       redBonusRate: db.config.redBonusRate ?? 0.01,
@@ -810,6 +816,7 @@ export async function handleApi(ctx) {
       'shopBodyguardPrice', 'shopBodyguardTicks', 'shopThemePrice',
       'shopChannelBasePrice', 'shopChannelRatio', 'shopChannelStep',
       'shopAutoDcaPrice', 'shopAutoDcaPremium',
+      'bankPoorThreshold', 'bankWithdrawAmount',
       'stPrice', 'stDelistTicks',
       'marketTradesEnabled',
       'sentimentEnabled', 'sentimentStrength', 'sentimentTicks', 'sentimentRollTicks',
@@ -1110,27 +1117,25 @@ export async function handleApi(ctx) {
 
   // ---------- 账号等级 ----------
   if (pathname === '/api/shop/level-up' && method === 'POST') {
-    const lv = Math.max(1, Math.floor(Number(me.level) || 1));
-    const base = Number(db.config.levelBaseAsset ?? 10000000);
-    const growth = Math.max(1, Number(db.config.levelGrowth ?? 2));
-    const need = base * Math.pow(growth, lv - 1);         // 默认每级 ×2
-    const equity = playerEquity(db, me);
-    if (equity < need) {
-      return json(res, 400, {
-        error: `升级需要总资产达到 ${Math.round(need).toLocaleString('en-US')}，你现在 ${Math.round(equity).toLocaleString('en-US')}`
-      });
-    }
-    const ratio = Math.min(0.99, Math.max(0, Number(db.config.levelUpRatio ?? 0.6)));
-    const cost = Math.floor(equity * ratio);
-    if (Number(me.cash) < cost) {
-      return json(res, 400, {
-        error: `升级要付 ${Math.round(cost).toLocaleString('en-US')} 现金（总资产的 ${(ratio * 100).toFixed(0)}%），你只有 ${Math.round(Number(me.cash) || 0).toLocaleString('en-US')}`
-      });
-    }
-    me.cash = Number(me.cash) - cost;
-    me.level = lv + 1;
+    const r = levelUpPlayer(db, me);
+    if (!r.ok) return json(res, r.status || 400, r);
     saveDb();
-    return json(res, 200, { ok: true, level: me.level, cost, cash: me.cash, player: publicPlayer(me, db) });
+    return json(res, 200, {
+      ok: true, level: r.level, cost: r.cost, cash: r.cash, bank: r.bank,
+      player: publicPlayer(me, db)
+    });
+  }
+
+  // ---------- 丰川银行 ----------
+  if (pathname === '/api/bank' && method === 'GET') {
+    return json(res, 200, bankStatus(db, me));
+  }
+
+  if (pathname === '/api/bank/withdraw' && method === 'POST') {
+    const r = withdrawFromBank(db, me);
+    if (!r.ok) return json(res, r.status || 400, r);
+    saveDb();
+    return json(res, 200, { ...r, status: bankStatus(db, me) });
   }
 
   // ---------- 自定义背景 ----------
