@@ -584,7 +584,7 @@ export function timeOfTick(db, absTick) {
   return (db.startedAt || 0) + absTick * (db.config.tickMs || 5000);
 }
 
-export function candlesFromSeries(series, group, tickMs, tickStart, maxCandles = 400, baseMs = 0, timeOf = null) {
+export function candlesFromSeries(series, group, tickMs, tickStart, maxCandles = 1200, baseMs = 0, timeOf = null) {
   const out = [];
   if (!series || !series.length) return out;
 

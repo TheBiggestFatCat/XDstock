@@ -10,7 +10,8 @@ function fmtLocalTime(sec, withDate = false) {
   return withDate ? `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${hm}` : hm;
 }
 
-const TF_SECONDS = { 'tick': 1, '1m': 12, '5m': 60, '15m': 180 };
+// K 线周期 → 一根 K 线聚合多少个 tick（必须和 src/config.js 的 TIMEFRAMES 一致）
+const TF_SECONDS = { 'tick': 10, '1m': 12, '5m': 60, '15m': 180 };
 
 const state = {
   token: localStorage.getItem('xd_token') || '',
@@ -2244,7 +2245,7 @@ function applyTickToChart(price) {
   const time = last ? Math.max(last.time + bucketSec, nowSec) : nowSec;
   const c = { time, open: price, high: price, low: price, close: price };
   state.candles.push(c);
-  if (state.candles.length > 400) state.candles.shift();
+  if (state.candles.length > 1200) state.candles.shift();
   state.candleSeries.update(c);
   renderMAs();
   state.tickBucket = bucket;

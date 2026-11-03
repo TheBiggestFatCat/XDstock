@@ -518,7 +518,7 @@ export async function handleApi(ctx) {
     if (!src) return json(res, 404, { error: '标的不存在' });
     const candles = candlesFromSeries(
       src.series, group, db.config.tickMs ?? 5000,
-      Math.max(0, db.tick - src.series.length), 400, db.startedAt || 0,
+      Math.max(0, db.tick - src.series.length), 1200, db.startedAt || 0,
       (absTick) => timeOfTick(db, absTick)
     );
     return json(res, 200, { code, tf, candles });

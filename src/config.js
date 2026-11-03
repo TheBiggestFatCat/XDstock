@@ -160,16 +160,16 @@ export const DEFAULT_CONFIG = {
   pinLength: 6              // 玩家 PIN 位数
 };
 
-// 交易周期（tick 数）
+// 交易周期（tick 数）：一根 K 线由多少个 tick 聚合而成
 export const TIMEFRAMES = {
-  'tick': 1,     // 每个 tick 一根
+  'tick': 10,    // 每 10 轮一根（50 秒）；3600 轮历史正好 360 根
   '1m': 12,
   '5m': 60,
   '15m': 180
 };
 
 export const TF_LABELS = {
-  'tick': '逐 tick',
+  'tick': '10 轮',
   '1m': '1 分钟',
   '5m': '5 分钟',
   '15m': '15 分钟'
