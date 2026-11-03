@@ -2484,3 +2484,19 @@ body[data-theme="bear"] .brand-logo {
 #rankTable td { text-align: center; }
 #rankTable td .rank-user { justify-content: center; }
 #rankTable td .rank-medal { margin: 0 auto; }
+
+/* 移动端：用户区只保留等级牌 */
+@media (max-width: 760px) {
+  .user-box {
+    display: flex !important;
+    align-items: center;
+    gap: 6px;
+  }
+  .user-box .nick,
+  .user-box #logoutBtn { display: none; }
+  .user-box .lv-badge {
+    font-size: 10px;
+    padding: 1px 7px;
+    line-height: 1.5;
+  }
+}
