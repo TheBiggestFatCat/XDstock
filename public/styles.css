@@ -2442,6 +2442,14 @@ body[data-theme="dark"] .fee-bonus { color: var(--down); }
 .report-btn:hover { border-color: var(--accent); color: var(--accent); }
 .report-next { font-size: 11.5px; color: var(--ink-3); }
 .report-next b { color: var(--accent); font-variant-numeric: tabular-nums; }
+/* 手机上这一行容易挤成竖排，允许换行、按钮不拆字 */
+@media (max-width: 760px) {
+  .report-bar { flex-wrap: wrap; gap: 6px 8px; }
+  .report-btn { white-space: nowrap; padding: 6px 10px; }
+  .report-cap { font-size: 11px; }
+  .report-next { flex: 1 1 100%; font-size: 11px; line-height: 1.5; }
+  .preview-grid { grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); }
+}
 
 .report-panel {
   border: 1px solid var(--line); border-radius: 12px;

@@ -191,6 +191,23 @@ const server = http.createServer(async (req, res) => {
 });
 
 // ---------------- 游戏主循环 ----------------
+// 金融大鳄：下期财报预览（提前 20 轮）
+// 注意：每轮的 SSE 广播用的是「无玩家」的公共 payload，所以预览必须在
+// 按人下发时单独补上，否则开着页面不刷新就永远看不到预览、倒计时也是死的
+function tycoonPreview(st, d) {
+  const pend = st.pendingReport;
+  if (!pend) return null;
+  const oldEps = Number(st.fundamentals?.eps) || 0;
+  return {
+    eps: Number(pend.eps) || 0,
+    revenue: Number(pend.revenue) || 0,
+    netProfit: Number(pend.netProfit) || 0,
+    growth: Number(pend.growth) || 0,
+    tickLeft: Math.max(0, (Number(st.nextReportTick) || 0) - d.tick),
+    expectPct: oldEps > 0 ? ((Number(pend.eps) || 0) / oldEps - 1) * 100 : 0
+  };
+}
+
 function tickPayload(forPlayerId) {
   const d = getDb();
   const tp = forPlayerId ? d.players[forPlayerId] : null;
@@ -206,20 +223,7 @@ function tickPayload(forPlayerId) {
     };
     // 金融大鳄：每轮都下发预览状态，否则前端只在刷新时才知道
     if (isTycoon && !st.isIndex) {
-      const pend = st.pendingReport;
-      stocks[code].preview = pend
-        ? {
-          eps: Number(pend.eps) || 0,
-          revenue: Number(pend.revenue) || 0,
-          netProfit: Number(pend.netProfit) || 0,
-          growth: Number(pend.growth) || 0,
-          tickLeft: Math.max(0, (Number(st.nextReportTick) || 0) - d.tick),
-          expectPct: (() => {
-            const oldEps = Number(st.fundamentals?.eps) || 0;
-            return oldEps > 0 ? ((Number(pend.eps) || 0) / oldEps - 1) * 100 : 0;
-          })()
-        }
-        : null;
+      stocks[code].preview = tycoonPreview(st, d);
     }
   }
   let me = null;
@@ -594,7 +598,17 @@ function loop() {
       continue;
     }
     // activity 里有 joined（我参没参加），必须按人算，不能共用 base
-    const payload = { ...base, me: tickPayload(c.playerId).me };
+    const personal = tickPayload(c.playerId);
+    const payload = { ...base, me: personal.me };
+    // 金融大鳄：公共 payload 里没有 preview（那是按人算的），这里补一份
+    if (cp && cp.theme === 'tycoon' && personal.stocks) {
+      const merged = {};
+      for (const [code, s] of Object.entries(base.stocks)) {
+        const p = personal.stocks[code];
+        merged[code] = p && p.preview !== undefined ? { ...s, preview: p.preview } : s;
+      }
+      payload.stocks = merged;
+    }
     const notes = byPlayer.get(c.playerId);
     if (notes) payload.closes = notes;
     const alerts = stealAlerts.get(c.playerId);
