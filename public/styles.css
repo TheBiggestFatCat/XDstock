@@ -277,7 +277,14 @@ textarea { resize: vertical; }
 }
 
 /* ---------- 股票列表 ---------- */
-.stock-list { display: flex; flex-direction: column; gap: 6px; max-height: 620px; overflow-y: auto; }
+.stock-list {
+  display: flex; flex-direction: column; gap: 6px;
+  max-height: 620px;
+  overflow-y: auto;
+  /* 只允许竖向滚动：hover 时条目右移 2px 会撑出横向滚动条 */
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
 .stock-item {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr) auto;
@@ -289,7 +296,8 @@ textarea { resize: vertical; }
   transition: background .18s, transform .12s, box-shadow .2s;
   border: 1.5px solid transparent;
 }
-.stock-item:hover { background: var(--hl-1); transform: translateX(2px); }
+/* 悬停时用内阴影 + 轻微内移，避免撑出容器 */
+.stock-item:hover { background: var(--hl-1); box-shadow: inset 2px 0 0 var(--accent); }
 .stock-item.active {
   background: linear-gradient(120deg, var(--hl-4), var(--hl-info));
   border-color: rgba(20, 184, 166, .35);
