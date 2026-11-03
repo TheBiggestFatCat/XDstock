@@ -33,7 +33,8 @@ export const DEFAULT_CONFIG = {
 
   // ---- 玩家资金冲击（真实股市感）----
   playerImpactEnabled: 1,        // 1=开启
-  playerImpactRef: 30000,        // 参考成交额：一笔 3 万算 1 单位压力
+  playerImpactRef: 1000000,      // 参考成交额：一笔 100 万算 1 单位压力
+  impactRefFreeCap: 10000000000, // 参考流通市值（100 亿）：小盘股冲击放大、大盘股削弱
   playerImpactStrength: 0.0009,  // 每单位压力推动多少价格（0.0009 = 0.09%）
   playerImpactDecay: 0.88,       // 压力每轮衰减系数
   // 后续影响倍率：1 = 照常；0.5 = 只有首轮全额，之后每轮只有一半力度
