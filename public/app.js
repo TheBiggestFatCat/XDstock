@@ -668,7 +668,17 @@ function switchShopTier(n) {
   renderShopTiers();
 }
 
+/** 把三个商店网格都挂到 #view-shop 下（防止 HTML 嵌套导致隐藏时连带被藏） */
+function normalizeShopDom() {
+  const view = $('#view-shop');
+  if (!view) return;
+  document.querySelectorAll('.shop-grid[data-tier]').forEach((el) => {
+    if (el.parentElement !== view) view.appendChild(el);
+  });
+}
+
 function renderShopTiers() {
+  normalizeShopDom();
   const lv = Math.max(1, Math.floor(Number(state.market?.me?.level) || 1));
   const cur = Math.max(1, Math.min(3, Number(state.shopTier) || 1));
 
