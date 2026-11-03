@@ -2239,6 +2239,8 @@ function handleCloses(list) {
     }
   }
   for (const c of list) {
+    // qty 为 0 的是「止盈止损触发生成挂单」事件，不是真的平仓，不要报盈亏
+    if (!c || !c.qty) continue;
     const name = state.market.stocks[c.code]?.name || c.code;
     const reasonMap = {
       tp: '止盈触发',
