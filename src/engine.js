@@ -1,4 +1,4 @@
-import { INDEX_BASE } from './stocks.js';
+import { INDEX_BASE, SMALL_INDEX_STOCK } from './stocks.js';
 import { genNextReport, fairFromReport, impactFactor, industryMidGrowth } from './fundamentals.js';
 import { genMarketTrades } from './marketTrades.js';
 import { now } from './store.js';
@@ -351,7 +351,56 @@ export function stepMarket(db) {
     }
     if (sum > 0) {
       db.index.value = Number(((Number(idx.scale) || INDEX_BASE) * sum).toFixed(2));
+      const idxStock = db.stocks.DENG;
+      if (idxStock) idxStock.price = db.index.value;
     }
+
+    // ---- 小灯指数：只编市值最小的 7 家，节奏和灯证指数一致 ----
+    if (!db.smallIndex || typeof db.smallIndex !== 'object') {
+      db.smallIndex = { value: INDEX_BASE, series: [INDEX_BASE] };
+    }
+    const sidx = db.smallIndex;
+    const byCap = live
+      .map((x) => ({ x, cap: x.price * (Number(x.shares) || 0) * (Number(x.freeFloat) || 0.45) }))
+      .filter((o) => o.cap > 0)
+      .sort((a, b) => a.cap - b.cap)
+      .slice(0, 7)
+      .map((o) => o.x);
+
+    const sMissing = byCap.some((x) => !(Number(sidx.weights?.[x.code]) > 0));
+    // 调仓时机完全跟着灯证指数走
+    if (sMissing || db.tick >= (Number(idx.rebalanceTick) || 0)
+      || !sidx.weights || !(Number(sidx.nextRebalanceTick) > 0)) {
+      const total = byCap.reduce(
+        (a, x) => a + x.price * (Number(x.shares) || 0) * (Number(x.freeFloat) || 0.45), 0);
+      if (total > 0) {
+        sidx.weights = {};
+        sidx.basePrices = {};
+        for (const x of byCap) {
+          const cap = x.price * (Number(x.shares) || 0) * (Number(x.freeFloat) || 0.45);
+          sidx.weights[x.code] = cap / total;
+          sidx.basePrices[x.code] = Math.max(0.01, Number(x.price) || 0.01);
+        }
+        sidx.scale = Number(sidx.value) > 0 ? Number(sidx.value) : INDEX_BASE;
+        sidx.rebalanceTick = db.tick;
+        sidx.nextRebalanceTick = Number(idx.nextRebalanceTick) || (db.tick + period);
+      }
+    }
+
+    let sSum = 0;
+    for (const x of byCap) {
+      const w = Number(sidx.weights?.[x.code]) || 0;
+      const b = Number(sidx.basePrices?.[x.code]) || 0;
+      if (w > 0 && b > 0) sSum += w * (x.price / b);
+    }
+    if (sSum > 0) {
+      sidx.value = Number(((Number(sidx.scale) || INDEX_BASE) * sSum).toFixed(2));
+    }
+    const sidxStock = db.stocks[SMALL_INDEX_STOCK.code];
+    if (sidxStock) sidxStock.price = sidx.value;
+    sidx.series.push(sidx.value);
+    if (sidx.series.length > 3600) sidx.series.splice(0, sidx.series.length - 3600);
+
   }
   db.index.series.push(db.index.value);
   const cap = cfg.historyTicks ?? 3600;

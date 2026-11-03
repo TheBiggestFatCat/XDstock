@@ -205,6 +205,17 @@ export const STOCK_SEED = {
 
 export const STOCK_CODES = Object.keys(STOCK_SEED);
 
+// 小灯指数：只编入市值最小的 7 家公司，调仓节奏和灯证指数一致
+export const SMALL_INDEX_STOCK = {
+  code: 'DENGS',
+  name: '小灯指数',
+  icon: '/assets/stocks/DENGS.png',
+  industry: '指数',
+  desc: '只编小盘股：市值最小的七家公司',
+  initialPrice: 1000,
+  trait: { id: 'index', name: '小盘指数', desc: '小公司的集合，波动更大' }
+};
+
 // 指数基点
 export const INDEX_BASE = 1000;
 

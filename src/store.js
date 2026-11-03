@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_CONFIG } from './config.js';
-import { STOCK_SEED, STOCK_CODES, INDEX_BASE, INDEX_STOCK } from './stocks.js';
+import { STOCK_SEED, STOCK_CODES, INDEX_BASE, INDEX_STOCK, SMALL_INDEX_STOCK } from './stocks.js';
 import { backDerive, fairFromReport } from './fundamentals.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -69,6 +69,7 @@ export function createDb() {
   // 实时汇率：留美外汇的股价由它驱动
   fx: { rate: 0, prevRate: 0, base: 0, at: 0, source: '', stale: true },
     index: { value: INDEX_BASE, series: [INDEX_BASE] },
+  smallIndex: { value: INDEX_BASE, series: [INDEX_BASE] },
     players: {},
     sessions: {},
     adminSessions: {},
@@ -144,6 +145,31 @@ function migrate(d) {
   merged.stocks[INDEX_STOCK.code].isIndex = true;
   // 指数图标始终以代码为准，换图标不用改存档
   merged.stocks[INDEX_STOCK.code].icon = INDEX_STOCK.icon;
+
+  // 小灯指数：标的和状态都要补
+  if (!merged.stocks[SMALL_INDEX_STOCK.code]) {
+    merged.stocks[SMALL_INDEX_STOCK.code] = {
+      code: SMALL_INDEX_STOCK.code,
+      name: SMALL_INDEX_STOCK.name,
+      icon: SMALL_INDEX_STOCK.icon,
+      industry: SMALL_INDEX_STOCK.industry,
+      desc: SMALL_INDEX_STOCK.desc,
+      initialPrice: SMALL_INDEX_STOCK.initialPrice,
+      trait: SMALL_INDEX_STOCK.trait,
+      price: merged.smallIndex?.value || INDEX_BASE,
+      fair: merged.smallIndex?.value || INDEX_BASE,
+      status: 'normal',
+      statusUntil: 0,
+      series: (merged.smallIndex?.series || [INDEX_BASE]).slice(-3600),
+      streak: 0,
+      isIndex: true
+    };
+  }
+  merged.stocks[SMALL_INDEX_STOCK.code].isIndex = true;
+  merged.stocks[SMALL_INDEX_STOCK.code].icon = SMALL_INDEX_STOCK.icon;
+  if (!merged.smallIndex || typeof merged.smallIndex !== 'object') {
+    merged.smallIndex = { value: INDEX_BASE, series: [INDEX_BASE] };
+  }
 
   // 老存档补上汇率缓存
   if (!merged.fx || typeof merged.fx !== 'object') {

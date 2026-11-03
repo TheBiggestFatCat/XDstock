@@ -260,6 +260,27 @@ function marketPayload(db, me) {
         id: n.id, text: n.text, at: n.at, kind: n.kind || null,
         ageTicks: Number(n.tick) > 0 ? Math.max(0, db.tick - Number(n.tick)) : null
       })),
+    smallIndex: (() => {
+      const si = db.smallIndex || {};
+      return {
+        value: Number(si.value) || 0,
+        series: (si.series || []).slice(-600),
+        weights: Object.entries(si.weights || {})
+          .map(([code, w]) => {
+            const st2 = db.stocks[code] || {};
+            const sh = Number(st2.shares) || 0;
+            const px2 = Number(st2.price) || 0;
+            return {
+              code, name: st2.name || code, weight: w, price: px2,
+              marketCap: px2 * sh,
+              freeCap: px2 * sh * (Number(st2.freeFloat) || 0.45)
+            };
+          })
+          .sort((a, b) => b.weight - a.weight),
+        nextRebalanceTick: Number(si.nextRebalanceTick) || 0,
+        rebalanceTick: Number(si.rebalanceTick) || 0
+      };
+    })(),
     me: me ? publicPlayer(me, db) : null,
     fx: {
       rate: Number(db.fx?.rate) || 0,

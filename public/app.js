@@ -304,7 +304,10 @@ function renderReport() {
 
   // 指数没有财报，只有成分权重
   if (st.isIndex) {
-    const idx = state.market?.index || {};
+    // 两个指数各有自己的成分表
+    const idx = st.code === 'DENGS'
+      ? (state.market?.smallIndex || {})
+      : (state.market?.index || {});
     if (btn) {
       btn.classList.remove('hidden');
       btn.textContent = '📊 成分权重';
