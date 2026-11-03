@@ -34,9 +34,6 @@ const state = {
   eqTrading: null,
   listTab: 'quotes',
   limitAuto: true,
-  drawMode: false,
-  drawTarget: 'limit',
-  previewLine: null,
   limitLine: null,
   orderMode: 'open',
   shopDir: 1,
@@ -1075,102 +1072,11 @@ function updateLimitLine(price) {
   });
 }
 
-/** 画线模式：开启后可以按住鼠标在K线上拖出挂单价 */
-function toggleDrawMode(on) {
-  state.drawMode = on === undefined ? !state.drawMode : !!on;
-  const btn = $('#drawLineBtn');
-  if (btn) {
-    btn.classList.toggle('active', state.drawMode);
-    btn.textContent = state.drawMode ? '✅ 完成' : '✏️ 划线';
-  }
-  $('#drawTargets')?.classList.toggle('hidden', !state.drawMode);
-  if (!state.drawMode) clearPreviewLine();
-  // 画线时禁掉图表的拖动/缩放，免得冲突
-  state.chart?.applyOptions({
-    handleScroll: !state.drawMode,
-    handleScale: !state.drawMode
-  });
-  const el = $('#chart');
-  if (el) el.style.cursor = state.drawMode ? 'crosshair' : '';
-}
-
-/** 拖动过程中的临时预览线（止盈/止损用） */
-function clearPreviewLine() {
-  const series = state.candleSeries;
-  if (state.previewLine && series) {
-    try { series.removePriceLine(state.previewLine); } catch { /* ignore */ }
-  }
-  state.previewLine = null;
-}
-
-function showPreviewLine(price, target) {
-  const series = state.candleSeries;
-  if (!series) return;
-  clearPreviewLine();
-  const colors = { tp: '#22c55e', sl: '#ef4444', limit: '#f97316' };
-  const names = { tp: '止盈', sl: '止损', limit: '挂单' };
-  state.previewLine = series.createPriceLine({
-    price,
-    color: colors[target] || '#f97316',
-    lineWidth: 2,
-    lineStyle: 2,
-    axisLabelVisible: true,
-    title: `${names[target] || ''} ${price.toFixed(2)}`
-  });
-}
-
-/** 当前持仓（画止盈止损时用） */
+/** 当前持仓 */
 function currentPosition() {
   return state.market?.me?.positions?.[state.code] || null;
 }
 
-/** 把拖出来的价格应用到对应目标 */
-function applyDrawPrice(price, { commit = false } = {}) {
-  const target = state.drawTarget || 'limit';
-  if (target === 'limit') {
-    setLimitPrice(price);
-    return;
-  }
-
-  const pos = currentPosition();
-  if (!pos) {
-    showPreviewLine(price, target);
-    if (commit) toast('这只票没有持仓，止盈止损无处可设', 'err');
-    return;
-  }
-
-  // 方向校验：多头止盈在上、止损在下；空头相反
-  // 注意：必须用「现价」判断，pos.price 是开仓成本价，价格走远后会误判
-  const dir = pos.side === 'long' ? 1 : -1;
-  const price0 = state.market?.stocks?.[state.code]?.price
-    || state.market?.me?.positions?.[state.code]?.price
-    || 0;
-  if (!(price0 > 0)) {
-    showPreviewLine(price, target);
-    if (commit) toast('还没拿到现价，稍等一下再画', 'err');
-    return;
-  }
-  const bad = target === 'tp'
-    ? (price - price0) * dir <= 0
-    : (price - price0) * dir >= 0;
-
-  showPreviewLine(price, target);
-
-  if (commit) {
-    if (bad) {
-      toast(
-        target === 'tp'
-          ? `止盈价必须${dir > 0 ? '高于' : '低于'}现价 ${price0.toFixed(2)}`
-          : `止损价必须${dir > 0 ? '低于' : '高于'}现价 ${price0.toFixed(2)}`,
-        'err'
-      );
-      return;
-    }
-    commitTpSl(target, price, pos);
-  }
-}
-
-/** 真正写入止盈/止损（只提交被改的那一项，另一项由服务端保留） */
 
 /** 手动输入止盈止损 + 触发时平仓数量 */
 
@@ -1225,29 +1131,6 @@ async function applyTpSl() {
     updatePriceLines();
     toast('止盈止损已更新' + (qtyV > 0 ? `（触发平 ${qtyV} 股）` : '（触发全平）'), 'ok');
   } catch (e) {
-    toast(e.message, 'err');
-  }
-}
-
-async function commitTpSl(target, price, pos) {
-  const body = { code: state.code };
-  body[target === 'tp' ? 'tp' : 'sl'] = price;
-  try {
-    const r = await api('/api/tpsl', { method: 'POST', body: JSON.stringify(body) });
-    // 用服务端返回的最新值更新本地，避免下一次编辑基于旧数据
-    if (r?.position && state.market?.me?.positions) {
-      const local = state.market.me.positions[state.code];
-      if (local) {
-        local.tp = r.position.tp ?? null;
-        local.sl = r.position.sl ?? null;
-      }
-    }
-    toast(`${target === 'tp' ? '止盈' : '止损'}已设为 ${price.toFixed(2)}`, 'ok');
-    clearPreviewLine();
-    updatePriceLines();
-    refreshMarket();
-  } catch (e) {
-    clearPreviewLine();
     toast(e.message, 'err');
   }
 }
@@ -1315,72 +1198,6 @@ function setLimitPrice(price, { manual = true } = {}) {
   if (manual) state.limitAuto = false;
   updateLimitLine(price);
   updateOrderBtnLabel();
-}
-
-function bindChartDrawing() {
-  const el = $('#chart');
-  if (!el || el.dataset.drawBound === '1') return;
-  el.dataset.drawBound = '1';
-
-  let dragging = false;
-
-  const apply = (clientY, commit = false) => {
-    const p = priceAtY(clientY);
-    if (p > 0) applyDrawPrice(p, { commit });
-  };
-
-  // 用捕获阶段：图表库会拦掉冒泡的鼠标事件
-  el.addEventListener('mousedown', (e) => {
-    if (!state.drawMode) return;
-    if (e.button !== 0) return;
-    e.preventDefault();
-    e.stopPropagation();
-    dragging = true;
-    apply(e.clientY, false);
-  }, true);
-
-  el.addEventListener('mousemove', (e) => {
-    if (!state.drawMode || !dragging) return;
-    e.preventDefault();
-    e.stopPropagation();
-    apply(e.clientY);
-  }, true);
-
-  const stop = () => { dragging = false; };
-  el.addEventListener('mouseup', (e) => {
-    if (state.drawMode) {
-      e.stopPropagation();
-      if (dragging) apply(e.clientY, true);   // 松手才真正提交
-    }
-    dragging = false;
-  }, true);
-  window.addEventListener('mouseup', stop);
-  el.addEventListener('mouseleave', stop);
-
-  // 触屏
-  el.addEventListener('touchstart', (e) => {
-    if (!state.drawMode || !e.touches[0]) return;
-    e.preventDefault();
-    dragging = true;
-    apply(e.touches[0].clientY);
-  }, { passive: false });
-  el.addEventListener('touchmove', (e) => {
-    if (!state.drawMode || !dragging || !e.touches[0]) return;
-    e.preventDefault();
-    apply(e.touches[0].clientY);
-  }, { passive: false });
-  // 松手才算数：之前只 stop 不提交，手机上永远设不上止盈止损
-  el.addEventListener('touchend', (e) => {
-    if (state.drawMode && dragging) {
-      const t = e.changedTouches?.[0];
-      if (t) {
-        e.preventDefault();
-        apply(t.clientY, true);
-      }
-    }
-    dragging = false;
-  }, { passive: false });
-  el.addEventListener('touchcancel', stop);
 }
 
 // ---------------- 限价挂单 ----------------
@@ -1459,7 +1276,6 @@ async function placeLimit() {
   try {
     await api('/api/order/limit', { method: 'POST', body: JSON.stringify(payload) });
     toast(`挂单已提交：${mode === 'close' ? '平仓' : '开仓'} @ ${limit.toFixed(2)}`, 'ok');
-    if (state.drawMode) toggleDrawMode(false);
     refreshMarket();
   } catch (e) {
     toast(e.message, 'err');
@@ -3462,16 +3278,7 @@ function bind() {
   ['#tpPrice', '#slPrice', '#tpslQty'].forEach((sel) => {
     $(sel)?.addEventListener('input', () => { state.tpslEdited = true; });
   });
-  $('#drawLineBtn')?.addEventListener('click', () => toggleDrawMode());
   $('#reportBtn')?.addEventListener('click', toggleReportPanel);
-  document.querySelectorAll('.dt-btn').forEach((b) => {
-    b.addEventListener('click', () => {
-      state.drawTarget = b.dataset.target;
-      document.querySelectorAll('.dt-btn').forEach((x) => x.classList.toggle('active', x === b));
-      clearPreviewLine();
-    });
-  });
-  bindChartDrawing();
   $('#orderBtn').addEventListener('click', placeLimit);
 
   $('#avatarBtn').addEventListener('click', () => $('#avatarInput').click());

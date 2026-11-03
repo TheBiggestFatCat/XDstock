@@ -218,7 +218,6 @@
             <span>挂单价 <i class="field-hint" id="limitHint">默认价已让利，保证下一轮能成交</i></span>
             <div class="limit-row">
               <input id="orderLimit" type="number" step="0.01" placeholder="填价格" />
-              <button id="drawLineBtn" class="draw-btn" type="button" title="在 K 线上拖动设置价格">✏️ 划线</button>
             </div>
             <div class="tpsl-row">
               <label class="field">
@@ -235,11 +234,6 @@
               </label>
             </div>
             <button id="tpslApply" class="btn btn-ghost btn-block" type="button">应用止盈止损</button>
-            <div id="drawTargets" class="draw-targets hidden">
-              <button class="dt-btn active" data-target="limit" type="button">挂单价</button>
-              <button class="dt-btn" data-target="tp" type="button">止盈</button>
-              <button class="dt-btn" data-target="sl" type="button">止损</button>
-            </div>
           </label>
 
           <button id="orderBtn" class="btn btn-primary btn-block">挂单开多</button>
