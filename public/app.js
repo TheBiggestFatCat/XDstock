@@ -671,7 +671,8 @@ function renderLevelCard() {
   const cfg = state.market?.config || {};
   const lv = Math.max(1, Math.floor(Number(me.level) || 1));
   const base = Number(cfg.levelBaseAsset ?? 10000000);
-  const need = base * Math.pow(10, lv - 1);
+  const growth = Math.max(1, Number(cfg.levelGrowth ?? 2));
+  const need = base * Math.pow(growth, lv - 1);
   const ratio = Number(cfg.levelUpRatio ?? 0.9);
   const equity = Number(me.equity) || 0;
   const cost = Math.floor(equity * ratio);

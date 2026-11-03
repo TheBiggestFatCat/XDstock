@@ -327,6 +327,7 @@ function marketPayload(db, me) {
       shopRenamePrice: db.config.shopRenamePrice ?? 1000000,
       shopRenameCooldown: db.config.shopRenameCooldown ?? 2000,
       levelBaseAsset: db.config.levelBaseAsset ?? 10000000,
+      levelGrowth: db.config.levelGrowth ?? 2,
       levelUpRatio: db.config.levelUpRatio ?? 0.9,
       shopChannelBasePrice: db.config.shopChannelBasePrice ?? 300000,
       shopChannelRatio: db.config.shopChannelRatio ?? 1.5,
@@ -1044,7 +1045,8 @@ export async function handleApi(ctx) {
   if (pathname === '/api/shop/level-up' && method === 'POST') {
     const lv = Math.max(1, Math.floor(Number(me.level) || 1));
     const base = Number(db.config.levelBaseAsset ?? 10000000);
-    const need = base * Math.pow(10, lv - 1);            // lv1->2: 1000万, lv2->3: 1亿 ...
+    const growth = Math.max(1, Number(db.config.levelGrowth ?? 2));
+    const need = base * Math.pow(growth, lv - 1);         // 默认每级 ×2
     const equity = playerEquity(db, me);
     if (equity < need) {
       return json(res, 400, {

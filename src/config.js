@@ -76,6 +76,7 @@ export const DEFAULT_CONFIG = {
   shopRenamePrice: 1000000,    // 改名卡
   shopRenameCooldown: 2000,    // 改名冷却（轮）
   levelBaseAsset: 10000000,    // 升到 lv2 需要的资产（之后每级 ×10）
+  levelGrowth: 2,              // 每升一级资产门槛翻几倍
   levelUpRatio: 0.9,           // 升级花掉自身资产的百分比
   shopThemeCooldown: 100,      // 换主题后的冷却轮数
 
