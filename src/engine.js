@@ -541,10 +541,14 @@ export function runReports(db) {
 
     // 财报历史（给前端的折线图用）
     // 同一片天下的农业股，财报同时发布
+    // 注意：必须用「发报后的下一期」，不能拿 st.nextReportTick（此刻还是旧的到期值），
+    // 否则兄弟股会一直到期，两只票轮流每 tick 发一次财报
     if (st.trait?.id === 'weather') {
       for (const sib of Object.values(db.stocks)) {
         if (sib === st || sib.isIndex || sib.trait?.id !== 'weather') continue;
-        sib.nextReportTick = st.nextReportTick;
+        // 还没轮到的兄弟股：直接把到期时间拉到现在，本轮跟着一起发报
+        // （已经发过的不能碰，否则会被重置成「立刻到期」，下一轮又发一次）
+        if (list.indexOf(sib) > list.indexOf(st)) sib.nextReportTick = db.tick;
       }
     }
 
