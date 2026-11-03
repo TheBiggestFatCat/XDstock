@@ -87,13 +87,13 @@ function stockChange(st) {
 }
 
 /**
- * 行情列表用的涨跌幅：固定看 15 分钟，
+ * 行情列表用的涨跌幅：固定看 1 分钟，
  * 不跟着图表周期变（否则切到「逐 tick」时会显示 5 秒的涨跌，疯狂跳动）
  */
 function listChange(st) {
   if (!st) return 0;
   const c = st.changes || {};
-  for (const key of ['15m', '5m', '1m']) {
+  for (const key of ['1m', '5m', '15m']) {
     if (Number.isFinite(c[key])) return c[key];
   }
   return Number.isFinite(st.changePct) ? st.changePct : 0;

@@ -352,7 +352,15 @@ export function stepMarket(db) {
     if (sum > 0) {
       db.index.value = Number(((Number(idx.scale) || INDEX_BASE) * sum).toFixed(2));
       const idxStock = db.stocks.DENG;
-      if (idxStock) idxStock.price = db.index.value;
+      if (idxStock) {
+        idxStock.price = db.index.value;
+        if (!Array.isArray(idxStock.series)) idxStock.series = [];
+        idxStock.series.push(db.index.value);
+        if (idxStock.series.length > 3600) {
+          idxStock.series.splice(0, idxStock.series.length - 3600);
+        }
+        idxStock.changePct = 0;
+      }
     }
 
     // ---- 小灯指数：只编市值最小的 7 家，节奏和灯证指数一致 ----
@@ -397,7 +405,14 @@ export function stepMarket(db) {
       sidx.value = Number(((Number(sidx.scale) || INDEX_BASE) * sSum).toFixed(2));
     }
     const sidxStock = db.stocks[SMALL_INDEX_STOCK.code];
-    if (sidxStock) sidxStock.price = sidx.value;
+    if (sidxStock) {
+      sidxStock.price = sidx.value;
+      if (!Array.isArray(sidxStock.series)) sidxStock.series = [];
+      sidxStock.series.push(sidx.value);
+      if (sidxStock.series.length > 3600) {
+        sidxStock.series.splice(0, sidxStock.series.length - 3600);
+      }
+    }
     sidx.series.push(sidx.value);
     if (sidx.series.length > 3600) sidx.series.splice(0, sidx.series.length - 3600);
 
