@@ -2475,3 +2475,7 @@ body[data-theme="bear"] .brand-logo {
   vertical-align: middle;
 }
 .bg-file { display: none; }
+
+/* 排行榜表头居中 */
+#rankTable th { text-align: center; }
+#rankTable thead tr th:first-child { padding-left: 8px; }
