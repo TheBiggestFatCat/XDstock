@@ -709,12 +709,22 @@ export async function handleApi(ctx) {
       'streak', 'bounceLo', 'bounceHi',
       'lotteryChance', 'lotteryLo', 'lotteryHi',
       'floorRatio', 'floorBoost',
+      // 散户情绪：只在这个个股上覆盖全局参数（留空 = 跟随全局）
+      'sentStrength', 'sentTicks', 'sentRollMin', 'sentRollMax', 'sentRollTicks',
       // 实时汇率（留美外汇）
       'coef', 'lev', 'fxEnabled', 'refreshMs', 'track'
     ];
     const changed = {};
     for (const [k, v] of Object.entries(body.patch || {})) {
       if (!allowed.includes(k)) continue;
+      // null / '' = 删掉这层覆盖，回到跟随全局参数
+      if (v === null || v === undefined || v === '') {
+        if (k in st.trait) {
+          delete st.trait[k];
+          changed[k] = null;
+        }
+        continue;
+      }
       const num = Number(v);
       if (!Number.isFinite(num)) continue;
       st.trait[k] = num;

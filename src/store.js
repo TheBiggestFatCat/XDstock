@@ -117,7 +117,7 @@ export function loadDb() {
   }
 }
 
-function migrate(d) {
+export function migrate(d) {
   const base = createDb();
   const merged = { ...base, ...d };
   merged.config = { ...base.config, ...(d.config || {}) };
@@ -188,26 +188,38 @@ function migrate(d) {
     }
   }
 
-  // 老存档补上股本与财报（按现价倒推，让 fair ≈ 现价）
-  // 每只股票补上「散户情绪」参数（管理面板个股里可直接改）
-  for (const st of Object.values(merged.stocks)) {
-    if (st.isIndex || !st.trait) continue;
-    if (!Number.isFinite(Number(st.trait.sentStrength))) st.trait.sentStrength = 0.004;
-    if (!Number.isFinite(Number(st.trait.sentTicks))) st.trait.sentTicks = 12;
-    if (!Number.isFinite(Number(st.trait.sentRollTicks))) st.trait.sentRollTicks = 720;
-    // 重掷周期从「固定值」改成「随机范围」：老存档按老值 ±1/3 推导，均值不变
-    const legacyRoll = Number(st.trait.sentRollTicks) > 0 ? Number(st.trait.sentRollTicks) : 720;
-    if (!Number.isFinite(Number(st.trait.sentRollMin))) {
-      st.trait.sentRollMin = Math.max(1, Math.round(legacyRoll * 2 / 3));
+  // 散户情绪：**全局参数是默认值，个股 trait 里的同名字段是「覆盖」**。
+  // 老存档曾给每只票都种了一遍出厂默认值（0.004 / 12 / 480~960），
+  // 而引擎是「个股优先、全局兜底」，结果全局参数被永久遮住 —— 改全局不生效。
+  // 这里做一次性清理：把「等于出厂默认」的个股字段删掉，改回跟随全局。
+  // 只跑一次，之后管理面板写进个股的值不会被再清掉。
+  if (!merged.sentTraitMigrated) {
+    const SENT_DEFAULTS = {
+      sentStrength: 0.004,
+      sentTicks: 12,
+      sentRollTicks: 720,
+      sentRollMin: 480,
+      sentRollMax: 960
+    };
+    let cleaned = 0;
+    for (const st of Object.values(merged.stocks)) {
+      if (st.isIndex || !st.trait) continue;
+      for (const [k, dv] of Object.entries(SENT_DEFAULTS)) {
+        if (!Number.isFinite(Number(st.trait[k]))) {
+          if (k in st.trait) delete st.trait[k];
+          continue;
+        }
+        if (Math.abs(Number(st.trait[k]) - dv) < 1e-9) {
+          delete st.trait[k];
+          cleaned += 1;
+        }
+      }
     }
-    if (!Number.isFinite(Number(st.trait.sentRollMax))) {
-      st.trait.sentRollMax = Math.max(
-        Number(st.trait.sentRollMin) || 1,
-        Math.round(legacyRoll * 4 / 3)
-      );
-    }
+    merged.sentTraitMigrated = true;
+    if (cleaned) console.log(`  清理了个股情绪默认值 ${cleaned} 项，改为跟随全局参数`);
   }
 
+  // 老存档补上股本与财报（按现价倒推，让 fair ≈ 现价）
   for (const st of Object.values(merged.stocks)) {
     if (st.isIndex) continue;
     const seed = STOCK_SEED[st.code];

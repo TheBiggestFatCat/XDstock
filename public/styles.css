@@ -145,6 +145,12 @@ body {
   transition: color .15s;
 }
 .rename-count.full { color: var(--accent); font-weight: 700; }
+/* 个股参数里「可选覆盖」的小标记 */
+.cfg-optional {
+  font-style: normal; font-size: 10px; font-weight: 500;
+  color: var(--ink-3); background: var(--hl-4);
+  padding: 1px 6px; border-radius: 999px; margin-left: 4px;
+}
 /* 用 .rename-field 提权，压过全局 input[type="text"] 的默认样式 */
 .rename-field .rename-input {
   display: block; width: 100%; box-sizing: border-box;

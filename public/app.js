@@ -3747,7 +3747,7 @@ async function loadAdmin() {
     },
     {
       title: '散户情绪',
-      desc: '每只票独立，个股面板可单独调',
+      desc: '全局默认值；个股面板填了才覆盖',
       fields: [
         ['sentimentEnabled', '开关(1=开 0=关)'],
         ['sentimentStrength', '基准偏移(0.004=0.4%)'],
@@ -3907,6 +3907,9 @@ const TRAIT_LABELS = {
   sentRollMax: ['情绪重掷周期上限(轮)', '和下限一起决定随机区间，960=80分钟']
 };
 
+/** 这些个股参数是「可选覆盖」：留空就跟随全局参数 */
+const OPTIONAL_TRAITS = ['sentStrength', 'sentTicks', 'sentRollMin', 'sentRollMax'];
+
 function renderTraitForm(stocks) {
   const box = $('#traitForm');
   if (!box) return;
@@ -3915,17 +3918,33 @@ function renderTraitForm(stocks) {
     box.innerHTML = '<div class="trait-empty">没有可配置的标的</div>';
     return;
   }
+  const cfg = state.market?.config || {};
 
   box.innerHTML = list.map((st) => {
     const trait = st.trait || {};
-    const keys = Object.keys(TRAIT_LABELS).filter((k) => typeof trait[k] === 'number');
+    // 情绪参数即使没有个股覆盖也要显示出来（留空 = 跟随全局）
+    const keys = Object.keys(TRAIT_LABELS).filter(
+      (k) => typeof trait[k] === 'number' || OPTIONAL_TRAITS.includes(k)
+    );
+    const globals = {
+      sentStrength: cfg.sentimentStrength,
+      sentTicks: cfg.sentimentTicks,
+      sentRollMin: cfg.sentimentRollMin,
+      sentRollMax: cfg.sentimentRollMax
+    };
     const fields = keys.map((k) => {
       const [label, hint] = TRAIT_LABELS[k];
-      return `<label class="field cfg-field" title="${hint}">
-        <span>${label}</span>
+      const optional = OPTIONAL_TRAITS.includes(k);
+      const val = typeof trait[k] === 'number' ? trait[k] : '';
+      const ph = optional
+        ? `全局 ${globals[k] ?? ''}`
+        : '';
+      const title = optional ? `${hint}；留空 = 跟随全局 ${globals[k] ?? ''}` : hint;
+      return `<label class="field cfg-field" title="${title}">
+        <span>${label}${optional ? ' <i class="cfg-optional">跟随全局</i>' : ''}</span>
         <input type="number" step="0.00001"
                data-trait-code="${st.code}" data-trait-key="${k}"
-               value="${trait[k]}" />
+               value="${val}" placeholder="${ph}" />
       </label>`;
     }).join('');
 
@@ -3984,11 +4003,16 @@ async function saveTraits() {
   const byCode = new Map();
   $$('#traitForm [data-trait-code]').forEach((inp) => {
     const code = inp.dataset.traitCode;
+    const key = inp.dataset.traitKey;
     if (!byCode.has(code)) byCode.set(code, {});
     const v = inp.value.trim();
-    if (v === '') return;
+    if (v === '') {
+      // 可选覆盖留空 = 删掉这层覆盖，回到跟随全局
+      if (OPTIONAL_TRAITS.includes(key)) byCode.get(code)[key] = null;
+      return;
+    }
     const num = Number(v);
-    if (Number.isFinite(num)) byCode.get(code)[inp.dataset.traitKey] = num;
+    if (Number.isFinite(num)) byCode.get(code)[key] = num;
   });
 
   try {
