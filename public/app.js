@@ -39,6 +39,7 @@ const state = {
   shopDir: 1,
   fakeNewsTargets: [],
   tradeTab: 'order',
+  shopTier: 1,
   tickBucket: null,
   tickKey: '',
   eqFitted: false,
@@ -660,12 +661,47 @@ function lvBadgeHtml(lv) {
 }
 
 /** 商店按等级显示：低等级看不到高等级商品 */
+
+/** 切换商店等级 */
+function switchShopTier(n) {
+  state.shopTier = Math.max(1, Math.min(3, Number(n) || 1));
+  renderShopTiers();
+}
+
 function renderShopTiers() {
   const lv = Math.max(1, Math.floor(Number(state.market?.me?.level) || 1));
-  document.querySelectorAll('[data-tier]').forEach((el) => {
-    const need = Number(el.dataset.tier) || 1;
-    el.classList.toggle('hidden', lv < need);
+  const cur = Math.max(1, Math.min(3, Number(state.shopTier) || 1));
+
+  // 顶部三个等级按钮：没解锁的显示锁，并且不可点
+  document.querySelectorAll('[data-tier-tab]').forEach((b) => {
+    const need = Number(b.dataset.tierTab) || 1;
+    const locked = lv < need;
+    b.classList.toggle('locked', locked);
+    b.textContent = locked ? `🔒 Lv.${need} 商店` : `Lv.${need} 商店`;
+    b.classList.toggle('active', need === cur);
   });
+
+  // 只显示当前这一档
+  let shown = 0;
+  document.querySelectorAll('.shop-grid[data-tier]').forEach((el) => {
+    const need = Number(el.dataset.tier) || 1;
+    const on = need === cur && lv >= need;
+    el.classList.toggle('hidden', !on);
+    if (on) shown += 1;
+  });
+
+  // 等级不够：显示提示，不显示任何商品
+  const lockBox = $('#shopLocked');
+  const lockText = $('#shopLockedText');
+  const need = cur;
+  if (lv < need) {
+    if (lockText) {
+      lockText.textContent = `Lv.${need} 商店需要账号等级 ${need}，你现在是 Lv.${lv}`;
+    }
+    lockBox?.classList.remove('hidden');
+  } else {
+    lockBox?.classList.add('hidden');
+  }
   const badge = $('#lvBadge');
   if (badge) {
     const c = LV_COLORS[Math.min(lv - 1, LV_COLORS.length - 1)];
@@ -3640,6 +3676,9 @@ function bind() {
     $(sel)?.addEventListener('input', () => { state.tpslEdited = true; });
   });
   $('#reportBtn')?.addEventListener('click', toggleReportPanel);
+  document.querySelectorAll('[data-tier-tab]').forEach((b) => {
+    b.addEventListener('click', () => switchShopTier(b.dataset.tierTab));
+  });
   $('#levelUpBtn')?.addEventListener('click', levelUp);
   $('#bgBuy')?.addEventListener('click', buyBg);
   $('#bgUpload')?.addEventListener('click', pickBgImage);

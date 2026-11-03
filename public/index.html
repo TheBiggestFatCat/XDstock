@@ -327,6 +327,17 @@
         <p>有些东西，钱能买到</p>
       </div>
 
+      <div class="shop-tiers" id="shopTiers">
+        <button class="shop-tier-btn active" data-tier-tab="1">Lv.1 商店</button>
+        <button class="shop-tier-btn" data-tier-tab="2">Lv.2 商店</button>
+        <button class="shop-tier-btn" data-tier-tab="3">Lv.3 商店</button>
+      </div>
+
+      <div class="shop-locked hidden" id="shopLocked">
+        <span class="lock-icon">🔒</span>
+        <p id="shopLockedText">需要更高的账号等级</p>
+      </div>
+
       <div class="shop-grid" data-tier="1">
         <div class="shop-card" id="fakeNewsCard">
           <div class="shop-card-head">
@@ -533,7 +544,7 @@
         </div>
 
         <!-- ===== 2 级商店（等级不足时整块隐藏） ===== -->
-        <div class="shop-grid hidden" data-tier="2">
+        <div class="shop-grid" id="shopGrid2" data-tier="2">
           <div class="shop-card" id="bgCard">
             <div class="shop-card-head">
               <span class="shop-icon">🖼️</span>
@@ -571,6 +582,23 @@
           </div>
         </div>
 </div>
+
+        <!-- ===== 3 级商店 ===== -->
+        <div class="shop-grid" data-tier="3">
+          <div class="shop-card">
+            <div class="shop-card-head">
+              <span class="shop-icon">✨</span>
+              <div>
+                <h3>敬请期待</h3>
+                <p class="shop-sub">3 级商店还在筹备中<br />
+                  <b class="perk">升级到 Lv.3 后开放</b>
+                </p>
+              </div>
+            </div>
+            <button class="btn btn-ghost btn-block" disabled>暂未开放</button>
+          </div>
+        </div>
+
       </div>
     </div>
 
