@@ -86,6 +86,19 @@ function stockChange(st) {
   return Number.isFinite(st.changePct) ? st.changePct : 0;
 }
 
+/**
+ * 行情列表用的涨跌幅：固定看 15 分钟，
+ * 不跟着图表周期变（否则切到「逐 tick」时会显示 5 秒的涨跌，疯狂跳动）
+ */
+function listChange(st) {
+  if (!st) return 0;
+  const c = st.changes || {};
+  for (const key of ['15m', '5m', '1m']) {
+    if (Number.isFinite(c[key])) return c[key];
+  }
+  return Number.isFinite(st.changePct) ? st.changePct : 0;
+}
+
 /** 当前是不是手机宽度 */
 function isMobile() {
   return window.matchMedia('(max-width: 760px)').matches;
@@ -552,7 +565,7 @@ function renderStockList() {
   const list = Object.values(m.stocks);
   wrap.innerHTML = '';
   for (const st of list) {
-    const chg = stockChange(st);
+    const chg = listChange(st);
     const div = document.createElement('div');
     div.className = 'stock-item' + (st.code === state.code ? ' active' : '') + (st.status !== 'normal' ? ' suspended' : '');
     div.dataset.code = st.code;
@@ -2090,7 +2103,7 @@ function updatePriceCells() {
     const chgEl = document.querySelector(`[data-chg="${code}"]`);
     if (!priceEl) continue;
     const prev = state.prevPrices[code];
-    const chg = stockChange(s);
+    const chg = listChange(s);
     priceEl.textContent = s.price.toFixed(2);
     priceEl.className = 'stock-price ' + cls(chg);
     if (chgEl) {
