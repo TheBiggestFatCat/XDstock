@@ -280,11 +280,17 @@ textarea { resize: vertical; }
 .stock-list {
   display: flex; flex-direction: column; gap: 6px;
   max-height: 620px;
+  /* 保留纵向滚动条，只禁掉横向 */
   overflow-y: auto;
-  /* 只允许竖向滚动：hover 时条目右移 2px 会撑出横向滚动条 */
   overflow-x: hidden;
-  scrollbar-gutter: stable;
 }
+/* 列表的纵向滚动条做窄一点，别抢走股票名和价格的位置 */
+.stock-list::-webkit-scrollbar { width: 6px; }
+.stock-list::-webkit-scrollbar-thumb {
+  background: var(--line); border-radius: 3px;
+}
+.stock-list::-webkit-scrollbar-thumb:hover { background: var(--ink-3); }
+.stock-list::-webkit-scrollbar-track { background: transparent; }
 .stock-item {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr) auto;
