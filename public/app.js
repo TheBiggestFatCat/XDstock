@@ -1340,13 +1340,26 @@ function switchOrderMode(mode) {
   // 平仓方向由持仓决定，做多/做空切换没意义
   $('#sideSwitch')?.classList.toggle('hidden', isClose);
 
-  // 平仓不需要数量/杠杆/止盈止损
-  ['#orderQty', '#orderLev'].forEach((sel) => {
-    const el = $(sel);
-    const field = el?.closest('.field') || el?.closest('.quick-qty');
-    if (field) field.classList.toggle('hidden', isClose);
+  // 平仓也要填数量（可以只平一部分），只有杠杆没意义
+  const levEl = $('#orderLev');
+  const levField = levEl?.closest('.field');
+  if (levField) levField.classList.toggle('hidden', isClose);
+
+  // 快捷分仓在两种模式下都在，只是档位含义不同
+  $('.quick-qty')?.classList.remove('hidden');
+  const quickLabels = isClose
+    ? ['1/4 平', '1/3 平', '半平', '全平']
+    : ['1/4 仓', '1/3 仓', '半仓', '全仓'];
+  $$('.quick-qty button').forEach((b, i) => {
+    if (quickLabels[i]) b.textContent = quickLabels[i];
   });
-  $('.quick-qty')?.classList.toggle('hidden', isClose);
+
+  // 切到平仓时，数量默认填满持仓
+  if (isClose) {
+    const p = state.market?.me?.positions?.[state.code];
+    const q = $('#orderQty');
+    if (q && p) q.value = String(p.qty);
+  }
 
   // 成本预估框在平仓模式下没意义，一起藏起来
   $('.cost-box')?.classList.toggle('hidden', isClose);
@@ -3309,13 +3322,18 @@ function bind() {
     });
   });
 
-  // 快捷分仓：按当前现金和杠杆能买的最大股数，再取比例
+  // 快捷分仓：开仓按「能买多少」，平仓按「持仓多少」
   $$('.quick-qty button').forEach((b) => {
     b.addEventListener('click', () => {
       const frac = Number(b.dataset.frac) || 1;
-      const maxQty = maxAffordableQty();
-      // 再小的比例也至少给 1 股
-      $('#orderQty').value = Math.max(1, Math.floor(maxQty * frac));
+      const isClose = (state.orderMode || 'open') === 'close';
+      const pos = state.market?.me?.positions?.[state.code];
+      const base = isClose ? Math.floor(pos?.qty || 0) : maxAffordableQty();
+      if (!(base > 0)) {
+        if (isClose) toast('这只票没有持仓', 'err');
+        return;
+      }
+      $('#orderQty').value = Math.max(1, Math.floor(base * frac));
       updateCostPreview();
     });
   });
