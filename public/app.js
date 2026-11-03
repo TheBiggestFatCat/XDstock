@@ -1502,6 +1502,8 @@ function selectStock(code) {
   if (changed) {
     state.tpslEdited = false;
     fillTpSlInputs(true);
+    // 换股票了，止盈止损列表必须换成这只票的，否则会显示上一只的记录
+    renderTpSlStatus();
   }
   // 手机上点列表进入个股详情页
   if (isMobile()) {
@@ -2096,6 +2098,9 @@ function onTick(d) {
   if ($('#view-shop').classList.contains('active')) renderShop();
   if (state.tradeTab === 'log' && $('#logPane') && !$('#logPane').classList.contains('hidden')) {
     loadStockTrades();
+  }
+  if (state.tradeTab === 'tpsl' && $('#tpslPane') && !$('#tpslPane').classList.contains('hidden')) {
+    renderTpSlStatus();
   }
   // 有成交（挂单被撮合 / 强平）就重拉一次自己的成交，B/S 标记才不会漏
   if ((d.orderEvents && d.orderEvents.length) || (d.closes && d.closes.length)) {
