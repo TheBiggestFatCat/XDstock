@@ -273,6 +273,24 @@
 
     <!-- ---------- 我的 ---------- -->
     <div class="view" id="view-portfolio">
+      <section class="profile-card">
+        <button id="profileAvatarBtn" class="profile-avatar" type="button" title="更换头像">
+          <img id="profileAvatarImg" alt="" />
+          <span id="profileAvatarFallback">👤</span>
+        </button>
+        <div class="profile-main">
+          <div class="profile-top">
+            <span class="profile-name" id="profileName">—</span>
+            <span class="profile-lv" id="profileLevel">Lv.1</span>
+          </div>
+          <div class="profile-since" id="profileSince"></div>
+          <div class="profile-progress">
+            <div class="profile-bar"><i id="profileBar"></i></div>
+            <span class="profile-progress-text" id="profileProgressText"></span>
+          </div>
+        </div>
+        <button id="profileLogout" class="profile-logout" type="button">退出登录</button>
+      </section>
       <div class="stat-grid" id="statGrid"></div>
       <div class="panel">
         <div class="panel-title">

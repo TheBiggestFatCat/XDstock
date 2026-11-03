@@ -256,15 +256,27 @@ function renderTopbar() {
     $('#equityValue').textContent = money(me.equity);
     $('#equityValue').className = 'cash-value';
     $('#nickDisplay').textContent = me.nickname;
-    const img = $('#avatarImg');
-    if (me.avatar) {
-      img.src = me.avatar;
+    applyAvatar(me.avatar);
+  }
+  $('#tickInfo').textContent = '第 ' + m.tick + ' 轮 · ' + (m.tickMs / 1000) + 's';
+}
+
+/** 头像同时更新顶栏和「我的」资料卡 */
+function applyAvatar(url) {
+  const on = !!url;
+  for (const sel of ['#avatarImg', '#profileAvatarImg']) {
+    const img = $(sel);
+    if (!img) continue;
+    if (on) {
+      img.src = url;
       img.classList.add('on');
     } else {
+      img.removeAttribute('src');
       img.classList.remove('on');
     }
   }
-  $('#tickInfo').textContent = '第 ' + m.tick + ' 轮 · ' + (m.tickMs / 1000) + 's';
+  const fb = $('#profileAvatarFallback');
+  if (fb) fb.classList.toggle('hidden', on);
 }
 
 const ST_DEFAULT_PRICE = 3;
@@ -2808,9 +2820,47 @@ function renderPositions(force = false) {
 }
 
 // ---------------- 我的 ----------------
+/** 「我的」顶部资料卡：头像 / 名字 / 等级 / 升级进度 */
+function renderProfile() {
+  const me = state.market?.me;
+  if (!me) return;
+  const cfg = state.market?.config || {};
+
+  const nameEl = $('#profileName');
+  if (nameEl) nameEl.textContent = me.nickname || '—';
+
+  const lv = Math.max(1, Math.floor(Number(me.level) || 1));
+  const lvEl = $('#profileLevel');
+  if (lvEl) lvEl.textContent = 'Lv.' + lv;
+
+  applyAvatar(me.avatar);
+
+  const sinceEl = $('#profileSince');
+  if (sinceEl) {
+    const t = Number(me.createdAt) || 0;
+    sinceEl.textContent = t > 0 ? '加入于 ' + new Date(t).toLocaleDateString('zh-CN') : '';
+  }
+
+  // 下一级需要的总资产：base × growth^(lv-1)
+  const base = Number(cfg.levelBaseAsset ?? 10000000);
+  const growth = Math.max(1, Number(cfg.levelGrowth ?? 2));
+  const need = base * Math.pow(growth, lv - 1);
+  const eq = Math.max(0, Number(me.equity) || 0);
+  const pct = need > 0 ? Math.max(0, Math.min(100, (eq / need) * 100)) : 100;
+  const bar = $('#profileBar');
+  if (bar) bar.style.width = pct.toFixed(1) + '%';
+  const txt = $('#profileProgressText');
+  if (txt) {
+    txt.textContent = eq >= need
+      ? `总资产已够，可以去商城升到 Lv.${lv + 1}`
+      : `距 Lv.${lv + 1} 还差 ${money0(need - eq)}`;
+  }
+}
+
 function renderPortfolio() {
   const me = state.market?.me;
   if (!me) return;
+  renderProfile();
   const pos = Object.values(me.positions || {});
   const marginTotal = pos.reduce((s, p) => s + p.margin, 0);
   const pnlTotal = pos.reduce((s, p) => s + p.pnl, 0);
@@ -3947,8 +3997,7 @@ function switchView(name) {
 }
 
 // ---------------- 头像 ----------------
-async function handleAvatarFile(file) {
-  const img = new Image();
+async function handleAvatarFile(file) {  const img = new Image();
   const url = URL.createObjectURL(file);
   img.onload = async () => {
     const size = 256;
@@ -3963,9 +4012,7 @@ async function handleAvatarFile(file) {
     try {
       const r = await api('/api/avatar', { method: 'POST', body: JSON.stringify({ dataUrl }) });
       state.market.me.avatar = r.avatar;
-      const el = $('#avatarImg');
-      el.src = r.avatar;
-      el.classList.add('on');
+      applyAvatar(r.avatar);
       toast('头像已更新', 'ok');
     } catch (e) {
       toast(e.message, 'err');
@@ -3975,6 +4022,14 @@ async function handleAvatarFile(file) {
 }
 
 // ---------------- 事件绑定 ----------------
+async function doLogout() {
+  try { await api('/api/logout', { method: 'POST' }); } catch { /* ignore */ }
+  localStorage.removeItem('xd_token');
+  state.token = '';
+  if (state.stream) state.stream.close();
+  location.reload();
+}
+
 function bind() {
   $('#loginBtn').addEventListener('click', doLogin);
   $('#pinUpgradeBtn').addEventListener('click', upgradePin);
@@ -3982,13 +4037,9 @@ function bind() {
   $('#loginPin').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
   $('#loginNick').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#loginPin').focus(); });
 
-  $('#logoutBtn').addEventListener('click', async () => {
-    try { await api('/api/logout', { method: 'POST' }); } catch { /* ignore */ }
-    localStorage.removeItem('xd_token');
-    state.token = '';
-    if (state.stream) state.stream.close();
-    location.reload();
-  });
+  $('#logoutBtn').addEventListener('click', doLogout);
+  $('#profileLogout')?.addEventListener('click', doLogout);
+  $('#profileAvatarBtn')?.addEventListener('click', () => $('#avatarInput').click());
 
   $$('.tab').forEach((t) => t.addEventListener('click', () => switchView(t.dataset.view)));
 

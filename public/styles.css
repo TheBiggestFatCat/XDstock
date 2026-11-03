@@ -452,6 +452,53 @@ input.tpsl-input {
 .stat-card .stat-value { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .stat-card .stat-sub { font-size: 11.5px; color: var(--ink-3); margin-top: 4px; }
 
+/* ---------- 我的：资料卡 ---------- */
+.profile-card {
+  display: flex; align-items: center; gap: 16px;
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r);
+  box-shadow: var(--shadow); padding: 18px 20px; margin-bottom: 16px;
+}
+.profile-avatar {
+  position: relative; width: 64px; height: 64px; flex: 0 0 64px;
+  border-radius: 50%; border: none; padding: 0; cursor: pointer; overflow: hidden;
+  background: var(--hl-4); display: grid; place-items: center; font-size: 28px;
+  transition: transform .15s, box-shadow .15s;
+}
+.profile-avatar:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0, 0, 0, .12); }
+.profile-avatar img { width: 100%; height: 100%; object-fit: cover; display: none; }
+.profile-avatar img.on { display: block; }
+.profile-main { flex: 1; min-width: 0; }
+.profile-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.profile-name {
+  font-size: 20px; font-weight: 800; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.profile-lv {
+  font-size: 11.5px; font-weight: 700; color: #fff; padding: 2px 9px; border-radius: 999px;
+  background: linear-gradient(135deg, #0d9488, #14b8a6);
+}
+.profile-since { font-size: 11.5px; color: var(--ink-3); margin-top: 3px; }
+.profile-progress { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.profile-bar { flex: 1; height: 6px; border-radius: 999px; background: var(--hl-4); overflow: hidden; }
+.profile-bar i {
+  display: block; height: 100%; width: 0; border-radius: 999px;
+  background: linear-gradient(90deg, #14b8a6, #0d9488); transition: width .3s;
+}
+.profile-progress-text { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
+.profile-logout {
+  flex: 0 0 auto; border: 1px solid var(--line); background: transparent; color: var(--ink-2);
+  font-family: inherit; font-size: 13px; padding: 8px 14px; border-radius: 10px; cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.profile-logout:hover { border-color: var(--down); color: var(--down); background: var(--hl-4); }
+@media (max-width: 760px) {
+  .profile-card { flex-wrap: wrap; gap: 12px; padding: 14px 16px; }
+  .profile-avatar { width: 52px; height: 52px; flex-basis: 52px; font-size: 22px; }
+  .profile-name { font-size: 17px; }
+  .profile-progress { display: none; }
+  .profile-logout { width: 100%; padding: 10px; }
+}
+
 /* ---------- 排行榜 ---------- */
 .rank-medal { font-size: 16px; }
 .rank-row-me { background: var(--hl-4) !important; }
