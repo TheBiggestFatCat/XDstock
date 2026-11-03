@@ -132,6 +132,39 @@ body {
 
 .field { display: block; margin-bottom: 14px; }
 .field > span { display: block; font-size: 12.5px; color: var(--ink-2); margin-bottom: 7px; font-weight: 500; }
+
+/* ---------- 改名卡输入框 ---------- */
+.rename-field { margin-bottom: 12px; }
+.rename-field > span.rename-label {
+  display: flex; align-items: baseline; justify-content: space-between;
+  font-size: 12.5px; color: var(--ink-2); font-weight: 500; margin-bottom: 7px;
+}
+.rename-count {
+  font-style: normal; font-size: 11px; color: var(--ink-3);
+  font-variant-numeric: tabular-nums; letter-spacing: .5px;
+  transition: color .15s;
+}
+.rename-count.full { color: var(--accent); font-weight: 700; }
+/* 用 .rename-field 提权，压过全局 input[type="text"] 的默认样式 */
+.rename-field .rename-input {
+  display: block; width: 100%; box-sizing: border-box;
+  padding: 13px 15px;
+  font-family: inherit; font-size: 15px; letter-spacing: .3px;
+  color: var(--ink);
+  background: var(--soft);
+  border: 1.5px solid var(--line);
+  border-radius: 12px;
+  outline: none;
+  transition: border-color .18s, box-shadow .18s, background .18s;
+}
+.rename-field .rename-input::placeholder { color: var(--ink-3); opacity: .75; letter-spacing: 0; }
+.rename-field .rename-input:hover:not(:disabled) { border-color: rgba(20, 184, 166, .45); }
+.rename-field .rename-input:focus {
+  background: var(--card);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(20, 184, 166, .13);
+}
+.rename-field .rename-input:disabled { opacity: .55; cursor: not-allowed; }
 input[type="text"], input[type="password"], input[type="number"], textarea, select {
   width: 100%;
   padding: 12px 14px;

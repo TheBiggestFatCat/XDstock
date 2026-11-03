@@ -600,9 +600,10 @@
               </div>
               <span class="shop-price">$1,000,000</span>
             </div>
-            <label class="field">
-              <span>新名字</span>
-              <input id="renameInput" maxlength="12" placeholder="2~12 个字" />
+            <label class="field rename-field">
+              <span class="rename-label">新名字<i id="renameCount" class="rename-count">0/12</i></span>
+              <input id="renameInput" class="rename-input" type="text" maxlength="12"
+                placeholder="2~12 个字，取个响亮的名号" autocomplete="off" spellcheck="false" />
             </label>
             <button id="renameBuy" class="btn btn-primary btn-block">改名 · $1,000,000</button>
             <p id="renameHint" class="field-hint"></p>

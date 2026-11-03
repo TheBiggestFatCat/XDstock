@@ -872,8 +872,20 @@ async function buyRename() {
     toast(`改名成功：${r.nickname}`, 'ok');
     await refreshMarket();
     $('#renameInput').value = '';
+    updateRenameCount();
     renderRenameHint();
   } catch (e) { toast(e.message, 'err'); }
+}
+
+/** 改名输入框的字数提示 */
+function updateRenameCount() {
+  const inp = $('#renameInput');
+  const cnt = $('#renameCount');
+  if (!inp || !cnt) return;
+  const max = Number(inp.maxLength) > 0 ? Number(inp.maxLength) : 12;
+  const n = (inp.value || '').length;
+  cnt.textContent = `${n}/${max}`;
+  cnt.classList.toggle('full', n >= max);
 }
 
 function renderRenameHint() {
@@ -884,6 +896,10 @@ function renderRenameHint() {
   if (hint) hint.textContent = left > 0 ? `冷却中，还要等 ${left} 轮` : '现在可以改名';
   const btn = $('#renameBuy');
   if (btn) btn.disabled = left > 0;
+  // 冷却期间不让输入，避免玩家填完才发现还要等
+  const inp = $('#renameInput');
+  if (inp) inp.disabled = left > 0;
+  updateRenameCount();
 }
 
 /** 自动定投卡片（Lv.2 道具） */
@@ -4190,6 +4206,10 @@ function bind() {
   $('#bgBuy')?.addEventListener('click', buyBg);
   $('#bgUpload')?.addEventListener('click', pickBgImage);
   $('#renameBuy')?.addEventListener('click', buyRename);
+  $('#renameInput')?.addEventListener('input', updateRenameCount);
+  $('#renameInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); buyRename(); }
+  });
   $('#autoDcaBuy')?.addEventListener('click', buyAutoDca);
   $('#autoDcaToggle')?.addEventListener('click', toggleAutoDca);
   $('#orderBtn').addEventListener('click', placeLimit);
