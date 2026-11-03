@@ -634,6 +634,28 @@ export async function handleApi(ctx) {
       saveDb();
       return json(res, 200, { ok: true, kicked: killed });
     }
+    if (action === 'bank') {
+      // 管理端给指定玩家的银行账户打钱（负数 = 扣钱），方便发补偿/活动奖励
+      const raw = Number(body.amount);
+      if (!Number.isFinite(raw) || raw === 0) {
+        return json(res, 400, { error: '金额要填非零数字' });
+      }
+      if (Math.abs(raw) > 1e12) return json(res, 400, { error: '金额太大了' });
+      const amount = Math.trunc(raw);
+      const before = Math.max(0, Number(p.bank) || 0);
+      const after = Math.max(0, before + amount);
+      p.bank = Math.round(after * 100) / 100;
+      // 只有真的存进去了才计入「累计存入」
+      const delta = p.bank - before;
+      if (delta > 0) {
+        p.bankDeposited = Math.round((Number(p.bankDeposited) || 0) + delta);
+      }
+      saveDb();
+      return json(res, 200, {
+        ok: true, nickname: p.nickname,
+        amount: delta, before, bank: p.bank, bankDeposited: p.bankDeposited || 0
+      });
+    }
     if (action === 'delete') {
       // 删号是不可逆的，必须已经封禁过
       if (!p.banned) return json(res, 400, { error: '请先封禁再删号' });
@@ -657,6 +679,7 @@ export async function handleApi(ctx) {
         avatar: p.avatar || null,
         equity: playerEquity(db, p),
         cash: p.cash || 0,
+        bank: Math.round((Number(p.bank) || 0) * 100) / 100,
         banned: !!p.banned,
         banReason: p.banReason || '',
         online: !!p.online

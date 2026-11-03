@@ -2365,6 +2365,12 @@ body[data-theme="dark"] .fee-bonus { color: var(--down); }
 .ban-btn:hover { background: var(--up); color: #fff; }
 .ban-btn.unban { border-color: var(--accent); color: var(--accent); }
 .ban-btn.unban:hover { background: var(--accent); color: #fff; }
+.ban-btn.bank { border-color: #b4713a; color: #b4713a; }
+.ban-btn.bank:hover { background: #b4713a; color: #fff; }
+.ban-bank {
+  font-size: 11.5px; color: #b4713a; font-variant-numeric: tabular-nums;
+  padding: 1px 7px; border-radius: 999px; background: rgba(180, 113, 58, .1);
+}
 
 /* 玩家管理 / 活动名单里的头像 */
 .ban-main .rank-avatar {

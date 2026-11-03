@@ -1336,9 +1336,11 @@ function renderBanList() {
         <b>${escapeHtml(p.nickname)}</b>
         ${p.banned ? '<span class="ban-tag">已封禁</span>' : ''}
         ${p.banReason ? `<span class="ban-reason">${escapeHtml(p.banReason)}</span>` : ''}
+        ${p.bank > 0 ? `<span class="ban-bank">🏦 ${money0(p.bank)}</span>` : ''}
         <span class="ban-money">${money0(p.equity)}</span>
       </div>
       <div class="ban-actions">
+        <button class="ban-btn bank" data-bank-id="${p.id}" data-bank-name="${escapeHtml(p.nickname)}">打钱</button>
         <button class="ban-btn ${p.banned ? 'unban' : ''}" data-ban-id="${p.id}" data-ban-action="${p.banned ? 'unban' : 'ban'}">
           ${p.banned ? '解封' : '封禁'}
         </button>
@@ -1346,6 +1348,10 @@ function renderBanList() {
         ${p.banned ? `<button class="ban-btn del" data-del-id="${p.id}" data-del-name="${escapeHtml(p.nickname)}">删号</button>` : ''}
       </div>
     </div>`).join('');
+
+  box.querySelectorAll('[data-bank-id]').forEach((b) => {
+    b.addEventListener('click', () => giveBankMoney(b.dataset.bankId, b.dataset.bankName));
+  });
 
   box.querySelectorAll('[data-ban-id]').forEach((b) => {
     b.addEventListener('click', () => banPlayer(b.dataset.banId, b.dataset.banAction));
@@ -1356,6 +1362,28 @@ function renderBanList() {
   box.querySelectorAll('[data-del-id]').forEach((b) => {
     b.addEventListener('click', () => deletePlayer(b.dataset.delId, b.dataset.delName));
   });
+}
+
+/** 管理端：给指定玩家的银行账户打钱（负数 = 扣钱） */
+async function giveBankMoney(id, name) {
+  const raw = prompt(
+    `给「${name}」的银行账户打多少钱？\n\n单位：美元，可以填负数扣钱\n例：1000000`,
+    '1000000'
+  );
+  if (raw === null) return;
+  const amount = Math.trunc(Number(String(raw).replace(/[,\s$]/g, '')));
+  if (!Number.isFinite(amount) || amount === 0) {
+    toast('金额要填非零数字', 'err');
+    return;
+  }
+  try {
+    const r = await adminApi('/api/admin/player', { id, action: 'bank', amount });
+    const word = r.amount >= 0 ? '打' : '扣';
+    toast(`已给「${name}」${word} $${money0(Math.abs(r.amount))}，银行余额 $${money0(r.bank)}`, 'ok');
+    loadAdminPlayers();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
 }
 
 async function logoutPlayer(id, name) {
