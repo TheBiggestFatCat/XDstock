@@ -103,9 +103,10 @@ export function placeLimitOrder(db, player, body) {
 
   if (!Array.isArray(player.orders)) player.orders = [];
   const maxPending = Math.max(1, num(cfg.maxPendingOrders, 5));
-  // 止盈止损单不占名额（它们是风控单，每个标的本来也只允许挂一张）
-  const manualCount = player.orders.filter((o) => !o.auto).length;
-  if (manualCount >= maxPending) {
+  // 止盈止损单和自动定投单不占名额（它们是系统单，不是玩家手动挂的）
+  const manualCount = player.orders.filter((o) => !o.auto && !o.autoDca).length;
+  // 系统单（自动定投）不受「同时挂几笔」的限制，否则玩家挂满手动单后定投就哑了
+  if (!body.system && manualCount >= maxPending) {
     return { ok: false, error: `最多同时挂 ${maxPending} 笔单，先撤掉一些` };
   }
 

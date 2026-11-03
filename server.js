@@ -8,6 +8,7 @@ import { stepMarket, seedHistory, changesFor, noticeAlive } from './src/engine.j
 import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, positionPnl, logTrade } from './src/trading.js';
 import { processOrders, fillCapFor } from './src/orders.js';
+import { autoDcaTick } from './src/autoDca.js';
 import { checkDelist } from './src/delist.js';
 import { fetchAudJpy } from './src/fx.js';
 import { handleApi } from './src/api.js';
@@ -266,6 +267,8 @@ function tickPayload(forPlayerId) {
       bearBonusEarned: p.bearBonusEarned || 0,
       frozen: Math.round((p.orders || []).reduce((a, o) => a + (Number(o.reserve) || 0), 0) * 100) / 100,
       fillCap: fillCapFor(d, p),
+      autoDca: !!p.autoDca,
+      autoDcaOn: p.autoDcaOn !== false,
       orders: (p.orders || []).map((o) => ({
         id: o.id,
         code: o.code,
@@ -278,7 +281,8 @@ function tickPayload(forPlayerId) {
         reserve: Math.round((o.reserve || 0) * 100) / 100,
         expireTick: o.expireTick,
         createdAt: o.createdAt,
-        auto: o.auto || null
+        auto: o.auto || null,
+        autoDca: !!o.autoDca
       }))
     };
   }
@@ -434,6 +438,14 @@ function loop() {
       p.workBank = Math.min(bankCap, cur + gain);
       p.workOnline = isOnline;
     }
+  }
+
+  // 自动定投：钱袋一满就自动挂单买 DENG（离线也生效）
+  try {
+    const dcaRuns = autoDcaTick(d, bankCap);
+    if (dcaRuns.some((x) => x.ok)) saveDb();
+  } catch (e) {
+    console.error('[autoDca] 出错:', e.message);
   }
 
   // 收益曲线快照：每 N 轮记一次 [tick, 总资产, 累计打工+偷钱收入]

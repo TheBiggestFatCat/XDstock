@@ -92,6 +92,9 @@ function publicPlayer(p, db) {
     frozen: Math.round((p.orders || []).reduce((a, o) => a + (Number(o.reserve) || 0), 0) * 100) / 100,
     // 这个玩家本轮的「单笔成交上限」（基础 + 商城通道 + 账号等级）
     fillCap: fillCapFor(db, p),
+    // 自动定投：autoDca = 买过这件道具，autoDcaOn = 当前是否开着
+    autoDca: !!p.autoDca,
+    autoDcaOn: p.autoDcaOn !== false,
     orders: (p.orders || []).map((o) => ({
       id: o.id,
       code: o.code,
@@ -104,7 +107,8 @@ function publicPlayer(p, db) {
       reserve: Math.round((o.reserve || 0) * 100) / 100,
       expireTick: o.expireTick,
       createdAt: o.createdAt,
-      auto: o.auto || null
+      auto: o.auto || null,
+      autoDca: !!o.autoDca
     })),
     income: (p.workEarned || 0) + (p.stealEarned || 0),
     createdAt: p.createdAt
@@ -381,6 +385,8 @@ function marketPayload(db, me) {
       shopChannelBasePrice: db.config.shopChannelBasePrice ?? 300000,
       shopChannelRatio: db.config.shopChannelRatio ?? 1.5,
       shopChannelStep: db.config.shopChannelStep ?? 100000,
+      shopAutoDcaPrice: db.config.shopAutoDcaPrice ?? 5000000,
+      shopAutoDcaPremium: db.config.shopAutoDcaPremium ?? 0.03,
       investigateCooldownTicks: db.config.investigateCooldownTicks ?? 30,
       maxFillNotionalPerTick: db.config.maxFillNotionalPerTick ?? 300000,
       redBonusRate: db.config.redBonusRate ?? 0.01,
@@ -803,6 +809,7 @@ export async function handleApi(ctx) {
       'shopFakeNewsPrice', 'shopFakeNewsChance', 'shopFakeNewsCooldown',
       'shopBodyguardPrice', 'shopBodyguardTicks', 'shopThemePrice',
       'shopChannelBasePrice', 'shopChannelRatio', 'shopChannelStep',
+      'shopAutoDcaPrice', 'shopAutoDcaPremium',
       'stPrice', 'stDelistTicks',
       'marketTradesEnabled',
       'sentimentEnabled', 'sentimentStrength', 'sentimentTicks', 'sentimentRollTicks',
@@ -1272,6 +1279,41 @@ export async function handleApi(ctx) {
     me.theme = code;
     saveDb();
     return json(res, 200, { ok: true, theme: code, changedTick: me.themeChangedTick });
+  }
+
+  // ---------- 自动定投（Lv.2 道具）----------
+  if (pathname === '/api/shop/auto-dca' && method === 'POST') {
+    const price = Number(db.config.shopAutoDcaPrice ?? 5000000);
+    if ((Math.floor(Number(me.level)) || 1) < 2) {
+      return json(res, 403, { error: '自动定投要 Lv.2 才能买' });
+    }
+    if (me.autoDca) {
+      return json(res, 200, {
+        ok: true, already: true, price, cash: me.cash,
+        autoDca: true, autoDcaOn: me.autoDcaOn !== false
+      });
+    }
+    if (Number(me.cash) < price) {
+      return json(res, 400, {
+        error: `现金不足，售价 $${price.toLocaleString()}，你只有 $${Number(me.cash).toFixed(2)}`
+      });
+    }
+    me.cash -= price;
+    me.shopSpent = (me.shopSpent || 0) + price;
+    me.autoDca = true;
+    me.autoDcaOn = true;
+    me.autoDcaAt = now();
+    saveDb();
+    return json(res, 200, { ok: true, price, cash: me.cash, autoDca: true, autoDcaOn: true });
+  }
+
+  // 暂停 / 继续定投
+  if (pathname === '/api/shop/auto-dca/toggle' && method === 'POST') {
+    if (!me.autoDca) return json(res, 400, { error: '还没买自动定投' });
+    const on = body.on !== false;
+    me.autoDcaOn = on;
+    saveDb();
+    return json(res, 200, { ok: true, autoDcaOn: on });
   }
 
   if (pathname === '/api/shop/bodyguard' && method === 'POST') {

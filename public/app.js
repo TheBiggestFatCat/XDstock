@@ -873,6 +873,95 @@ function renderRenameHint() {
   if (btn) btn.disabled = left > 0;
 }
 
+/** 自动定投卡片（Lv.2 道具） */
+function renderAutoDcaCard() {
+  const me = state.market?.me || {};
+  const cfg = state.market?.config || {};
+  const price = Number(cfg.shopAutoDcaPrice ?? 5000000);
+  const premium = Math.max(0, Number(cfg.shopAutoDcaPremium ?? 0.03));
+  const owned = !!me.autoDca;
+  const on = me.autoDcaOn !== false;
+  const cash = Number(me.cash) || 0;
+  const lv = Math.max(1, Math.floor(Number(me.level) || 1));
+  const st = state.market?.stocks?.DENG;
+  const bankCap = Math.max(0, Number(cfg.workRatePerTick ?? 50))
+    * Math.max(1, Number(cfg.workBankTicks ?? 1440));
+  const limit = st ? Math.round(Number(st.price) * (1 + premium) * 100) / 100 : 0;
+  const qty = limit > 0 ? Math.floor(bankCap / limit) : 0;
+  const pct = Math.round(premium * 100);
+
+  const priceEl = $('#autoDcaPrice');
+  if (priceEl) priceEl.textContent = money0(price);
+  $('#autoDcaOwned')?.classList.toggle('hidden', !owned);
+
+  const hint = $('#autoDcaHint');
+  if (hint) {
+    if (owned) {
+      hint.textContent = on
+        ? `运行中：钱袋攒满 ${money0(bankCap)} 就自动挂单 ${qty} 股 @ ${limit.toFixed(2)}（现价 +${pct}%）`
+        : '已暂停：钱袋攒满也不会自动下单';
+    } else if (st) {
+      hint.textContent = `每次大约买入 ${qty} 股（钱袋上限 ${money0(bankCap)} ÷ 挂单价 ${limit.toFixed(2)}）`;
+    } else {
+      hint.textContent = '等待行情数据…';
+    }
+  }
+
+  const buy = $('#autoDcaBuy');
+  if (buy) {
+    if (owned) {
+      buy.classList.add('hidden');
+    } else {
+      buy.classList.remove('hidden');
+      if (lv < 2) {
+        buy.disabled = true;
+        buy.textContent = `需要 Lv.2（你现在 Lv.${lv}）`;
+      } else if (cash < price) {
+        buy.disabled = true;
+        buy.textContent = `现金不足（差 ${money0(price - cash)}）`;
+      } else {
+        buy.disabled = false;
+        buy.textContent = `购买 · ${money0(price)}`;
+      }
+    }
+  }
+  const tg = $('#autoDcaToggle');
+  if (tg) {
+    tg.classList.toggle('hidden', !owned);
+    tg.textContent = on ? '暂停定投' : '继续定投';
+  }
+}
+
+async function buyAutoDca() {
+  const btn = $('#autoDcaBuy');
+  if (btn && btn.disabled) return;
+  try {
+    const r = await api('/api/shop/auto-dca', { method: 'POST' });
+    if (state.market?.me) {
+      state.market.me.autoDca = true;
+      state.market.me.autoDcaOn = r.autoDcaOn !== false;
+      if (Number.isFinite(r.cash)) state.market.me.cash = r.cash;
+    }
+    toast('自动定投已开启：钱袋一满就自动买 DENG', 'ok');
+    refreshMarket();
+    renderShop();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
+async function toggleAutoDca() {
+  const on = !(state.market?.me?.autoDcaOn !== false);
+  try {
+    const r = await api('/api/shop/auto-dca/toggle', { method: 'POST', body: JSON.stringify({ on }) });
+    if (state.market?.me) state.market.me.autoDcaOn = r.autoDcaOn !== false;
+    toast(r.autoDcaOn ? '已继续定投' : '已暂停定投', 'ok');
+    renderShop();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
 // ---------------- 商城 ----------------
 // ---------------- 主题配色 ----------------
 const THEME_CHART = {
@@ -1125,6 +1214,7 @@ function renderShop() {
   renderLevelCard();
   renderBgCard();
   renderRenameHint();
+  renderAutoDcaCard();
 
   const ownedThemes = state.market?.me?.themes || [];
   const curTheme = state.theme || state.market?.me?.theme || 'default';
@@ -1776,7 +1866,7 @@ function renderMyOrders() {
       const label = o.action === 'close' ? '平' : '开';
       const autoTag = o.auto
         ? `<span class="mo-auto">${o.auto === 'tp' ? '止盈单' : '止损单'}</span>`
-        : '';
+        : (o.autoDca ? '<span class="mo-auto">定投</span>' : '');
       return `<div class="mo-row">
         <span class="mo-side ${buy ? 'buy' : 'sell'}">${label}${buy ? '买' : '卖'}</span>
         <span class="mo-name">${o.name}${autoTag}</span>
@@ -3475,7 +3565,9 @@ async function loadAdmin() {
         ['shopThemePrice', '主题售价'],
         ['shopChannelBasePrice', '通道首价'],
         ['shopChannelRatio', '通道涨价倍率'],
-        ['shopChannelStep', '通道每级加成']
+        ['shopChannelStep', '通道每级加成'],
+        ['shopAutoDcaPrice', '自动定投售价'],
+        ['shopAutoDcaPremium', '定投挂单溢价(0.03=+3%)']
       ]
     },
     {
@@ -3879,6 +3971,8 @@ function bind() {
   $('#bgBuy')?.addEventListener('click', buyBg);
   $('#bgUpload')?.addEventListener('click', pickBgImage);
   $('#renameBuy')?.addEventListener('click', buyRename);
+  $('#autoDcaBuy')?.addEventListener('click', buyAutoDca);
+  $('#autoDcaToggle')?.addEventListener('click', toggleAutoDca);
   $('#orderBtn').addEventListener('click', placeLimit);
 
   // 暗中调查弹窗

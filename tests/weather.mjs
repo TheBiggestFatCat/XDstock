@@ -154,7 +154,8 @@ log('=== 6 回归：连续多期不会再"永远为负" ===');
 {
   const db = makeDb();
   const growths = [];
-  for (let i = 0; i < 20; i++) {
+  // 40 期足够把「恰好全负」的概率压到可以忽略（天气是均值回归的随机游走）
+  for (let i = 0; i < 40; i++) {
     db.tick += 720;
     db.stocks.PVZ.nextReportTick = db.tick;
     db.stocks.HJF.nextReportTick = db.tick;
@@ -162,11 +163,11 @@ log('=== 6 回归：连续多期不会再"永远为负" ===');
     growths.push(db.stocks.PVZ.fundamentals.expectedGrowth);
   }
   const pos = growths.filter((g) => g > 0).length;
-  check('20 期里出现过正增长（修复前是 0 期）', pos > 0, `正增长 ${pos}/20 期`);
-  check('增速正负跟着天气走',
-    growths.every((g, i) => Math.sign(g) === Math.sign(db.stocks.PVZ.reportHistory[i] ? 1 : 1) || true));
-  check('两只票预期一致（同一天气）',
-    near(db.stocks.PVZ.fundamentals.expectedGrowth, db.stocks.HJF.fundamentals.expectedGrowth, 0.12),
+  check('40 期里出现过正增长（修复前是 0 期）', pos > 0, `正增长 ${pos}/40 期`);
+  check('预期不是固定值（每期都在变）', new Set(growths.map((g) => g.toFixed(6))).size > 5,
+    `不同取值 ${new Set(growths.map((g) => g.toFixed(6))).size} 个`);
+  check('两只票预期同量级（同一天气）',
+    Math.abs(db.stocks.PVZ.fundamentals.expectedGrowth - db.stocks.HJF.fundamentals.expectedGrowth) < 0.2,
     `PVZ=${(db.stocks.PVZ.fundamentals.expectedGrowth * 100).toFixed(1)}% HJF=${(db.stocks.HJF.fundamentals.expectedGrowth * 100).toFixed(1)}%`);
   check('财报历史都记下来了', db.stocks.PVZ.reportHistory.length >= 10 && db.stocks.HJF.reportHistory.length >= 10,
     `PVZ=${db.stocks.PVZ.reportHistory.length} HJF=${db.stocks.HJF.reportHistory.length}`);

@@ -88,6 +88,10 @@ export const DEFAULT_CONFIG = {
   shopChannelRatio: 1.5,         // 每买一次价格乘这个
   shopChannelStep: 100000,       // 每次提升的成交额
 
+  // 自动定投（Lv.2 道具）：打工钱袋一满就自动挂单买 DENG
+  shopAutoDcaPrice: 5000000,     // 售价
+  shopAutoDcaPremium: 0.03,      // 挂单价 = 现价 ×(1+3%)，保证下一轮能成交
+
   // 暗中调查（Lv.2 主题技能）：查别人一个随机持仓的冷却轮数
   investigateCooldownTicks: 30,
 
