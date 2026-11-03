@@ -286,6 +286,32 @@ function tickPayload(forPlayerId) {
     closed: d.config.marketOpen === false,
     index: d.index.value,
     indexChanges: changesFor(d.index.series, TIMEFRAMES),
+    // 调仓后权重会变，不推的话前端面板一直是进页面时那份
+    indexWeights: Object.entries(d.index.weights || {}).map(([code, w]) => {
+      const st2 = d.stocks[code] || {};
+      const sh = Number(st2.shares) || 0;
+      const px2 = Number(st2.price) || 0;
+      return {
+        code, name: st2.name || code, weight: w, price: px2,
+        marketCap: px2 * sh,
+        freeCap: px2 * sh * (Number(st2.freeFloat) || 0.45)
+      };
+    }).sort((a, b) => b.weight - a.weight),
+    smallIndex: {
+      value: Number(d.smallIndex?.value) || 0,
+      weights: Object.entries(d.smallIndex?.weights || {}).map(([code, w]) => {
+        const st2 = d.stocks[code] || {};
+        const sh = Number(st2.shares) || 0;
+        const px2 = Number(st2.price) || 0;
+        return {
+          code, name: st2.name || code, weight: w, price: px2,
+          marketCap: px2 * sh,
+          freeCap: px2 * sh * (Number(st2.freeFloat) || 0.45)
+        };
+      }).sort((a, b) => b.weight - a.weight),
+      nextRebalanceTick: Number(d.smallIndex?.nextRebalanceTick) || 0,
+      rebalanceTick: Number(d.smallIndex?.rebalanceTick) || 0
+    },
     fx: {
       rate: Number(d.fx?.rate) || 0,
       prevRate: Number(d.fx?.prevRate) || 0,

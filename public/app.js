@@ -492,7 +492,10 @@ function renderReportChart(hist) {
 function renderIndexWeights() {
   const panel = $('#reportPanel');
   if (!panel) return;
-  const idx = state.market?.index || {};
+  // 小灯指数看自己的成分表
+  const idx = state.code === 'DENGS'
+    ? (state.market?.smallIndex || {})
+    : (state.market?.index || {});
   const list = idx.weights || [];
   if (!list.length) {
     panel.innerHTML = '<div class="field-hint">还没有权重数据，下一轮生成</div>';
@@ -2019,6 +2022,15 @@ function onTick(d) {
   m.index.value = d.index;
   // 指数的各周期涨跌幅也要跟着更新，否则顶部读数会一直停在进页面时那一刻
   if (d.indexChanges) m.index.changes = d.indexChanges;
+  if (Array.isArray(d.indexWeights)) m.index.weights = d.indexWeights;
+  if (d.smallIndex) {
+    m.smallIndex = m.smallIndex || {};
+    m.smallIndex.value = d.smallIndex.value;
+    if (Array.isArray(d.smallIndex.weights)) m.smallIndex.weights = d.smallIndex.weights;
+    if (d.smallIndex.nextRebalanceTick !== undefined) {
+      m.smallIndex.nextRebalanceTick = d.smallIndex.nextRebalanceTick;
+    }
+  }
   if (d.fx) m.fx = d.fx;
   m.index.series.push(d.index);
   if (m.index.series.length > 600) m.index.series.shift();
