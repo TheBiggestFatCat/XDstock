@@ -18,7 +18,7 @@ export const DEFAULT_CONFIG = {
   minLeverage: 1,
   maxLeverage: 20,
   liquidationBuffer: 0.0,   // 保证金亏到 0 就强平
-  maxOrdersPerTick: 30,      // 每人每轮最多下几单（防止刷成交额抬小灯证券）
+  maxOrdersPerTick: 5,       // 每人每轮最多操作几次（只限制个人，全服不限）
 
   // ---- 新闻 ----
   eventChance: 0.012,       // 每 tick 触发一条新新闻的概率
