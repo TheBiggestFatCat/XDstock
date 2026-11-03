@@ -25,7 +25,7 @@ const TRAIT_BIAS = {
   hype: 0.025,         // 话题驱动：靠新闻
   reversal: 0.0,       // 反转王：随波逐流
   meme: -0.05,         // 梗股：热度过了就凉
-  backstop: -0.015,    // 护盘：稳但没增长
+  backstop: -0.025,    // 护盘：稳，但增长很慢
   fx: 0.0,
   broker: 0.0,
 };

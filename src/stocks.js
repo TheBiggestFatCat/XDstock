@@ -110,6 +110,7 @@ export const STOCK_SEED = {
       id: 'backstop',
       name: '护盘',
       desc: '财团在下面接着，跌不深但也涨不动',
+      volMult: 1.25,
       revMult: 0.8,
       floorRatio: 0.85,
       floorBoost: 0.025
