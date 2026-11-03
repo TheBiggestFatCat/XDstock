@@ -369,7 +369,7 @@ export function stepMarket(db) {
 
     const sMissing = byCap.some((x) => !(Number(sidx.weights?.[x.code]) > 0));
     // 调仓时机完全跟着灯证指数走
-    if (sMissing || db.tick >= (Number(idx.rebalanceTick) || 0)
+    if (sMissing || db.tick === (Number(idx.rebalanceTick) || -1)
       || !sidx.weights || !(Number(sidx.nextRebalanceTick) > 0)) {
       const total = byCap.reduce(
         (a, x) => a + x.price * (Number(x.shares) || 0) * (Number(x.freeFloat) || 0.45), 0);
