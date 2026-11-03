@@ -273,14 +273,15 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
   let bonus = 0;
   const noBonus = reason === 'liquidated' || reason === 'delisted';
 
+  // 注意：每笔平仓单都独立判定一次，不做「每个持仓只算一次」的限制
+  // （分批止盈/止损时，每一笔平仓都有机会吃到返现）
   const redRate = Number(cfg.redBonusRate ?? 0.01);
-  if (player.theme === 'red' && redRate > 0 && !pos.redBonusGiven && !noBonus) {
+  if (player.theme === 'red' && redRate > 0 && !noBonus) {
     const minTicks = Math.max(0, Number(cfg.redBonusMinTicks ?? 12));
     const held = db.tick - Number(pos.openedTick ?? db.tick);
     if (held >= minTicks && indexUptrend(db)) {
       bonus = notional * redRate;
       back += bonus;
-      pos.redBonusGiven = true;
       // 累计统计，主题卡片上要显示
       player.redBonusEarned = num(player.redBonusEarned) + bonus;
     }
@@ -288,13 +289,12 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
 
   // 「绿绿的熊」技能：熊市里平仓，同样返 1% 成交额（和红牛正好反过来）
   const bearRate = Number(cfg.bearBonusRate ?? 0.01);
-  if (player.theme === 'bear' && bearRate > 0 && !pos.bearBonusGiven && !noBonus) {
+  if (player.theme === 'bear' && bearRate > 0 && !noBonus) {
     const minTicks = Math.max(0, Number(cfg.bearBonusMinTicks ?? 12));
     const held = db.tick - Number(pos.openedTick ?? db.tick);
     if (held >= minTicks && indexDowntrend(db)) {
       bonus += notional * bearRate;
       back += notional * bearRate;
-      pos.bearBonusGiven = true;
       player.bearBonusEarned = num(player.bearBonusEarned) + notional * bearRate;
     }
   }
