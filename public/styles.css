@@ -2372,3 +2372,22 @@ body[data-theme="hermit"] .brand-logo {
 .tpsl-status > div b { font-variant-numeric: tabular-nums; font-size: 13px; }
 .tpsl-status > div i { margin-left: auto; font-style: normal; font-size: 11px; color: var(--ink-3); }
 .tpsl-status .ts-empty { font-size: 12px; color: var(--ink-3); }
+
+.ts-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; padding: 8px 10px; border-radius: 8px;
+  background: var(--soft-2);
+}
+.ts-kind {
+  font-size: 10.5px; padding: 2px 6px; border-radius: 5px;
+  background: var(--accent-soft); color: var(--accent-2); flex: none;
+}
+.ts-kind.sl { background: var(--soft-3); color: var(--ink-2); }
+.ts-row b { font-variant-numeric: tabular-nums; font-size: 13px; }
+.ts-row i { font-style: normal; font-size: 11px; color: var(--ink-3); }
+.ts-del {
+  margin-left: auto; flex: none; width: 22px; height: 22px;
+  border: none; border-radius: 50%; cursor: pointer;
+  background: transparent; color: var(--ink-3); font-size: 12px;
+}
+.ts-del:hover { background: var(--soft-3); color: var(--up); }

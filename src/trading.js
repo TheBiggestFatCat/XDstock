@@ -357,10 +357,24 @@ export function checkPositions(db) {
       // 止盈止损：到线不直接成交，而是自动挂一张平仓单，
       // 交给撮合流程按「每轮成交量上限」慢慢平
       const dir = pos.side === 'long' ? 1 : -1;
-      let hit = null;
-      if (pos.tp && (price - pos.tp) * dir >= 0) hit = 'tp';
-      if (pos.sl && (price - pos.sl) * dir <= 0) hit = 'sl';
-      if (!hit) continue;
+
+      // 多条止盈止损：先补一条老数据到列表里
+      if (!Array.isArray(pos.tpsl)) {
+        pos.tpsl = [];
+        if (pos.tp) pos.tpsl.push({ id: 'ts_legacy_tp', kind: 'tp', price: Number(pos.tp), qty: pos.tpQty || null, fired: false });
+        if (pos.sl) pos.tpsl.push({ id: 'ts_legacy_sl', kind: 'sl', price: Number(pos.sl), qty: pos.slQty || null, fired: false });
+      }
+
+      // 找出所有触发但还没处理的条件
+      const hits = pos.tpsl.filter((x) => {
+        if (x.fired) return false;
+        return x.kind === 'tp'
+          ? (price - x.price) * dir >= 0
+          : (price - x.price) * dir <= 0;
+      });
+      if (!hits.length) continue;
+
+      const hit = hits[0].kind;
 
       const already = (player.orders || []).some(
         (o) => o.code === code && o.action === 'close'
@@ -368,7 +382,7 @@ export function checkPositions(db) {
       if (already) continue;
 
       // 止盈/止损可以只平一部分：用玩家预先设好的数量
-      const presetQty = Number(hit === 'tp' ? pos.tpQty : pos.slQty);
+      const presetQty = Number(hits[0].qty);
       const orderQty = Math.max(1, Math.min(
         pos.qty,
         Number.isFinite(presetQty) && presetQty > 0 ? Math.floor(presetQty) : pos.qty
@@ -396,8 +410,11 @@ export function checkPositions(db) {
       });
 
       // 止盈止损已转化成挂单，持仓上的条件清掉，避免重复触发
-      pos.tp = null;
-      pos.sl = null;
+      for (const h of hits) h.fired = true;
+      const restTp = pos.tpsl.find((x) => x.kind === 'tp' && !x.fired);
+      const restSl = pos.tpsl.find((x) => x.kind === 'sl' && !x.fired);
+      pos.tp = restTp ? restTp.price : null;
+      pos.sl = restSl ? restSl.price : null;
       pos.closing = hit;
       results.push({
         playerId: player.id,

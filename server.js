@@ -238,6 +238,11 @@ function tickPayload(forPlayerId) {
         margin: pos.margin,
         leverage: pos.leverage,
         tp: pos.tp,
+        tpsl: Array.isArray(pos.tpsl)
+          ? pos.tpsl.filter((x) => !x.fired).map((x) => ({
+            id: x.id, kind: x.kind, price: x.price, qty: x.qty || null
+          }))
+          : [],
         sl: pos.sl,
         // 分批平仓中的状态，前端要显示「止损中」
         closing: pos.closing || null

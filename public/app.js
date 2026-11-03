@@ -1081,19 +1081,11 @@ function currentPosition() {
 /** 手动输入止盈止损 + 触发时平仓数量 */
 
 /** 把持仓上已有的止盈止损回填到输入框 */
-function fillTpSlInputs(force = false) {
-  const pos = state.market?.me?.positions?.[state.code];
-  const tpEl = $('#tpPrice');
-  const slEl = $('#slPrice');
-  const qEl = $('#tpslQty');
-  // 玩家正在输入的框、或者已经改过的框，一律不覆盖，否则每轮 tick 都会把手打的内容刷掉
-  const canWrite = (el) => el && document.activeElement !== el && (force || !state.tpslEdited);
-  if (canWrite(tpEl)) tpEl.value = pos?.tp ? Number(pos.tp).toFixed(2) : '';
-  if (canWrite(slEl)) slEl.value = pos?.sl ? Number(pos.sl).toFixed(2) : '';
-  if (canWrite(qEl)) qEl.value = (pos?.tpQty || pos?.slQty) ? String(pos.tpQty || pos.slQty) : '';
+function fillTpSlInputs() {
+  // 改成多条条件单后，输入框只用于新增，不再回填
 }
 
-/** 止盈止损页的状态摘要 */
+/** 止盈止损页：列表 + 每行可删除 */
 function renderTpSlStatus() {
   const box = $('#tpslStatus');
   if (!box) return;
@@ -1103,21 +1095,48 @@ function renderTpSlStatus() {
     box.innerHTML = '<span class="ts-empty">这只票没有持仓，止盈止损无处可设</span>';
     return;
   }
-  const rows = [];
-  if (pos.tp) {
-    rows.push(`<div><span>止盈</span><b class="up">${Number(pos.tp).toFixed(2)}</b>`
-      + `<i>${pos.tpQty ? `平 ${pos.tpQty} 股` : '全平'}</i></div>`);
-  }
-  if (pos.sl) {
-    rows.push(`<div><span>止损</span><b class="down">${Number(pos.sl).toFixed(2)}</b>`
-      + `<i>${pos.slQty ? `平 ${pos.slQty} 股` : '全平'}</i></div>`);
-  }
-  if (!rows.length) {
-    box.innerHTML = `<span class="ts-empty">当前持仓 ${pos.qty} 股 · 还没设置止盈止损（现价 ${(st?.price || 0).toFixed(2)}）</span>`;
+  const list = Array.isArray(pos.tpsl) ? pos.tpsl : [];
+  const head = `<div class="ts-title">当前持仓 ${pos.qty} 股 · ${pos.side === 'long' ? '做多' : '做空'}`
+    + ` · 现价 ${(st?.price || 0).toFixed(2)}</div>`;
+
+  if (!list.length) {
+    box.innerHTML = head + '<span class="ts-empty">还没有条件单，填好价格点上面的按钮添加</span>';
     return;
   }
-  box.innerHTML = `<div class="ts-title">当前持仓 ${pos.qty} 股 · ${pos.side === 'long' ? '做多' : '做空'}</div>`
-    + rows.join('');
+
+  box.innerHTML = head + list.map((x) => {
+    const isTp = x.kind === 'tp';
+    return `<div class="ts-row">
+      <span class="ts-kind ${isTp ? 'tp' : 'sl'}">${isTp ? '止盈' : '止损'}</span>
+      <b class="${isTp ? 'up' : 'down'}">${Number(x.price).toFixed(2)}</b>
+      <i>${x.qty ? `平 ${x.qty} 股` : '全平'}</i>
+      <button class="ts-del" data-tpsl-del="${x.id}" type="button" title="删除这条">✕</button>
+    </div>`;
+  }).join('');
+
+  box.querySelectorAll('[data-tpsl-del]').forEach((b) => {
+    b.addEventListener('click', () => removeTpSl(b.dataset.tpslDel));
+  });
+}
+
+/** 删掉一条止盈止损 */
+async function removeTpSl(id) {
+  try {
+    const r = await api('/api/tpsl/remove', {
+      method: 'POST', body: JSON.stringify({ code: state.code, id })
+    });
+    if (r?.position && state.market?.me?.positions?.[state.code]) {
+      const local = state.market.me.positions[state.code];
+      local.tpsl = r.position.tpsl || [];
+      local.tp = r.position.tp ?? null;
+      local.sl = r.position.sl ?? null;
+    }
+    renderTpSlStatus();
+    updatePriceLines();
+    toast('已删除这条条件单', 'ok');
+  } catch (e) {
+    toast(e.message, 'err');
+  }
 }
 
 async function applyTpSl() {
@@ -1141,20 +1160,22 @@ async function applyTpSl() {
   }
   if (qtyV > 0 && qtyV > pos.qty) { toast(`最多 ${pos.qty} 股`, 'err'); return; }
 
-  const body = { code: state.code };
-  if (tpV > 0) { body.tp = tpV; body.tpQty = qtyV || null; }
-  if (slV > 0) { body.sl = slV; body.slQty = qtyV || null; }
+  const body = { code: state.code, qty: qtyV || null };
+  if (tpV > 0) body.tp = tpV;
+  if (slV > 0) body.sl = slV;
   try {
     const r = await api('/api/tpsl', { method: 'POST', body: JSON.stringify(body) });
     if (r?.position && state.market?.me?.positions?.[state.code]) {
       const local = state.market.me.positions[state.code];
       local.tp = r.position.tp ?? null;
       local.sl = r.position.sl ?? null;
-      local.tpQty = r.position.tpQty ?? null;
-      local.slQty = r.position.slQty ?? null;
+      if (Array.isArray(r.position.tpsl)) local.tpsl = r.position.tpsl;
     }
     state.tpslEdited = false;
-    fillTpSlInputs(true);
+    // 加完清空，方便接着加下一条
+    if ($('#tpPrice')) $('#tpPrice').value = '';
+    if ($('#slPrice')) $('#slPrice').value = '';
+    if ($('#tpslQty')) $('#tpslQty').value = '';
     updatePriceLines();
     renderTpSlStatus();
     toast('止盈止损已更新' + (qtyV > 0 ? `（触发平 ${qtyV} 股）` : '（触发全平）'), 'ok');

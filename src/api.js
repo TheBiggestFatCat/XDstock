@@ -1126,6 +1126,7 @@ export async function handleApi(ctx) {
     });
   }
 
+  // 追加一条止盈/止损条件（可以加多条，到一条触发一条）
   if (pathname === '/api/tpsl' && method === 'POST') {
     const code = String(body.code || '').toUpperCase();
     const pos = me.positions[code];
@@ -1136,56 +1137,78 @@ export async function handleApi(ctx) {
     const price = st.price;
     const dir = pos.side === 'long' ? 1 : -1;
 
-    const has = (k) => Object.prototype.hasOwnProperty.call(body, k);
+    if (!Array.isArray(pos.tpsl)) pos.tpsl = [];
+    const max = Math.max(1, Number(db.config.maxTpslPerPosition ?? 8));
+    if (pos.tpsl.length >= max) {
+      return json(res, 400, { error: `每笔持仓最多 ${max} 条止盈止损，先删掉一些` });
+    }
+
     const parse = (v) => {
       if (v === null || v === undefined || v === '') return null;
       const n = Number(v);
       return Number.isFinite(n) ? n : NaN;
     };
-
-    // 只改请求里出现的字段，没传的保持原样（避免并发编辑互相覆盖）
-    let tp = pos.tp ?? null;
-    let sl = pos.sl ?? null;
-    let tpQty = pos.tpQty ?? null;
-    let slQty = pos.slQty ?? null;
-
-    if (has('tp')) {
-      const v = parse(body.tp);
-      if (v !== null) {
-        if (!Number.isFinite(v) || v <= 0) return json(res, 400, { error: '止盈价必须是正数' });
-        if ((v - price) * dir <= 0) {
-          return json(res, 400, {
-            error: `止盈价必须${dir > 0 ? '高于' : '低于'}现价 ${price.toFixed(2)}，否则会立刻成交`
-          });
-        }
-      }
-      tp = v;
-    }
-
-    if (has('sl')) {
-      const v = parse(body.sl);
-      if (v !== null) {
-        if (!Number.isFinite(v) || v <= 0) return json(res, 400, { error: '止损价必须是正数' });
-        if ((v - price) * dir >= 0) {
-          return json(res, 400, {
-            error: `止损价必须${dir > 0 ? '低于' : '高于'}现价 ${price.toFixed(2)}，否则会立刻成交`
-          });
-        }
-      }
-      sl = v;
-    }
-
-    pos.tp = tp;
-    pos.sl = sl;
-    // 触发时只平这么多股（留空 = 全平）
-    const toQty = (v) => {
-      const n = Math.floor(Number(v));
+    const qty = (() => {
+      const n = Math.floor(Number(body.qty));
       return Number.isFinite(n) && n > 0 ? Math.min(pos.qty, n) : null;
-    };
-    if (body.tpQty !== undefined) tpQty = toQty(body.tpQty);
-    if (body.slQty !== undefined) slQty = toQty(body.slQty);
-    pos.tpQty = tpQty;
-    pos.slQty = slQty;
+    })();
+
+    const added = [];
+
+    const tpV = parse(body.tp);
+    if (tpV !== null) {
+      if (!Number.isFinite(tpV) || tpV <= 0) return json(res, 400, { error: '止盈价必须是正数' });
+      if ((tpV - price) * dir <= 0) {
+        return json(res, 400, {
+          error: `止盈价必须${dir > 0 ? '高于' : '低于'}现价 ${price.toFixed(2)}`
+        });
+      }
+      added.push({
+        id: 'ts_' + Math.random().toString(36).slice(2, 9),
+        kind: 'tp', price: tpV, qty, fired: false, createdTick: db.tick
+      });
+    }
+
+    const slV = parse(body.sl);
+    if (slV !== null) {
+      if (!Number.isFinite(slV) || slV <= 0) return json(res, 400, { error: '止损价必须是正数' });
+      if ((slV - price) * dir >= 0) {
+        return json(res, 400, {
+          error: `止损价必须${dir > 0 ? '低于' : '高于'}现价 ${price.toFixed(2)}`
+        });
+      }
+      added.push({
+        id: 'ts_' + Math.random().toString(36).slice(2, 9),
+        kind: 'sl', price: slV, qty, fired: false, createdTick: db.tick
+      });
+    }
+
+    if (!added.length) return json(res, 400, { error: '止盈和止损至少要填一个' });
+
+    pos.tpsl.push(...added);
+    // 老字段同步一份，兼容老逻辑
+    const firstTp = pos.tpsl.find((x) => x.kind === 'tp' && !x.fired);
+    const firstSl = pos.tpsl.find((x) => x.kind === 'sl' && !x.fired);
+    pos.tp = firstTp ? firstTp.price : null;
+    pos.sl = firstSl ? firstSl.price : null;
+    saveDb();
+    return json(res, 200, { ok: true, added, position: pos });
+  }
+
+  // 删掉一条止盈止损
+  if (pathname === '/api/tpsl/remove' && method === 'POST') {
+    const code = String(body.code || '').toUpperCase();
+    const pos = me.positions[code];
+    if (!pos) return json(res, 400, { error: '没有这只票的持仓' });
+    const id = String(body.id || '');
+    if (!Array.isArray(pos.tpsl)) pos.tpsl = [];
+    const before = pos.tpsl.length;
+    pos.tpsl = pos.tpsl.filter((x) => x.id !== id);
+    if (pos.tpsl.length === before) return json(res, 400, { error: '没有这条记录' });
+    const firstTp = pos.tpsl.find((x) => x.kind === 'tp' && !x.fired);
+    const firstSl = pos.tpsl.find((x) => x.kind === 'sl' && !x.fired);
+    pos.tp = firstTp ? firstTp.price : null;
+    pos.sl = firstSl ? firstSl.price : null;
     saveDb();
     return json(res, 200, { ok: true, position: pos });
   }
