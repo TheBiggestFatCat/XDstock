@@ -68,6 +68,51 @@ function uniform(lo, hi) {
   return lo + Math.random() * (hi - lo);
 }
 
+/**
+ * 散户情绪的重掷周期（轮）：每次重掷都从 [min, max] 里重新抽一个间隔，
+ * 免得所有票像上了发条一样同节奏换情绪。
+ *
+ * 优先级：
+ *   1. 个股 trait.sentRollMin / sentRollMax（面板里能改）
+ *   2. 个股老字段 trait.sentRollTicks：按 ±1/3 现推一个区间（和 migrate 口径一致）
+ *   3. 全局 config.sentimentRollMin / sentimentRollMax
+ *   4. 全局老字段 sentimentRollTicks（固定周期兜底）
+ */
+export function sentimentRollInterval(db, st) {
+  const cfg = (db && db.config) || {};
+  const t = (st && st.trait) || {};
+
+  const gLegacy = Math.max(1, Math.floor(Number(cfg.sentimentRollTicks ?? 720)));
+  const tLegacy = Number(t.sentRollTicks);
+  const hasTLegacy = Number.isFinite(tLegacy) && tLegacy > 0;
+  const derivedMin = hasTLegacy ? Math.max(1, Math.round(tLegacy * 2 / 3)) : null;
+  const derivedMax = derivedMin != null ? Math.max(derivedMin, Math.round(tLegacy * 4 / 3)) : null;
+
+  const tMin = Number(t.sentRollMin);
+  const tMax = Number(t.sentRollMax);
+  let min;
+  let max;
+  if (Number.isFinite(tMin) || Number.isFinite(tMax)) {
+    // 个股显式配了区间（哪怕只配了一头）
+    min = Math.max(1, Math.floor(Number.isFinite(tMin) ? tMin : tMax));
+    max = Math.max(1, Math.floor(Number.isFinite(tMax) ? tMax : tMin));
+  } else if (derivedMin != null) {
+    min = derivedMin;
+    max = derivedMax;
+  } else {
+    min = Math.max(1, Math.floor(Number(cfg.sentimentRollMin ?? gLegacy)));
+    max = Math.max(1, Math.floor(Number(cfg.sentimentRollMax ?? gLegacy)));
+  }
+
+  if (max < min) {
+    const tmp = min;
+    min = max;
+    max = tmp;
+  }
+  if (max === min) return min;
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
 /** 单只股票走一步 */
 function stepStock(st, cfg, events, brokerDrift, fxData, db) {
   const t = st.trait || {};
@@ -145,20 +190,22 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
     p *= Math.exp(k * Math.log(st.fair / p));
   }
 
-  // 散户情绪：每小时重掷方向，按固定间隔施加随机偏移（每只票独立）
+  // 散户情绪：每隔一段随机周期重掷方向，按固定间隔施加随机偏移（每只票独立）
   if (db && Number(cfg.sentimentEnabled ?? 1) !== 0) {
     const t2 = st.trait || {};
     const strength = Math.max(0, Number(t2.sentStrength ?? cfg.sentimentStrength ?? 0.004));
     const every = Math.max(1, Math.floor(Number(t2.sentTicks ?? cfg.sentimentTicks ?? 12)));
-    const rollEvery = Math.max(60, Math.floor(Number(t2.sentRollTicks ?? cfg.sentimentRollTicks ?? 720)));
     if (!st.sentiment || typeof st.sentiment !== 'object') {
       st.sentiment = { v: 0, nextRoll: 0, nextApply: 0 };
     }
     if (!(Number(st.sentiment.nextRoll) > 0) || db.tick >= Number(st.sentiment.nextRoll)) {
+      // 每次重掷都重新抽一个周期，不再固定
+      const rollEvery = sentimentRollInterval(db, st);
       st.sentiment = {
         v: Math.random() * 2 - 1,
         nextRoll: db.tick + rollEvery,
-        nextApply: db.tick
+        nextApply: db.tick,
+        rollEvery
       };
     }
     if (db.tick >= Number(st.sentiment.nextApply || 0)) {

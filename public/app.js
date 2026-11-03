@@ -3440,7 +3440,8 @@ async function loadAdmin() {
         ['sentimentEnabled', '开关(1=开 0=关)'],
         ['sentimentStrength', '基准偏移(0.004=0.4%)'],
         ['sentimentTicks', '每多少轮施加一次'],
-        ['sentimentRollTicks', '多少轮重掷(720=1h)']
+        ['sentimentRollMin', '重掷周期下限(轮)'],
+        ['sentimentRollMax', '重掷周期上限(轮)']
       ]
     },
     {
@@ -3578,7 +3579,8 @@ const TRAIT_LABELS = {
   // 散户情绪（每只票独立）
   sentStrength: ['散户情绪强度', '情绪 1.0 时的基准偏移，0.004=0.4%'],
   sentTicks: ['情绪作用间隔(轮)', '每多少轮施加一次偏移，12=1分钟'],
-  sentRollTicks: ['情绪重掷周期(轮)', '多少轮重新掷情绪，720=1小时']
+  sentRollMin: ['情绪重掷周期下限(轮)', '每次重掷从「下限~上限」里随机抽一个周期，480=40分钟'],
+  sentRollMax: ['情绪重掷周期上限(轮)', '和下限一起决定随机区间，960=80分钟']
 };
 
 function renderTraitForm(stocks) {

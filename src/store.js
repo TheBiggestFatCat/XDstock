@@ -195,6 +195,17 @@ function migrate(d) {
     if (!Number.isFinite(Number(st.trait.sentStrength))) st.trait.sentStrength = 0.004;
     if (!Number.isFinite(Number(st.trait.sentTicks))) st.trait.sentTicks = 12;
     if (!Number.isFinite(Number(st.trait.sentRollTicks))) st.trait.sentRollTicks = 720;
+    // 重掷周期从「固定值」改成「随机范围」：老存档按老值 ±1/3 推导，均值不变
+    const legacyRoll = Number(st.trait.sentRollTicks) > 0 ? Number(st.trait.sentRollTicks) : 720;
+    if (!Number.isFinite(Number(st.trait.sentRollMin))) {
+      st.trait.sentRollMin = Math.max(1, Math.round(legacyRoll * 2 / 3));
+    }
+    if (!Number.isFinite(Number(st.trait.sentRollMax))) {
+      st.trait.sentRollMax = Math.max(
+        Number(st.trait.sentRollMin) || 1,
+        Math.round(legacyRoll * 4 / 3)
+      );
+    }
   }
 
   for (const st of Object.values(merged.stocks)) {

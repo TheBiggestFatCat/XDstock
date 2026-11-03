@@ -98,11 +98,16 @@ export const DEFAULT_CONFIG = {
   // 全市场新闻的冲击折扣（1 = 不打折）
   globalEventScale: 0.2,
 
-  // 散户情绪：每小时随机一个方向，按 tick 间隔施加随机偏移
+  // 散户情绪：每隔一段随机周期重掷方向，按 tick 间隔施加随机偏移
   sentimentEnabled: 1,
   sentimentStrength: 0.004,    // 情绪 1.0 时的基准偏移（0.4%）
   sentimentTicks: 12,          // 每多少 tick 施加一次
-  sentimentRollTicks: 720,     // 多少 tick 重掷一次情绪（720 = 1 小时）
+  // 重掷周期改成随机范围（轮）：每次重掷从 [min, max] 里重新抽一个间隔
+  // 默认 480~960 轮 ≈ 40~80 分钟，均值仍是原来的 1 小时
+  sentimentRollMin: 480,
+  sentimentRollMax: 960,
+  // 老字段（固定周期）：只在 min/max 都没配时兜底
+  sentimentRollTicks: 720,
 
   // 哈基蜂业抽奖：每轮触发概率 / 涨跌幅区间
   weatherLotteryChance: 0.0006,
