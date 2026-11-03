@@ -683,6 +683,8 @@ function renderLevelCard() {
   const growth = Math.max(1, Number(cfg.levelGrowth ?? 2));
   const need = base * Math.pow(growth, lv - 1);
   const ratio = Number(cfg.levelUpRatio ?? 0.6);
+  const ratioEl = $('#levelRatio');
+  if (ratioEl) ratioEl.textContent = `${Math.round(ratio * 100)}%`;
   const equity = Number(me.equity) || 0;
   const cost = Math.floor(equity * ratio);
 
