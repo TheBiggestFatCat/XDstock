@@ -2894,7 +2894,8 @@ function renderPortfolio() {
   const pnlTotal = pos.reduce((s, p) => s + p.pnl, 0);
   const frozenCash = Number(me.frozen) || 0;
   $('#statGrid').innerHTML = `
-    <div class="stat-card"><div class="stat-label">总资产</div><div class="stat-value">${money(me.equity)}</div><div class="stat-sub">现金 + 保证金 + 浮盈亏${frozenCash > 0 ? ' + 冻结押金' : ''}</div></div>
+    <div class="stat-card"><div class="stat-label">总资产</div><div class="stat-value">${money(me.equity)}</div><div class="stat-sub">现金 + 保证金 + 浮盈亏${frozenCash > 0 ? ' + 冻结押金' : ''}（不含银行存款）</div></div>
+    <div class="stat-card"><div class="stat-label">银行存款</div><div class="stat-value">${money(Number(me.bank) || 0)}</div><div class="stat-sub">不计入上面的总资产，但计入排行榜</div></div>
     <div class="stat-card"><div class="stat-label">可用现金</div><div class="stat-value">${money(me.cash)}</div><div class="stat-sub">${frozenCash > 0 ? `另有 ${money(frozenCash)} 冻结在挂单里` : '可用于开新仓'}</div></div>
     <div class="stat-card"><div class="stat-label">占用保证金</div><div class="stat-value">${money(marginTotal)}</div><div class="stat-sub">${pos.length} 个持仓</div></div>
     <div class="stat-card"><div class="stat-label">浮动盈亏</div><div class="stat-value ${cls(pnlTotal)}">${money(pnlTotal)}</div><div class="stat-sub">实时结算</div></div>`;
@@ -3366,7 +3367,7 @@ async function loadRank(force = false) {
     const spyLeftNow = Math.max(0, (Number(meNow.investigateReadyAt) || 0) - tickNow);
     // 冷却秒数也算进签名，不然按钮上的倒计时不会刷新
     const sig = d.rows
-      .map((r) => `${r.id}:${Math.round(r.equity)}:${r.cash.toFixed(0)}:${r.level || 1}:${r.nickname}`)
+      .map((r) => `${r.id}:${Math.round(r.total ?? r.equity)}:${Math.round(r.bank || 0)}:${r.cash.toFixed(0)}:${r.level || 1}:${r.nickname}`)
       .join('|') + `|${meNow.theme || 'default'}|${stealLeftNow}|${spyLeftNow}|${meNow.stealQueued ? 1 : 0}`;
     if (!force && sig === state.rankSig && wrap.querySelector('table')) {
       const t = $('#rankTime');
@@ -3376,7 +3377,7 @@ async function loadRank(force = false) {
     state.rankSig = sig;
     wrap.innerHTML = `
       <table>
-        <thead><tr><th>#</th><th>玩家</th><th>等级</th><th>总资产</th><th>现金</th><th>操作</th></tr></thead>
+        <thead><tr><th>#</th><th>玩家</th><th>等级</th><th title="现金 + 持仓 + 冻结 + 银行存款">总资产</th><th>现金</th><th>操作</th></tr></thead>
         <tbody>
           ${d.rows.map((r, i) => {
             const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
@@ -3388,6 +3389,8 @@ async function loadRank(force = false) {
             const cdLeft = stealLeftNow;
             const spyLeft = spyLeftNow;
             const probeActive = meNow.theme === 'probe';
+            const bank = Math.max(0, Number(r.bank) || 0);
+            const total = Number.isFinite(r.total) ? r.total : r.equity + bank;
             let actionCell = '<span class="stock-code">—</span>';
             if (!isMe) {
               const parts = [];
@@ -3398,6 +3401,7 @@ async function loadRank(force = false) {
               } else if (r.cash <= 0) {
                 parts.push('<span class="stock-code">没现金</span>');
               } else {
+                // 偷钱上限只看交易资产，银行里的钱偷不到
                 const capByEquity = Math.floor(r.equity * Number(cfg.stealCapRatio ?? 0.001));
                 const maxTake = Math.max(0, Math.min(capByEquity, r.cash));
                 parts.push(`<button class="steal-btn" data-steal="${r.id}" data-name="${escapeHtml(r.nickname)}" title="总资产 0.1% = ${money(capByEquity)}，实际最多能拿走 ${money(maxTake)}">偷钱</button>`);
@@ -3414,7 +3418,9 @@ async function loadRank(force = false) {
               <td><span class="rank-medal">${medal || i + 1}</span></td>
               <td><span class="rank-user">${rankAvatar(r)}<span class="rank-name">${escapeHtml(r.nickname)}</span></span></td>
               <td>${lvCell}</td>
-              <td class="${cls(r.equity - 100000)}">${money(r.equity)}</td>
+              <td class="${cls(total - 100000)}">${money(total)}${bank > 0
+                ? `<span class="rank-bank" title="银行存款 ${money(bank)}">🏦 ${money0(bank)}</span>`
+                : ''}</td>
               <td>${money(r.cash)}</td>
               <td>${actionCell}</td>
             </tr>`;

@@ -502,6 +502,11 @@ input.tpsl-input {
 /* ---------- 排行榜 ---------- */
 .rank-medal { font-size: 16px; }
 .rank-row-me { background: var(--hl-4) !important; }
+.rank-bank {
+  display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+  font-size: 11px; color: #b4713a; background: rgba(180, 113, 58, .1);
+  font-variant-numeric: tabular-nums;
+}
 
 /* ---------- 管理 ---------- */
 .admin-lock { max-width: 380px; }

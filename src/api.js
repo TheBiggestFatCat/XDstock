@@ -540,18 +540,26 @@ export async function handleApi(ctx) {
 
   if (pathname === '/api/leaderboard' && method === 'GET') {
     // 排行榜只公开资产，不再公开任何人的持仓
-    const rows = Object.values(db.players).map((p) => ({
-      id: p.id,
-      nickname: p.nickname,
-      avatar: p.avatar || null,
-      cash: p.cash,
-      equity: playerEquity(db, p),
-      guardUntil: p.guardUntil || 0,
-      theme: p.theme || 'default',
-      level: Math.max(1, Math.floor(Number(p.level) || 1)),
-      positions: []
-    }));
-    rows.sort((a, b) => b.equity - a.equity);
+    const rows = Object.values(db.players).map((p) => {
+      const equity = playerEquity(db, p);
+      const bank = Math.max(0, Number(p.bank) || 0);
+      return {
+        id: p.id,
+        nickname: p.nickname,
+        avatar: p.avatar || null,
+        cash: p.cash,
+        // equity = 交易资产（现金 + 持仓 + 冻结），偷钱上限仍按这个算
+        equity,
+        bank,
+        // total = 排名用的总资产（含银行存款）
+        total: Math.round((equity + bank) * 100) / 100,
+        guardUntil: p.guardUntil || 0,
+        theme: p.theme || 'default',
+        level: Math.max(1, Math.floor(Number(p.level) || 1)),
+        positions: []
+      };
+    });
+    rows.sort((a, b) => b.total - a.total || b.equity - a.equity);
     return json(res, 200, { rows });
   }
 
