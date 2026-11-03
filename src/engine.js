@@ -336,9 +336,12 @@ export function stepMarket(db) {
   if (live.length) {
     const idx = db.index;
     const period = Math.max(60, Number(cfg.indexRebalanceTicks ?? 2160));
+    // 有新股上市（权重表里没有它）就立刻调仓，不用等到季度末
+    const missing = live.some((x) => !(Number(idx.weights?.[x.code]) > 0));
     if (!idx.weights || !idx.basePrices || !(idx.nextRebalanceTick > 0)
-      || db.tick >= idx.nextRebalanceTick) {
+      || missing || db.tick >= idx.nextRebalanceTick) {
       rebalanceIndex(db, live, period);
+      if (missing) console.log('[指数] 发现新成分股，已调仓纳入');
     }
     let sum = 0;
     for (const s of live) {
