@@ -2530,3 +2530,39 @@ body[data-theme="bear"] .brand-logo {
 }
 .shop-locked .lock-icon { font-size: 34px; }
 .shop-locked p { margin: 0; color: var(--ink-2); font-size: 13.5px; }
+
+/* 标的管理：横向卡片 */
+.trait-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.trait-form .trait-card {
+  width: 100%;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.trait-form .trait-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.trait-form .trait-head b { font-size: 14px; }
+.trait-form .trait-head .trait-tag { margin-left: auto; }
+/* 参数横排：一行尽量铺满，放不下自动换行 */
+.trait-form .trait-card .cfg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 10px;
+}
+.trait-form .trait-card .cfg-field span {
+  font-size: 11px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
