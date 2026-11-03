@@ -82,6 +82,10 @@ function publicPlayer(p, db) {
     redBonusEarned: p.redBonusEarned || 0,
     bearBonusEarned: p.bearBonusEarned || 0,
     theme: p.theme || 'default',
+    level: Math.max(1, Math.floor(Number(p.level) || 1)),
+    bgUnlocked: !!p.bgUnlocked,
+    background: p.background || '',
+    renameReadyAt: Number(p.renameReadyAt) || 0,
     themeChangedTick: p.themeChangedTick || 0,
     themes: Array.isArray(p.themes) ? p.themes : [],
     frozen: Math.round((p.orders || []).reduce((a, o) => a + (Number(o.reserve) || 0), 0) * 100) / 100,
@@ -319,6 +323,11 @@ function marketPayload(db, me) {
       shopBodyguardPrice: db.config.shopBodyguardPrice ?? 50000,
       shopBodyguardTicks: db.config.shopBodyguardTicks ?? 720,
       shopThemePrice: db.config.shopThemePrice ?? 2000000,
+      shopBgPrice: db.config.shopBgPrice ?? 5000000,
+      shopRenamePrice: db.config.shopRenamePrice ?? 1000000,
+      shopRenameCooldown: db.config.shopRenameCooldown ?? 2000,
+      levelBaseAsset: db.config.levelBaseAsset ?? 10000000,
+      levelUpRatio: db.config.levelUpRatio ?? 0.9,
       shopChannelBasePrice: db.config.shopChannelBasePrice ?? 300000,
       shopChannelRatio: db.config.shopChannelRatio ?? 1.5,
       shopChannelStep: db.config.shopChannelStep ?? 100000,
@@ -474,6 +483,7 @@ export async function handleApi(ctx) {
       equity: playerEquity(db, p),
       guardUntil: p.guardUntil || 0,
       theme: p.theme || 'default',
+      level: Math.max(1, Math.floor(Number(p.level) || 1)),
       positions: []
     }));
     rows.sort((a, b) => b.equity - a.equity);
@@ -1028,6 +1038,85 @@ export async function handleApi(ctx) {
       cooldownTicks: cdTicks,
       event: { id: ev.id, text: ev.text, dir: ev.dir, companies, createdAt: ev.createdAt }
     });
+  }
+
+  // ---------- 账号等级 ----------
+  if (pathname === '/api/shop/level-up' && method === 'POST') {
+    const lv = Math.max(1, Math.floor(Number(me.level) || 1));
+    const base = Number(db.config.levelBaseAsset ?? 10000000);
+    const need = base * Math.pow(10, lv - 1);            // lv1->2: 1000万, lv2->3: 1亿 ...
+    const equity = playerEquity(db, me);
+    if (equity < need) {
+      return json(res, 400, {
+        error: `升级需要总资产达到 ${Math.round(need).toLocaleString('en-US')}，你现在 ${Math.round(equity).toLocaleString('en-US')}`
+      });
+    }
+    const ratio = Math.min(0.99, Math.max(0, Number(db.config.levelUpRatio ?? 0.9)));
+    const cost = Math.floor(equity * ratio);
+    if (Number(me.cash) < cost) {
+      return json(res, 400, {
+        error: `升级要付 ${Math.round(cost).toLocaleString('en-US')} 现金（总资产的 ${(ratio * 100).toFixed(0)}%），你只有 ${Math.round(Number(me.cash) || 0).toLocaleString('en-US')}`
+      });
+    }
+    me.cash = Number(me.cash) - cost;
+    me.level = lv + 1;
+    saveDb();
+    return json(res, 200, { ok: true, level: me.level, cost, cash: me.cash, player: publicPlayer(me, db) });
+  }
+
+  // ---------- 自定义背景 ----------
+  if (pathname === '/api/shop/bg' && method === 'POST') {
+    if (Math.max(1, Math.floor(Number(me.level) || 1)) < 2) {
+      return json(res, 403, { error: '需要 2 级商店' });
+    }
+    if (me.bgUnlocked) return json(res, 200, { ok: true, already: true });
+    const price = Number(db.config.shopBgPrice ?? 5000000);
+    if (Number(me.cash) < price) {
+      return json(res, 400, { error: `现金不足，需要 ${Math.round(price).toLocaleString('en-US')}` });
+    }
+    me.cash = Number(me.cash) - price;
+    me.bgUnlocked = true;
+    saveDb();
+    return json(res, 200, { ok: true, player: publicPlayer(me, db) });
+  }
+
+  if (pathname === '/api/shop/bg/save' && method === 'POST') {
+    if (!me.bgUnlocked) return json(res, 400, { error: '还没解锁自定义背景' });
+    const data = String(body.data || '');
+    if (!/^data:image\/(png|jpeg|webp);base64,/.test(data)) {
+      return json(res, 400, { error: '图片格式不支持' });
+    }
+    if (data.length > 1600 * 1024) {
+      return json(res, 413, { error: '图片太大，换个小的（建议 500KB 以内）' });
+    }
+    me.background = data;
+    saveDb();
+    return json(res, 200, { ok: true, size: data.length });
+  }
+
+  // ---------- 改名卡 ----------
+  if (pathname === '/api/shop/rename' && method === 'POST') {
+    if (Math.max(1, Math.floor(Number(me.level) || 1)) < 2) {
+      return json(res, 403, { error: '需要 2 级商店' });
+    }
+    const cd = Math.max(0, Number(db.config.shopRenameCooldown ?? 2000));
+    const last = Number(me.renameReadyAt || 0);
+    if (cd > 0 && last > db.tick) {
+      return json(res, 429, { error: `改名冷却中，还要等 ${last - db.tick} 轮`, leftTicks: last - db.tick });
+    }
+    const name = String(body.nickname || '').trim();
+    if (name.length < 2 || name.length > 12) return json(res, 400, { error: '名字要 2~12 个字' });
+    const taken = Object.values(db.players).some((p) => p.id !== me.id && p.nickname === name);
+    if (taken) return json(res, 400, { error: '这个名字有人用了' });
+    const price = Number(db.config.shopRenamePrice ?? 1000000);
+    if (Number(me.cash) < price) {
+      return json(res, 400, { error: `现金不足，需要 ${Math.round(price).toLocaleString('en-US')}` });
+    }
+    me.cash = Number(me.cash) - price;
+    me.nickname = name;
+    me.renameReadyAt = db.tick + cd;
+    saveDb();
+    return json(res, 200, { ok: true, nickname: name, readyAt: me.renameReadyAt, player: publicPlayer(me, db) });
   }
 
   if (pathname === '/api/shop/channel' && method === 'POST') {

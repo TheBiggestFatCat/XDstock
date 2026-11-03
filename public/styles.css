@@ -2463,3 +2463,15 @@ body[data-theme="bear"] .brand-logo {
 
 .ban-btn.logout { border-color: var(--line); color: var(--ink-2); }
 .ban-btn.logout:hover { background: var(--soft-3); }
+
+/* 等级牌子 */
+.lv-badge {
+  --lv: #94a3b8;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 2px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; letter-spacing: .3px;
+  color: #fff; background: var(--lv);
+  box-shadow: 0 2px 6px rgba(0,0,0,.12);
+  vertical-align: middle;
+}
+.bg-file { display: none; }

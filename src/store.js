@@ -269,6 +269,10 @@ function migrate(d) {
     delete p.bankruptAt;
     delete p.bankruptDebt;
   }
+  // 老存档补账号等级
+  for (const p of Object.values(merged.players || {})) {
+    if (!Number.isFinite(Number(p.level)) || Number(p.level) < 1) p.level = 1;
+  }
   delete merged.book;
   for (const k of Object.keys(merged.config)) {
     if (k.toLowerCase().includes('loan')) delete merged.config[k];

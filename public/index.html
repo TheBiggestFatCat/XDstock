@@ -87,7 +87,7 @@
       </button>
       <div class="user-box">
         <span id="nickDisplay" class="nick">—</span>
-        <button id="logoutBtn" class="btn-link">退出</button>
+        <span id="lvBadge" class="lv-badge">Lv.1</span><button id="logoutBtn" class="btn-link">退出</button>
       </div>
     </div>
   </header>
@@ -327,7 +327,7 @@
         <p>有些东西，钱能买到</p>
       </div>
 
-      <div class="shop-grid">
+      <div class="shop-grid" data-tier="1">
         <div class="shop-card" id="fakeNewsCard">
           <div class="shop-card-head">
             <span class="shop-icon">📰</span>
@@ -428,6 +428,21 @@
           <button class="btn btn-primary btn-block theme-btn" data-theme-code="tycoon">购买</button>
         </div>
 
+        <div class="shop-card" id="levelCard">
+          <div class="shop-card-head">
+            <span class="shop-icon">🏅</span>
+            <div>
+              <h3>账号等级 <span id="levelNow" class="lv-badge">Lv.1</span></h3>
+              <p class="shop-sub">升级能解锁更高级的商店<br />
+                <b class="perk">费用 = 你当前总资产的 90%</b>
+              </p>
+            </div>
+            <span class="shop-price" id="levelPrice">—</span>
+          </div>
+          <p id="levelHint" class="field-hint"></p>
+          <button id="levelUpBtn" class="btn btn-primary btn-block">升级</button>
+        </div>
+
         <div class="shop-card theme-card" data-theme-code="hermit">
           <div class="shop-card-head">
             <span class="shop-icon">🧙</span>
@@ -514,7 +529,48 @@
             </div>
           </div>
           <button class="btn btn-ghost btn-block theme-btn" data-theme-code="default">使用经典配色</button>
+        
         </div>
+
+        <!-- ===== 2 级商店（等级不足时整块隐藏） ===== -->
+        <div class="shop-grid hidden" data-tier="2">
+          <div class="shop-card" id="bgCard">
+            <div class="shop-card-head">
+              <span class="shop-icon">🖼️</span>
+              <div>
+                <h3>自定义背景</h3>
+                <p class="shop-sub">给整个游戏换一张底图<br />
+                  <b class="perk">一次买断，永久可用</b>
+                </p>
+              </div>
+              <span class="shop-price">$5,000,000</span>
+            </div>
+            <input id="bgFile" type="file" accept="image/*" class="bg-file" />
+            <button id="bgBuy" class="btn btn-primary btn-block">解锁</button>
+            <button id="bgUpload" class="btn btn-ghost btn-block hidden">上传新背景</button>
+            <p id="bgHint" class="field-hint"></p>
+          </div>
+
+          <div class="shop-card" id="renameCard">
+            <div class="shop-card-head">
+              <span class="shop-icon">✏️</span>
+              <div>
+                <h3>改名卡</h3>
+                <p class="shop-sub">改一次名字，2000 轮冷却<br />
+                  <b class="perk">买完立刻生效</b>
+                </p>
+              </div>
+              <span class="shop-price">$1,000,000</span>
+            </div>
+            <label class="field">
+              <span>新名字</span>
+              <input id="renameInput" maxlength="12" placeholder="2~12 个字" />
+            </label>
+            <button id="renameBuy" class="btn btn-primary btn-block">改名 · $1,000,000</button>
+            <p id="renameHint" class="field-hint"></p>
+          </div>
+        </div>
+</div>
       </div>
     </div>
 

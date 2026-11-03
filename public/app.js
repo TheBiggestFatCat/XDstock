@@ -204,6 +204,11 @@ async function refreshMarket() {
   state.me = d.me;
   syncThemeFromServer();
   renderTopbar();
+  if ($('#view-shop')?.classList.contains('active')) {
+    renderShopTiers();
+    renderLevelCard();
+    renderRenameHint();
+  }
   renderClosed();
   renderNews();
   renderStockList();
@@ -632,6 +637,165 @@ function renderSidePositions() {
   wrap.querySelectorAll('[data-pos]').forEach((el) => {
     el.addEventListener('click', () => selectStock(el.dataset.pos));
   });
+}
+
+
+// ---------------- 账号等级 / 分级商店 ----------------
+const LV_COLORS = ['#94a3b8', '#3b82f6', '#a855f7', '#f59e0b', '#ef4444'];
+
+/** 等级牌子（顶栏、排行榜、卡片共用） */
+function lvBadgeHtml(lv) {
+  const n = Math.max(1, Math.floor(Number(lv) || 1));
+  const c = LV_COLORS[Math.min(n - 1, LV_COLORS.length - 1)];
+  return `<span class="lv-badge" style="--lv:${c}">Lv.${n}</span>`;
+}
+
+/** 商店按等级显示：低等级看不到高等级商品 */
+function renderShopTiers() {
+  const lv = Math.max(1, Math.floor(Number(state.market?.me?.level) || 1));
+  document.querySelectorAll('[data-tier]').forEach((el) => {
+    const need = Number(el.dataset.tier) || 1;
+    el.classList.toggle('hidden', lv < need);
+  });
+  const badge = $('#lvBadge');
+  if (badge) {
+    const c = LV_COLORS[Math.min(lv - 1, LV_COLORS.length - 1)];
+    badge.textContent = `Lv.${lv}`;
+    badge.style.setProperty('--lv', c);
+  }
+}
+
+/** 升级卡片 */
+function renderLevelCard() {
+  const me = state.market?.me || {};
+  const cfg = state.market?.config || {};
+  const lv = Math.max(1, Math.floor(Number(me.level) || 1));
+  const base = Number(cfg.levelBaseAsset ?? 10000000);
+  const need = base * Math.pow(10, lv - 1);
+  const ratio = Number(cfg.levelUpRatio ?? 0.9);
+  const equity = Number(me.equity) || 0;
+  const cost = Math.floor(equity * ratio);
+
+  const now = $('#levelNow');
+  if (now) now.outerHTML = lvBadgeHtml(lv).replace('class="lv-badge"', 'id="levelNow" class="lv-badge"');
+  const priceEl = $('#levelPrice');
+  if (priceEl) priceEl.textContent = money0(cost);
+  const hint = $('#levelHint');
+  if (hint) {
+    hint.textContent = equity >= need
+      ? `达成条件 · 升级后变成 Lv.${lv + 1}，扣掉 ${money0(cost)} 现金`
+      : `还差 ${money0(need - equity)} 总资产才能升到 Lv.${lv + 1}`;
+  }
+  const btn = $('#levelUpBtn');
+  if (btn) {
+    const can = equity >= need && Number(me.cash) >= cost;
+    btn.disabled = !can;
+    btn.textContent = can ? `升级到 Lv.${lv + 1}` : '条件不足';
+  }
+}
+
+async function levelUp() {
+  try {
+    const r = await api('/api/shop/level-up', { method: 'POST' });
+    toast(`升级成功！现在是 Lv.${r.level}`, 'ok');
+    await refreshMarket();
+    renderShopTiers();
+    renderLevelCard();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
+/** 背景卡片 */
+function renderBgCard() {
+  const me = state.market?.me || {};
+  const unlocked = !!me.bgUnlocked;
+  $('#bgBuy')?.classList.toggle('hidden', unlocked);
+  $('#bgUpload')?.classList.toggle('hidden', !unlocked);
+  const hint = $('#bgHint');
+  if (hint) {
+    hint.textContent = unlocked
+      ? (me.background ? '当前已使用自定义背景，可以随时换一张' : '已解锁，选一张图片上传吧')
+      : '解锁后可以随时更换背景';
+  }
+  applyBackground(me.background);
+}
+
+function applyBackground(data) {
+  const bg = document.body;
+  if (data) {
+    bg.style.backgroundImage = `url(${data})`;
+    bg.style.backgroundSize = 'cover';
+    bg.style.backgroundPosition = 'center';
+    bg.style.backgroundAttachment = 'fixed';
+  } else {
+    bg.style.backgroundImage = '';
+  }
+}
+
+async function buyBg() {
+  try {
+    await api('/api/shop/bg', { method: 'POST' });
+    toast('自定义背景已解锁', 'ok');
+    await refreshMarket();
+    renderBgCard();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+/** 图片压缩后上传（避免存档过大） */
+function pickBgImage() {
+  const inp = $('#bgFile');
+  if (!inp) return;
+  inp.value = '';
+  inp.onchange = () => {
+    const f = inp.files && inp.files[0];
+    if (!f) return;
+    const img = new Image();
+    const url = URL.createObjectURL(f);
+    img.onload = async () => {
+      URL.revokeObjectURL(url);
+      const maxW = 1600;
+      const scale = Math.min(1, maxW / img.width);
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * scale);
+      cv.height = Math.round(img.height * scale);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      const data = cv.toDataURL('image/jpeg', 0.82);
+      try {
+        await api('/api/shop/bg/save', { method: 'POST', body: JSON.stringify({ data }) });
+        if (state.market?.me) state.market.me.background = data;
+        applyBackground(data);
+        toast('背景已更新', 'ok');
+        renderBgCard();
+      } catch (e) { toast(e.message, 'err'); }
+    };
+    img.onerror = () => toast('图片读取失败', 'err');
+    img.src = url;
+  };
+  inp.click();
+}
+
+/** 改名 */
+async function buyRename() {
+  const name = ($('#renameInput')?.value || '').trim();
+  if (name.length < 2) { toast('名字至少 2 个字', 'err'); return; }
+  try {
+    const r = await api('/api/shop/rename', { method: 'POST', body: JSON.stringify({ nickname: name }) });
+    toast(`改名成功：${r.nickname}`, 'ok');
+    await refreshMarket();
+    $('#renameInput').value = '';
+    renderRenameHint();
+  } catch (e) { toast(e.message, 'err'); }
+}
+
+function renderRenameHint() {
+  const me = state.market?.me || {};
+  const tick = state.market?.tick || 0;
+  const left = Math.max(0, (Number(me.renameReadyAt) || 0) - tick);
+  const hint = $('#renameHint');
+  if (hint) hint.textContent = left > 0 ? `冷却中，还要等 ${left} 轮` : '现在可以改名';
+  const btn = $('#renameBuy');
+  if (btn) btn.disabled = left > 0;
 }
 
 // ---------------- 商城 ----------------
@@ -2773,11 +2937,12 @@ async function loadRank(force = false) {
     state.rankSig = sig;
     wrap.innerHTML = `
       <table>
-        <thead><tr><th>#</th><th>玩家</th><th>总资产</th><th>现金</th><th>操作</th></tr></thead>
+        <thead><tr><th>#</th><th>玩家</th><th>等级</th><th>总资产</th><th>现金</th><th>操作</th></tr></thead>
         <tbody>
           ${d.rows.map((r, i) => {
             const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
             const mine = r.id === state.market?.me?.id ? 'rank-row-me' : '';
+            const lvCell = lvBadgeHtml(r.level || 1);
             const _unusedHold = r.positions.length
               ? r.positions.map((p) => `<span class="pill ${p.side}">${p.name} ${p.side === 'long' ? '多' : '空'} ×${p.qty} @${(p.leverage || 1).toFixed(0)}x</span>`).join(' ')
               : '<span class="stock-code">空仓</span>';
@@ -3427,6 +3592,10 @@ function bind() {
     $(sel)?.addEventListener('input', () => { state.tpslEdited = true; });
   });
   $('#reportBtn')?.addEventListener('click', toggleReportPanel);
+  $('#levelUpBtn')?.addEventListener('click', levelUp);
+  $('#bgBuy')?.addEventListener('click', buyBg);
+  $('#bgUpload')?.addEventListener('click', pickBgImage);
+  $('#renameBuy')?.addEventListener('click', buyRename);
   $('#orderBtn').addEventListener('click', placeLimit);
 
   $('#avatarBtn').addEventListener('click', () => $('#avatarInput').click());

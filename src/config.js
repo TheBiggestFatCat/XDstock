@@ -72,6 +72,11 @@ export const DEFAULT_CONFIG = {
   shopBodyguardPrice: 50000,   // 保镖售价
   shopBodyguardTicks: 720,     // 保护时长（720 轮 = 1 小时）
   shopThemePrice: 2000000,     // 主题配色售价
+  shopBgPrice: 5000000,        // 自定义背景（一次买断）
+  shopRenamePrice: 1000000,    // 改名卡
+  shopRenameCooldown: 2000,    // 改名冷却（轮）
+  levelBaseAsset: 10000000,    // 升到 lv2 需要的资产（之后每级 ×10）
+  levelUpRatio: 0.9,           // 升级花掉自身资产的百分比
   shopThemeCooldown: 100,      // 换主题后的冷却轮数
 
   // 交易专属通道：每次 +10 万单笔成交上限，价格指数增长
