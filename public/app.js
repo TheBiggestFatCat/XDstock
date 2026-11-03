@@ -629,6 +629,10 @@ const THEME_CHART = {
     text: '#55682f', grid: 'rgba(223,234,196,.8)', border: 'rgba(223,234,196,.95)',
     cross: 'rgba(101,163,13,.45)', crossLabel: '#65a30d'
   },
+  bear: {
+    text: '#3f6b4e', grid: 'rgba(213,233,219,.8)', border: 'rgba(213,233,219,.95)',
+    cross: 'rgba(21,128,61,.4)', crossLabel: '#15803d'
+  },
   hermit: {
     text: '#5f5582', grid: 'rgba(227,221,244,.8)', border: 'rgba(227,221,244,.95)',
     cross: 'rgba(124,107,176,.45)', crossLabel: '#7c6bb0'
@@ -837,6 +841,14 @@ function renderShop() {
   if (redEarnedEl) {
     redEarnedEl.textContent = money(redEarned);
     redEarnedEl.className = redEarned > 0 ? 'up' : '';
+  }
+
+  // ---- 绿熊的累计返现 ----
+  const bearEarned = Number(state.market?.me?.bearBonusEarned || 0);
+  const bearEarnedEl = $('#bearEarned');
+  if (bearEarnedEl) {
+    bearEarnedEl.textContent = money(bearEarned);
+    bearEarnedEl.className = bearEarned > 0 ? 'down' : '';
   }
 
   // ---- 主题 ----

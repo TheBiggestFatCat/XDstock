@@ -123,6 +123,21 @@ function indexImpactCost(db, notional) {
 
 
 /** 指数是否处于上升趋势：现价 > MA5 > MA10 > MA30 */
+export function indexDowntrend(db) {
+  const series = db.index?.series || [];
+  if (series.length < 31) return false;
+  const tail = series.slice(-31);
+  const last = tail[tail.length - 1];
+  const ma = (n) => {
+    const part = tail.slice(-n);
+    return part.reduce((a, b) => a + b, 0) / part.length;
+  };
+  const ma5 = ma(5);
+  const ma10 = ma(10);
+  const ma30 = ma(30);
+  return last < ma5 && ma5 < ma10 && ma10 < ma30;
+}
+
 export function indexUptrend(db) {
   const series = db.index?.series || [];
   if (series.length < 31) return false;
@@ -256,14 +271,10 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
 
   // 「红红的牛」技能：牛市里平仓，额外返 1% 成交额（每个持仓只算一次）
   let bonus = 0;
+  const noBonus = reason === 'liquidated' || reason === 'delisted';
+
   const redRate = Number(cfg.redBonusRate ?? 0.01);
-  if (
-    player.theme === 'red' &&
-    redRate > 0 &&
-    !pos.redBonusGiven &&
-    reason !== 'liquidated' &&
-    reason !== 'delisted'
-  ) {
+  if (player.theme === 'red' && redRate > 0 && !pos.redBonusGiven && !noBonus) {
     const minTicks = Math.max(0, Number(cfg.redBonusMinTicks ?? 12));
     const held = db.tick - Number(pos.openedTick ?? db.tick);
     if (held >= minTicks && indexUptrend(db)) {
@@ -272,6 +283,19 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
       pos.redBonusGiven = true;
       // 累计统计，主题卡片上要显示
       player.redBonusEarned = num(player.redBonusEarned) + bonus;
+    }
+  }
+
+  // 「绿绿的熊」技能：熊市里平仓，同样返 1% 成交额（和红牛正好反过来）
+  const bearRate = Number(cfg.bearBonusRate ?? 0.01);
+  if (player.theme === 'bear' && bearRate > 0 && !pos.bearBonusGiven && !noBonus) {
+    const minTicks = Math.max(0, Number(cfg.bearBonusMinTicks ?? 12));
+    const held = db.tick - Number(pos.openedTick ?? db.tick);
+    if (held >= minTicks && indexDowntrend(db)) {
+      bonus += notional * bearRate;
+      back += notional * bearRate;
+      pos.bearBonusGiven = true;
+      player.bearBonusEarned = num(player.bearBonusEarned) + notional * bearRate;
     }
   }
 

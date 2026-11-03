@@ -93,7 +93,9 @@ export const DEFAULT_CONFIG = {
 
   // 「红红的牛」技能：指数处于上升趋势时平仓，额外返 1% 成交额
   redBonusRate: 0.01,
-  redBonusMinTicks: 12,        // 持仓至少满这么多轮才算（防开平刷奖励）
+  bearBonusRate: 0.01,
+  redBonusMinTicks: 12,
+  bearBonusMinTicks: 12,        // 持仓至少满这么多轮才算（防开平刷奖励）
 
   // ---- 成交节奏 ----
   // 挂单可以挂任意数量，但每轮最多成交这么多「金额」

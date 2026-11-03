@@ -299,6 +299,8 @@ function marketPayload(db, me) {
       maxFillNotionalPerTick: db.config.maxFillNotionalPerTick ?? 300000,
       redBonusRate: db.config.redBonusRate ?? 0.01,
       redBonusMinTicks: db.config.redBonusMinTicks ?? 12,
+    bearBonusRate: db.config.bearBonusRate ?? 0.01,
+    bearBonusMinTicks: db.config.bearBonusMinTicks ?? 12,
       limitOrderEnabled: db.config.limitOrderEnabled ?? 1,
       orderTtlTicks: db.config.orderTtlTicks ?? 720,
       maxPendingOrders: db.config.maxPendingOrders ?? 5,
@@ -737,7 +739,7 @@ export async function handleApi(ctx) {
       'shopBodyguardPrice', 'shopBodyguardTicks', 'shopThemePrice',
       'shopChannelBasePrice', 'shopChannelRatio', 'shopChannelStep',
       'stPrice', 'stDelistTicks',
-      'marketTradesEnabled',
+      'marketTradesEnabled', 'redBonusRate', 'redBonusMinTicks', 'bearBonusRate', 'bearBonusMinTicks',
       'fxEnabled', 'fxCoef', 'fxLeverage', 'fxRefreshMs', 'fxTrack',
       'impactCostCoef', 'impactCostMax', 'playerImpactTail',
       'maxOrdersPerTick', 'maxFillNotionalPerTick',
@@ -1045,7 +1047,7 @@ export async function handleApi(ctx) {
   }
 
   // ---------- 主题配色 ----------
-  const THEMES = ['red', 'dark', 'tycoon', 'hermit'];
+  const THEMES = ['red', 'bear', 'dark', 'tycoon', 'hermit'];
 
   if (pathname === '/api/shop/theme' && method === 'POST') {
     const code = String(body.theme || '').trim();

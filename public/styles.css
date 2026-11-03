@@ -2391,3 +2391,49 @@ body[data-theme="hermit"] .brand-logo {
   background: transparent; color: var(--ink-3); font-size: 12px;
 }
 .ts-del:hover { background: var(--soft-3); color: var(--up); }
+
+/* ---- 绿绿的熊（深绿） ---- */
+body[data-theme="bear"] {
+  --soft: #f4faf5;
+  --soft-2: #e9f5ec;
+  --soft-3: #dcf0e2;
+  --soft-blue: #f2f9f6;
+  --soft-gray: #eff6f1;
+  --tabs-1: rgba(244, 250, 245, .98);
+  --tabs-2: rgba(244, 250, 245, .86);
+  --bg: #eaf6ec;
+  --bg-2: #dcefe1;
+  --card: #ffffff;
+  --surface: #f8fdf9;
+  --ink: #0d2a17;
+  --ink-2: #3f6b4e;
+  --ink-3: #7fa38c;
+  --line: #d5e9db;
+  --accent: #15803d;
+  --accent-2: #14532d;
+  --accent-soft: #def3e4;
+  --up: #e11d48;
+  --down: #15803d;
+  --shadow: 0 8px 28px rgba(20, 83, 45, .10);
+  --shadow-lg: 0 18px 48px rgba(20, 83, 45, .16);
+  --glass: rgba(244, 250, 245, .82);
+  --glass-line: rgba(213, 233, 219, .9);
+  --glass-hover: rgba(220, 240, 226, .8);
+  --blob-a: #a9dfba;
+  --blob-b: #cbeed5;
+  --blob-c: #8fd3a5;
+}
+body[data-theme="bear"] .tab.active {
+  background: linear-gradient(135deg, #22c55e, #14532d);
+  box-shadow: 0 8px 20px rgba(21, 128, 61, .3);
+}
+body[data-theme="bear"] .brand-logo {
+  background: linear-gradient(140deg, #4ade80, #15803d);
+  box-shadow: 0 10px 24px rgba(21, 128, 61, .35);
+}
+.tp-bear-1, .tp-bear-2, .tp-bear-3 {
+  border-radius: 8px; padding: 5px 10px; font-size: 11px; text-align: center;
+}
+.tp-bear-1 { background: #eaf6ec; color: #14532d; }
+.tp-bear-2 { background: #15803d; color: #fff; }
+.tp-bear-3 { background: #f8fdf9; color: #3f6b4e; border: 1px solid #d5e9db; }
