@@ -258,6 +258,7 @@ function tickPayload(forPlayerId) {
       stealQueued: p.stealQueued || null,
       stealEarned: p.stealEarned || 0,
       stealReadyAt: p.stealReadyAt || 0,
+      investigateReadyAt: Number(p.investigateReadyAt) || 0,
       guardUntil: p.guardUntil || 0,
       fakeNewsReadyAt: p.fakeNewsReadyAt || 0,
       channelLevel: p.channelLevel || 0,

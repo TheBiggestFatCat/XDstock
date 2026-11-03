@@ -895,6 +895,10 @@ const THEME_CHART = {
     text: '#5f5582', grid: 'rgba(227,221,244,.8)', border: 'rgba(227,221,244,.95)',
     cross: 'rgba(124,107,176,.45)', crossLabel: '#7c6bb0'
   },
+  probe: {
+    text: '#6b5644', grid: 'rgba(232,220,206,.8)', border: 'rgba(232,220,206,.95)',
+    cross: 'rgba(139,94,60,.42)', crossLabel: '#8b5e3c'
+  },
 };
 
 /** 把主题套到 body 上，并同步图表配色 */
@@ -3097,9 +3101,14 @@ async function loadRank(force = false) {
   try {
     const d = await api('/api/leaderboard');
     const wrap = $('#rankTable');
+    const meNow = state.market?.me || {};
+    const tickNow = state.market?.tick || 0;
+    const stealLeftNow = Math.max(0, (Number(meNow.stealReadyAt) || 0) - tickNow);
+    const spyLeftNow = Math.max(0, (Number(meNow.investigateReadyAt) || 0) - tickNow);
+    // 冷却秒数也算进签名，不然按钮上的倒计时不会刷新
     const sig = d.rows
       .map((r) => `${r.id}:${Math.round(r.equity)}:${r.cash.toFixed(0)}:${r.level || 1}:${r.nickname}`)
-      .join('|');
+      .join('|') + `|${meNow.theme || 'default'}|${stealLeftNow}|${spyLeftNow}|${meNow.stealQueued ? 1 : 0}`;
     if (!force && sig === state.rankSig && wrap.querySelector('table')) {
       const t = $('#rankTime');
       if (t) t.textContent = '刚刚同步';
@@ -3112,30 +3121,35 @@ async function loadRank(force = false) {
         <tbody>
           ${d.rows.map((r, i) => {
             const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
-            const mine = r.id === state.market?.me?.id ? 'rank-row-me' : '';
+            const mine = r.id === meNow.id ? 'rank-row-me' : '';
             const lvCell = lvBadgeHtml(r.level || 1);
-            const _unusedHold = r.positions.length
-              ? r.positions.map((p) => `<span class="pill ${p.side}">${p.name} ${p.side === 'long' ? '多' : '空'} ×${p.qty} @${(p.leverage || 1).toFixed(0)}x</span>`).join(' ')
-              : '<span class="stock-code">空仓</span>';
             const cfg = state.market?.config || {};
-            const meNow = state.market?.me || {};
             const queued = !!meNow.stealQueued;
             const isMe = r.id === meNow.id;
-            const tickNow = state.market?.tick || 0;
-            const cdLeft = Math.max(0, (Number(meNow.stealReadyAt) || 0) - tickNow);
+            const cdLeft = stealLeftNow;
+            const spyLeft = spyLeftNow;
+            const probeActive = meNow.theme === 'probe';
             let actionCell = '<span class="stock-code">—</span>';
             if (!isMe) {
+              const parts = [];
               if (cdLeft > 0) {
-                actionCell = `<span class="steal-cd" title="冷却结束后可以再偷">冷却 ${cdLeft}</span>`;
+                parts.push(`<span class="steal-cd" title="冷却结束后可以再偷">冷却 ${cdLeft}</span>`);
               } else if (queued) {
-                actionCell = '<span class="steal-done">已派出</span>';
+                parts.push('<span class="steal-done">已派出</span>');
               } else if (r.cash <= 0) {
-                actionCell = '<span class="stock-code">没现金</span>';
+                parts.push('<span class="stock-code">没现金</span>');
               } else {
                 const capByEquity = Math.floor(r.equity * Number(cfg.stealCapRatio ?? 0.001));
                 const maxTake = Math.max(0, Math.min(capByEquity, r.cash));
-                actionCell = `<button class="steal-btn" data-steal="${r.id}" data-name="${escapeHtml(r.nickname)}" title="总资产 0.1% = ${money(capByEquity)}，实际最多能拿走 ${money(maxTake)}">偷钱</button>`;
+                parts.push(`<button class="steal-btn" data-steal="${r.id}" data-name="${escapeHtml(r.nickname)}" title="总资产 0.1% = ${money(capByEquity)}，实际最多能拿走 ${money(maxTake)}">偷钱</button>`);
               }
+              // 暗中调查：装备了这个主题才会出现，就在「偷钱」旁边
+              if (probeActive) {
+                parts.push(spyLeft > 0
+                  ? `<span class="spy-cd" title="调查冷却中">调查 ${spyLeft}</span>`
+                  : `<button class="spy-btn" data-spy="${r.id}" data-name="${escapeHtml(r.nickname)}" title="随机查看他的一个持仓">调查</button>`);
+              }
+              actionCell = `<span class="rank-actions">${parts.join('')}</span>`;
             }
             return `<tr class="${mine}">
               <td><span class="rank-medal">${medal || i + 1}</span></td>
@@ -3150,6 +3164,9 @@ async function loadRank(force = false) {
       </table>`;
     wrap.querySelectorAll('[data-steal]').forEach((b) => {
       b.addEventListener('click', () => stealFrom(b.dataset.steal, b.dataset.name));
+    });
+    wrap.querySelectorAll('[data-spy]').forEach((b) => {
+      b.addEventListener('click', () => investigatePlayer(b.dataset.spy, b.dataset.name));
     });
   } catch (e) {
     toast(e.message, 'err');
@@ -3183,6 +3200,49 @@ async function stealFrom(targetId, name) {
   } catch (e) {
     toast(e.message, 'err');
   }
+}
+
+// ---------------- 暗中调查（Lv.2 主题技能） ----------------
+async function investigatePlayer(targetId, name) {
+  try {
+    const r = await api('/api/investigate', { method: 'POST', body: JSON.stringify({ targetId }) });
+    if (state.market?.me) state.market.me.investigateReadyAt = r.readyAt;
+    showSpyResult(r);
+    loadRank(true);
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
+function showSpyResult(r) {
+  const p = r.position;
+  const box = $('#spyBody');
+  if (!box) return;
+  box.innerHTML = `
+    <p class="spy-line">对象：<b>${escapeHtml(r.target.nickname)}</b></p>
+    <div class="spy-pos">
+      <div class="spy-code">${escapeHtml(p.name)} <span class="stock-code">${p.code}</span></div>
+      <div class="spy-row"><span>方向</span><b class="${p.side === 'long' ? 'up' : 'down'}">${p.side === 'long' ? '做多' : '做空'}</b></div>
+      <div class="spy-row"><span>数量</span><b>${p.qty} 股</b></div>
+      <div class="spy-row"><span>杠杆</span><b>${(p.leverage || 1).toFixed(0)}x</b></div>
+      <div class="spy-row"><span>成本价</span><b>${p.entry.toFixed(2)}</b></div>
+      <div class="spy-row"><span>现价</span><b>${p.price.toFixed(2)}</b></div>
+      <div class="spy-row"><span>浮动盈亏</span><b class="${cls(p.pnl)}">${money(p.pnl)}（${pct(p.pnlPct)}）</b></div>
+      <div class="spy-row"><span>已持有</span><b>${p.heldTicks} 轮</b></div>
+    </div>
+    <p class="spy-hint">冷却 ${r.cooldownTicks} 轮 · 第 ${r.readyAt} 轮后可以再查</p>`;
+  const m = $('#spyModal');
+  if (m) {
+    m.classList.remove('hidden');
+    m.style.display = 'flex';
+  }
+}
+
+function closeSpy() {
+  const m = $('#spyModal');
+  if (!m) return;
+  m.style.display = 'none';
+  m.classList.add('hidden');
 }
 
 // ---------------- 管理 ----------------
@@ -3418,6 +3478,13 @@ async function loadAdmin() {
         ['activityThreshold', '触发阈值(资产)'],
         ['activityReward', '平分总金额'],
         ['activityCooldownMinutes', '同一目标冷却(分钟)']
+      ]
+    },
+    {
+      title: '暗中调查',
+      desc: 'Lv.2 主题技能：查别人的持仓',
+      fields: [
+        ['investigateCooldownTicks', '调查冷却(轮)']
       ]
     },
     {
@@ -3804,6 +3871,13 @@ function bind() {
   $('#bgUpload')?.addEventListener('click', pickBgImage);
   $('#renameBuy')?.addEventListener('click', buyRename);
   $('#orderBtn').addEventListener('click', placeLimit);
+
+  // 暗中调查弹窗
+  $('#spyClose')?.addEventListener('click', closeSpy);
+  $('#spyOk')?.addEventListener('click', closeSpy);
+  $('#spyModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'spyModal') closeSpy();
+  });
 
   $('#avatarBtn').addEventListener('click', () => $('#avatarInput').click());
   $('#avatarInput').addEventListener('change', (e) => {

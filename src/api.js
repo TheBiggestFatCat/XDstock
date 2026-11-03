@@ -76,6 +76,7 @@ function publicPlayer(p, db) {
     stealQueued: p.stealQueued || null,
     stealEarned: p.stealEarned || 0,
     stealReadyAt: p.stealReadyAt || 0,
+    investigateReadyAt: Number(p.investigateReadyAt) || 0,
     guardUntil: p.guardUntil || 0,
     fakeNewsReadyAt: p.fakeNewsReadyAt || 0,
     channelLevel: p.channelLevel || 0,
@@ -105,6 +106,59 @@ function publicPlayer(p, db) {
     })),
     income: (p.workEarned || 0) + (p.stealEarned || 0),
     createdAt: p.createdAt
+  };
+}
+
+/**
+ * 暗中调查（Lv.2 主题「暗中调查」的技能）：随机看目标玩家的一个持仓
+ * 返回 { ok:true, ... } 或 { ok:false, status, error, leftTicks? }
+ */
+export function investigatePlayer(db, me, targetId) {
+  if (me.theme !== 'probe') {
+    return { ok: false, status: 403, error: '需要装备「暗中调查」主题才能调查' };
+  }
+  const cd = Math.max(0, Math.round(Number(db.config.investigateCooldownTicks ?? 30)));
+  const readyAt = Number(me.investigateReadyAt) || 0;
+  if (db.tick < readyAt) {
+    const left = readyAt - db.tick;
+    return { ok: false, status: 429, error: `调查冷却中，还要等 ${left} 轮`, leftTicks: left };
+  }
+  const victim = db.players[String(targetId || '')];
+  if (!victim) return { ok: false, status: 404, error: '没这个人' };
+  if (victim.id === me.id) return { ok: false, status: 400, error: '调查自己没意义' };
+
+  const list = Object.entries(victim.positions || {}).filter(([code]) => db.stocks[code]);
+  if (!list.length) {
+    return { ok: false, status: 400, error: `${victim.nickname} 现在空仓，什么也查不到` };
+  }
+
+  const [code, pos] = list[Math.floor(Math.random() * list.length)];
+  const st = db.stocks[code];
+  const price = Number(st.price) || 0;
+  const pnl = positionPnl(pos, price);
+  const margin = Number(pos.margin) || 0;
+
+  // 查到了才进冷却，空手而归不罚
+  me.investigateReadyAt = db.tick + cd;
+
+  return {
+    ok: true,
+    target: { id: victim.id, nickname: victim.nickname, avatar: victim.avatar || null },
+    position: {
+      code,
+      name: st.name || code,
+      side: pos.side === 'short' ? 'short' : 'long',
+      qty: Number(pos.qty) || 0,
+      entry: Number(pos.entry) || 0,
+      price,
+      leverage: Number(pos.leverage) || 1,
+      margin,
+      pnl,
+      pnlPct: margin > 0 ? (pnl / margin) * 100 : 0,
+      heldTicks: Math.max(0, db.tick - (Number(pos.openedTick) || db.tick))
+    },
+    cooldownTicks: cd,
+    readyAt: me.investigateReadyAt
   };
 }
 
@@ -328,6 +382,7 @@ function marketPayload(db, me) {
       shopChannelBasePrice: db.config.shopChannelBasePrice ?? 300000,
       shopChannelRatio: db.config.shopChannelRatio ?? 1.5,
       shopChannelStep: db.config.shopChannelStep ?? 100000,
+      investigateCooldownTicks: db.config.investigateCooldownTicks ?? 30,
       maxFillNotionalPerTick: db.config.maxFillNotionalPerTick ?? 300000,
       redBonusRate: db.config.redBonusRate ?? 0.01,
       redBonusMinTicks: db.config.redBonusMinTicks ?? 12,
@@ -756,6 +811,7 @@ export async function handleApi(ctx) {
       'impactCostCoef', 'impactCostMax', 'playerImpactTail',
       'maxOrdersPerTick', 'maxFillNotionalPerTick',
       'limitOrderEnabled', 'orderTtlTicks', 'maxPendingOrders',
+      'investigateCooldownTicks',
       'playerImpactEnabled', 'playerImpactRef', 'playerImpactStrength', 'impactRefFreeCap',
       'playerImpactDecay', 'playerImpactMax', 'playerImpactFlowMax',
       'brokerMidpoint', 'brokerMidFloor', 'brokerSensitivity', 'brokerCap', 'brokerAlpha',
@@ -866,6 +922,14 @@ export async function handleApi(ctx) {
     me.stealQueued = { targetId: victim.id, targetName: victim.nickname, at: db.tick };
     saveDb();
     return json(res, 200, { ok: true, target: victim.nickname });
+  }
+
+  // 暗中调查：Lv.2 主题技能，随机看目标的一个持仓（30 轮冷却）
+  if (pathname === '/api/investigate' && method === 'POST') {
+    const r = investigatePlayer(db, me, body.targetId);
+    if (!r.ok) return json(res, r.status || 400, r);
+    saveDb();
+    return json(res, 200, r);
   }
 
   if (pathname === '/api/stock-trades' && method === 'GET') {
@@ -1146,11 +1210,18 @@ export async function handleApi(ctx) {
   }
 
   // ---------- 主题配色 ----------
-  const THEMES = ['red', 'bear', 'dark', 'tycoon', 'hermit'];
+  // probe（暗中调查）是 Lv.2 主题，购买时要检查账号等级
+  const THEMES = ['red', 'bear', 'dark', 'tycoon', 'hermit', 'probe'];
+  const THEME_NEED_LEVEL = { probe: 2 };
 
   if (pathname === '/api/shop/theme' && method === 'POST') {
     const code = String(body.theme || '').trim();
     if (!THEMES.includes(code)) return json(res, 400, { error: '没有这个主题' });
+
+    const needLv = Math.max(1, Number(THEME_NEED_LEVEL[code]) || 1);
+    if ((Math.floor(Number(me.level)) || 1) < needLv) {
+      return json(res, 403, { error: `这个主题要 Lv.${needLv} 才能买` });
+    }
 
     const price = Number(db.config.shopThemePrice ?? 2000000);
     if (!Array.isArray(me.themes)) me.themes = [];

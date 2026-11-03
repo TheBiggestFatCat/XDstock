@@ -1023,6 +1023,128 @@ input.tpsl-input {
   white-space: nowrap;
 }
 
+/* ---------- 暗中调查 ---------- */
+/* 「偷钱」和「调查」并排 */
+.rank-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.spy-btn {
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 9px;
+  border: 1.5px solid #d3b79b;
+  background: #f7efe5;
+  color: #6b4a32;
+  cursor: pointer;
+  transition: all .16s;
+  white-space: nowrap;
+}
+.spy-btn:hover {
+  background: #efe1d0;
+  border-color: #b98a5f;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(107, 74, 50, .25);
+}
+.spy-btn:active { transform: scale(.95); }
+.spy-cd {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #7a5a3c;
+  background: #f5ebe0;
+  border: 1px solid #ddc6ae;
+  border-radius: 8px;
+  padding: 4px 9px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 调查结果弹窗 */
+.spy-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(40, 27, 16, .46);
+  backdrop-filter: blur(3px);
+}
+/* 注意：display:flex 会盖掉 hidden，必须用 !important 兜底（见 AGENTS 坑表） */
+.spy-modal.hidden { display: none !important; }
+.spy-card {
+  width: min(430px, 100%);
+  max-height: 86vh;
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow-lg);
+  padding: 16px 16px 14px;
+}
+.spy-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.spy-head h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 15px;
+  color: var(--ink);
+}
+.spy-icon { font-size: 18px; }
+.spy-close {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: var(--soft-2);
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.spy-body { font-size: 12.5px; color: var(--ink-2); }
+.spy-line { margin: 0 0 8px; }
+.spy-pos {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 10px 12px;
+}
+.spy-code {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.spy-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+}
+.spy-row b {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.spy-hint {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
 /* ---------- 下单卡片切换 ---------- */
 .trade-tabs {
   display: flex;
@@ -2353,6 +2475,52 @@ body[data-theme="hermit"] .brand-logo {
 .tp-hermit-1 { background: #f2effc; color: #5b4f8a; }
 .tp-hermit-2 { background: #7c6bb0; color: #fff; }
 .tp-hermit-3 { background: #fbfaff; color: #5f5582; border: 1px solid #e3ddf4; }
+
+/* ---- 暗中调查（棕色 / 深棕） ---- */
+body[data-theme="probe"] {
+  --soft: #faf6f1;
+  --soft-2: #f4ece2;
+  --soft-3: #ebdfd0;
+  --soft-blue: #f8f4ee;
+  --soft-gray: #f7f2ea;
+  --tabs-1: rgba(250, 246, 241, .98);
+  --tabs-2: rgba(250, 246, 241, .86);
+  --bg: #f2e9dd;
+  --bg-2: #e7d8c5;
+  --card: #ffffff;
+  --surface: #fdfaf6;
+  --ink: #2b1d12;
+  --ink-2: #5b4632;
+  --ink-3: #977f66;
+  --line: #e6d8c7;
+  --accent: #8b5e3c;
+  --accent-2: #4a3020;
+  --accent-soft: #f1e5d7;
+  --up: #e11d48;
+  --down: #15803d;
+  --shadow: 0 8px 28px rgba(74, 48, 32, .10);
+  --shadow-lg: 0 18px 48px rgba(74, 48, 32, .18);
+  --glass: rgba(250, 246, 241, .82);
+  --glass-line: rgba(230, 216, 199, .9);
+  --glass-hover: rgba(241, 229, 215, .8);
+  --blob-a: #d8bd9c;
+  --blob-b: #e9d9c4;
+  --blob-c: #c8a87f;
+}
+body[data-theme="probe"] .tab.active {
+  background: linear-gradient(135deg, #b08055, #5c3c26);
+  box-shadow: 0 8px 20px rgba(107, 74, 50, .3);
+}
+body[data-theme="probe"] .brand-logo {
+  background: linear-gradient(140deg, #d8b48c, #8b5e3c);
+  box-shadow: 0 10px 24px rgba(107, 74, 50, .35);
+}
+.tp-probe-1, .tp-probe-2, .tp-probe-3 {
+  border-radius: 8px; padding: 5px 10px; font-size: 11px; text-align: center;
+}
+.tp-probe-1 { background: #f2e9dd; color: #4a3020; }
+.tp-probe-2 { background: #6b4a32; color: #fff; }
+.tp-probe-3 { background: #fdfaf6; color: #5b4632; border: 1px solid #e6d8c7; }
 
 .news-age {
   margin-left: auto; flex: none;

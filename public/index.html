@@ -586,6 +586,26 @@
             <button id="renameBuy" class="btn btn-primary btn-block">改名 · $1,000,000</button>
             <p id="renameHint" class="field-hint"></p>
           </div>
+
+          <div class="shop-card theme-card" data-theme-code="probe">
+            <div class="shop-card-head">
+              <span class="shop-icon">🕵️</span>
+              <div>
+                <h3>暗中调查<span class="theme-owned hidden" data-owned="probe">已拥有</span></h3>
+                <p class="shop-sub">深棕大衣，雨夜里的私家侦探<br />
+                  <b class="perk">技能：在排行榜「偷钱」旁边多一个「调查」，随机看一名玩家的一个持仓（方向 / 数量 / 成本 / 浮盈），冷却 30 轮</b>
+                </p>
+              </div>
+              <span class="shop-price">$2,000,000</span>
+            </div>
+            <p class="theme-cd hidden" data-cd-for="probe"></p>
+            <div class="theme-preview">
+              <span class="tp-probe-1">背景</span>
+              <span class="tp-probe-2">强调色</span>
+              <span class="tp-probe-3">面板</span>
+            </div>
+            <button class="btn btn-primary btn-block theme-btn" data-theme-code="probe">购买</button>
+          </div>
         </div>
 
         <!-- ===== 3 级商店 ===== -->
@@ -708,6 +728,20 @@
 </section>
 
 <input id="avatarInput" type="file" accept="image/*" class="hidden" />
+
+<!-- 暗中调查：结果弹窗 -->
+<div id="spyModal" class="spy-modal hidden">
+  <div class="spy-card">
+    <div class="spy-head">
+      <span class="spy-icon">🕵️</span>
+      <h3>暗中调查</h3>
+      <button id="spyClose" class="spy-close" aria-label="关闭">×</button>
+    </div>
+    <div id="spyBody" class="spy-body"></div>
+    <button id="spyOk" class="btn btn-ghost btn-block">知道了</button>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <script src="/vendor/lightweight-charts.js"></script>

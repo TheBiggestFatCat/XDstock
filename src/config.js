@@ -85,6 +85,9 @@ export const DEFAULT_CONFIG = {
   shopChannelRatio: 1.5,         // 每买一次价格乘这个
   shopChannelStep: 100000,       // 每次提升的成交额
 
+  // 暗中调查（Lv.2 主题技能）：查别人一个随机持仓的冷却轮数
+  investigateCooldownTicks: 30,
+
   // 市场噪声成交：每轮编几笔「散户」成交，让成交列表看着像有人在交易
   marketTradesEnabled: 1,
   marketTradesRate: 3,        // 噪声成交数量倍率（3 = 三倍）
