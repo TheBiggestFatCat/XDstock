@@ -1175,14 +1175,16 @@ function applyDrawPrice(price, { commit = false } = {}) {
 /** 手动输入止盈止损 + 触发时平仓数量 */
 
 /** 把持仓上已有的止盈止损回填到输入框 */
-function fillTpSlInputs() {
+function fillTpSlInputs(force = false) {
   const pos = state.market?.me?.positions?.[state.code];
   const tpEl = $('#tpPrice');
   const slEl = $('#slPrice');
   const qEl = $('#tpslQty');
-  if (tpEl) tpEl.value = pos?.tp ? Number(pos.tp).toFixed(2) : '';
-  if (slEl) slEl.value = pos?.sl ? Number(pos.sl).toFixed(2) : '';
-  if (qEl) qEl.value = (pos?.tpQty || pos?.slQty) ? String(pos.tpQty || pos.slQty) : '';
+  // 玩家正在输入的框、或者已经改过的框，一律不覆盖，否则每轮 tick 都会把手打的内容刷掉
+  const canWrite = (el) => el && document.activeElement !== el && (force || !state.tpslEdited);
+  if (canWrite(tpEl)) tpEl.value = pos?.tp ? Number(pos.tp).toFixed(2) : '';
+  if (canWrite(slEl)) slEl.value = pos?.sl ? Number(pos.sl).toFixed(2) : '';
+  if (canWrite(qEl)) qEl.value = (pos?.tpQty || pos?.slQty) ? String(pos.tpQty || pos.slQty) : '';
 }
 
 async function applyTpSl() {
@@ -1218,6 +1220,8 @@ async function applyTpSl() {
       local.tpQty = r.position.tpQty ?? null;
       local.slQty = r.position.slQty ?? null;
     }
+    state.tpslEdited = false;
+    fillTpSlInputs(true);
     updatePriceLines();
     toast('止盈止损已更新' + (qtyV > 0 ? `（触发平 ${qtyV} 股）` : '（触发全平）'), 'ok');
   } catch (e) {
@@ -1578,7 +1582,13 @@ function renderMyOrders() {
 }
 
 function selectStock(code) {
+  const changed = state.code !== code;
   state.code = code;
+  // 换股票了：输入框内容重新按新持仓回填
+  if (changed) {
+    state.tpslEdited = false;
+    fillTpSlInputs(true);
+  }
   // 手机上点列表进入个股详情页
   if (isMobile()) {
     document.body.classList.add('m-detail');
@@ -3449,6 +3459,9 @@ function bind() {
   });
   // 手动输入止盈止损
   $('#tpslApply')?.addEventListener('click', applyTpSl);
+  ['#tpPrice', '#slPrice', '#tpslQty'].forEach((sel) => {
+    $(sel)?.addEventListener('input', () => { state.tpslEdited = true; });
+  });
   $('#drawLineBtn')?.addEventListener('click', () => toggleDrawMode());
   $('#reportBtn')?.addEventListener('click', toggleReportPanel);
   document.querySelectorAll('.dt-btn').forEach((b) => {
