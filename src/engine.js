@@ -3,6 +3,49 @@ import { genNextReport, fairFromReport, impactFactor, industryMidGrowth } from '
 import { genMarketTrades } from './marketTrades.js';
 import { now } from './store.js';
 
+/** 公告最多留几条（超出就丢最老的） */
+const NOTICE_MAX = 20;
+/** 哈基蜂业盘面异动公告的固定显示时长（轮）：30 轮 = 2.5 分钟 */
+export const HJF_NOTICE_TICKS = 30;
+
+/**
+ * 公告是否还该显示。
+ * 设了 expireTick 就按 tick 判（到期自动消失）；
+ * 老公告没有这个字段，退回原来的「24 小时内可见」时间口径。
+ */
+export function noticeAlive(db, n) {
+  if (!n) return false;
+  const expire = Number(n.expireTick) || 0;
+  if (expire > 0) return Number(db.tick) < expire;
+  return now() - (Number(n.at) || 0) < 24 * 3600 * 1000;
+}
+
+/**
+ * 发一条公告。
+ * @param {number} ticks 显示时长（轮）；0 = 永久，不会自动消失
+ * @param {object} extra 额外字段（比如 kind: 'up' | 'down'）
+ */
+export function pushNotice(db, text, ticks = 0, extra = {}) {
+  if (!Array.isArray(db.notices)) db.notices = [];
+  const tick = Number(db.tick) || 0;
+  const dur = Math.max(0, Math.floor(Number(ticks) || 0));
+  const notice = {
+    id: 'n_' + Math.random().toString(36).slice(2, 10),
+    text: String(text || '').slice(0, 300),
+    at: now(),
+    tick,
+    expireTick: dur > 0 ? tick + dur : 0,
+    ...extra
+  };
+  db.notices.push(notice);
+  // 顺手清掉已经过期的，列表不会越堆越多
+  db.notices = db.notices.filter((n) => noticeAlive(db, n));
+  if (db.notices.length > NOTICE_MAX) {
+    db.notices.splice(0, db.notices.length - NOTICE_MAX);
+  }
+  return notice;
+}
+
 let gaussSpare = null;
 export function gauss() {
   if (gaussSpare !== null) {
@@ -307,15 +350,13 @@ export function stepMarket(db) {
     st.price = Number((st.price * (1 + (up ? pct : -pct))).toFixed(4));
     st.lotteryAt = db.tick;
     st.lastLottery = { pct, up, tick: db.tick };
-    db.notices = db.notices || [];
-    db.notices.push({
-      id: 'n_' + Math.random().toString(36).slice(2, 10),
-      text: `${st.name}盘面异动，${up ? '直线拉升' : '闪崩下杀'} ${(pct * 100).toFixed(0)}%，全场哗然`,
-      at: Date.now(),
-      tick: db.tick,
-      kind: up ? 'up' : 'down'
-    });
-    if (db.notices.length > 20) db.notices.splice(0, db.notices.length - 20);
+    // 哈基蜂业的异动公告固定显示 30 轮，过期自动消失
+    pushNotice(
+      db,
+      `${st.name}盘面异动，${up ? '直线拉升' : '闪崩下杀'} ${(pct * 100).toFixed(0)}%，全场哗然`,
+      HJF_NOTICE_TICKS,
+      { kind: up ? 'up' : 'down' }
+    );
   }
 
   // 3.58 天气股对齐（共用天气、同时发报）

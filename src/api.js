@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
-import { candlesFromSeries, changesFor, timeOfTick } from './engine.js';
+import { candlesFromSeries, changesFor, timeOfTick, pushNotice, noticeAlive } from './engine.js';
 import { TIMEFRAMES } from './config.js';
 import { getBuild } from './build.js';
 import { playerEquity, positionPnl } from './trading.js';
@@ -250,10 +250,12 @@ function marketPayload(db, me) {
           : Math.max(0, (Number(e.duration) || 0) - (Number(e.remaining) || 0))
       })),
     notices: (db.notices || [])
-      .filter((n) => now() - n.at < 24 * 3600 * 1000)
+      .filter((n) => noticeAlive(db, n))
       .map((n) => ({
         id: n.id, text: n.text, at: n.at, kind: n.kind || null,
-        ageTicks: Number(n.tick) > 0 ? Math.max(0, db.tick - Number(n.tick)) : null
+        ageTicks: Number(n.tick) > 0 ? Math.max(0, db.tick - Number(n.tick)) : null,
+        // 有 tick 期限的公告，前端可以用来显示「还剩 N 轮」
+        leftTicks: Number(n.expireTick) > 0 ? Math.max(0, Number(n.expireTick) - db.tick) : null
       })),
     smallIndex: (() => {
       const si = db.smallIndex || {};
@@ -504,7 +506,9 @@ export async function handleApi(ctx) {
     return json(res, 200, {
       config: db.config,
       marketOpen: db.config.marketOpen !== false,
-      notices: db.notices || [],
+      tick: db.tick,
+      // 过期的公告不再下发，管理面板看到的和玩家看到的一致
+      notices: (db.notices || []).filter((n) => noticeAlive(db, n)),
       closedAt: db.closedAt || 0,
       stocks: Object.values(db.stocks).map((s) => ({
         code: s.code,
@@ -694,15 +698,12 @@ export async function handleApi(ctx) {
   if (pathname === '/api/admin/announce' && method === 'POST') {
     const text = String(body.text || '').trim().slice(0, 300);
     if (!text) return json(res, 400, { error: '公告内容为空' });
-    if (!Array.isArray(db.notices)) db.notices = [];
-    const notice = {
-      id: 'n_' + Math.random().toString(36).slice(2, 10),
-      text,
-      at: now(),
-      tick: db.tick
-    };
-    db.notices.push(notice);
-    if (db.notices.length > 20) db.notices.splice(0, db.notices.length - 20);
+    // 显示时长（轮）：0 / 负数 / 不传 = 永久，不自动消失
+    const rawTicks = Number(body.ticks);
+    const ticks = Number.isFinite(rawTicks) && rawTicks > 0
+      ? Math.min(43200, Math.round(rawTicks))
+      : 0;
+    const notice = pushNotice(db, text, ticks);
     saveDb();
     return json(res, 200, { ok: true, notice });
   }

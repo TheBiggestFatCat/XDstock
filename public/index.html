@@ -647,6 +647,11 @@
               <span>公告内容（不影响行情，和新闻显示在一起）</span>
               <textarea id="noticeText" rows="2" placeholder="例如：今晚 24 点停服维护，请提前平仓"></textarea>
             </label>
+            <label class="field">
+              <span>显示时长（轮，0 = 永久）</span>
+              <input id="noticeTicks" type="number" min="0" max="43200" step="10" value="720" />
+            </label>
+            <p class="panel-sub" style="margin:-4px 0 12px">720 轮 ≈ 1 小时（1 轮 = 5 秒）。到点自动从「市场快讯」里消失，填 0 表示一直挂着。</p>
             <button id="noticeBtn" class="btn btn-primary">发布公告</button>
             <div id="noticeList" class="notice-list"></div>
           </div>

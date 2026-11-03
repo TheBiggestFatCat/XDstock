@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getDb, saveDb, now, backupDb } from './src/store.js';
 import { getBuild } from './src/build.js';
-import { stepMarket, seedHistory, changesFor } from './src/engine.js';
+import { stepMarket, seedHistory, changesFor, noticeAlive } from './src/engine.js';
 import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, positionPnl, logTrade } from './src/trading.js';
 import { processOrders } from './src/orders.js';
@@ -332,10 +332,12 @@ function tickPayload(forPlayerId) {
       workBankTicks: d.config.workBankTicks ?? 1440
     },
     notices: (d.notices || [])
-      .filter((n) => now() - n.at < 24 * 3600 * 1000)
+      .filter((n) => noticeAlive(d, n))
       .map((n) => ({
         id: n.id, text: n.text, at: n.at,
-        ageTicks: Number(n.tick) > 0 ? Math.max(0, d.tick - Number(n.tick)) : null
+        kind: n.kind || null,
+        ageTicks: Number(n.tick) > 0 ? Math.max(0, d.tick - Number(n.tick)) : null,
+        leftTicks: Number(n.expireTick) > 0 ? Math.max(0, Number(n.expireTick) - d.tick) : null
       })),
     events: d.events
       .filter((e) => e.announced !== false)

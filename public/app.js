@@ -1870,12 +1870,20 @@ function renderNews() {
   // 公告永远排在最前面，且不参与行情
   const ageTip = (n) => (n === null || n === undefined)
     ? '' : `<span class="news-age">已过去 ${n} 轮</span>`;
+  // 有 tick 期限的公告显示「还剩 N 轮」，老公告还是显示已过去多少轮
+  const noticeTip = (n) => {
+    const left = Number(n.leftTicks);
+    if (n.leftTicks === null || n.leftTicks === undefined || !Number.isFinite(left)) {
+      return ageTip(n.ageTicks);
+    }
+    return `<span class="news-age">还剩 ${left} 轮</span>`;
+  };
 
   const noticeHtml = notices.slice(0, 3).map((n) => `
     <div class="news-item news-notice">
       <span class="news-badge badge-notice">公告</span>
       <span class="news-text">${escapeHtml(n.text)}</span>
-      ${ageTip(n.ageTicks)}
+      ${noticeTip(n)}
     </div>`).join('');
 
   const newsHtml = list.slice(0, Math.max(1, 4 - Math.min(3, notices.length))).map((ev) => `
@@ -3215,14 +3223,20 @@ async function loadAdmin() {
   $('#adminPanel').classList.remove('hidden');
 
   // 公告
+  const tickNow = Number(d.tick) || 0;
   const notices = (d.notices || []).slice().sort((a, b) => (b.at || 0) - (a.at || 0));
   const nl = $('#noticeList');
   if (nl) {
     nl.innerHTML = notices.length
-      ? notices.map((n) => `<div class="notice-row">
+      ? notices.map((n) => {
+        const expire = Number(n.expireTick) || 0;
+        const leftText = expire > 0 ? `剩 ${Math.max(0, expire - tickNow)} 轮` : '永久';
+        return `<div class="notice-row">
           <span class="notice-text">${escapeHtml(n.text)}</span>
+          <span class="notice-left">${leftText}</span>
           <button class="mini-btn danger" data-del-notice="${n.id}">删除</button>
-        </div>`).join('')
+        </div>`;
+      }).join('')
       : '<div class="notice-empty">还没有公告</div>';
     nl.querySelectorAll('[data-del-notice]').forEach((b) => {
       b.addEventListener('click', async () => {
@@ -3615,9 +3629,12 @@ async function saveConfig() {
 async function publishNotice() {
   const text = $('#noticeText').value.trim();
   if (!text) { toast('写点什么', 'err'); return; }
+  // 显示时长（轮）：0 = 永久
+  const rawTicks = Number($('#noticeTicks')?.value);
+  const ticks = Number.isFinite(rawTicks) && rawTicks > 0 ? Math.round(rawTicks) : 0;
   try {
-    await adminApi('/api/admin/announce', { text });
-    toast('公告已发布', 'ok');
+    await adminApi('/api/admin/announce', { text, ticks });
+    toast(ticks > 0 ? `公告已发布，${ticks} 轮后自动消失` : '公告已发布（永久）', 'ok');
     $('#noticeText').value = '';
     loadAdmin();
     refreshMarket();
