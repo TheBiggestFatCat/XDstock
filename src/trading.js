@@ -111,7 +111,7 @@ function distributeIndexFlow(db, signedNotional) {
 }
 
 /** 指数的冲击成本 = 各成分腿冲击成本之和（拆单后更便宜，符合直觉） */
-function indexImpactCost(db, notional) {
+export function indexImpactCost(db, notional) {
   let total = 0;
   for (const { st, weight } of indexWeights(db)) {
     if (weight <= 0) continue;
@@ -403,8 +403,10 @@ export function checkPositions(db) {
 
       const hit = hits[0].kind;
 
+      // 只有「已经挂出去的止盈止损单」才算处理过。
+      // 玩家手动挂的平仓单不算——否则一张永远不成交的远价单会把止损整个屏蔽掉。
       const already = (player.orders || []).some(
-        (o) => o.code === code && o.action === 'close'
+        (o) => o.code === code && o.action === 'close' && o.auto
       );
       if (already) continue;
 
@@ -432,8 +434,9 @@ export function checkPositions(db) {
         reserve: 0,
         createdAt: Date.now(),
         createdTick: db.tick,
-        expireTick: db.tick + ttl,
-        auto: hit            // tp / sl，撮合时每轮重新定价追价
+        // 风控单给双倍时长，而且 expireTick 必须和撮合里的实际口径一致
+        expireTick: db.tick + ttl * 2,
+        auto: hit            // tp / sl，撮合时按「必须成交」处理
       });
 
       // 止盈止损已转化成挂单，持仓上的条件清掉，避免重复触发

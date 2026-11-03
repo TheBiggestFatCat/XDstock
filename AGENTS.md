@@ -16,6 +16,7 @@ QQ 群风格的模拟炒股网页游戏。Node.js 零依赖、单文件 `data/db
 node server.js                       # 本地起服务
 node --check src/api.js              # 语法检查（改完必跑）
 node --check public/app.js
+node tests/order-audit.mjs           # 下单/撮合/押金回归（改下单必跑，55 条断言）
 ```
 
 ## 铁律
@@ -37,7 +38,7 @@ node --check public/app.js
 6. **发布流程**：改代码 → `node --check` → 本地跑通 → SFTP 上传 → 改线上数据（先备份）→
    `systemctl restart xdstock` → curl 验证 → `git commit` → `git push`（需代理 `127.0.0.1:4780`）。
 
-## 最容易踩的 6 个坑
+## 最容易踩的 8 个坑
 
 | 坑 | 症状 | 正解 |
 |---|---|---|
@@ -47,6 +48,8 @@ node --check public/app.js
 | 调仓判定用 `>=` | 每轮都调仓，指数锁死 | 用 `db.tick === idx.rebalanceTick` |
 | 兄弟股发报用旧 tick | 每 tick 都发报 | 赋 `db.tick` |
 | 参数误判作用域 | 以为是全服限制，其实是每人 | 读实现：`maxOrdersPerTick` 是**每人每轮操作次数** |
+| 止盈止损走限价撮合 | 跳空时止损永远不成交（挂单在上方等反弹） | auto 单必须强制成交，不能按限价判断 |
+| 押金漏算冲击成本 | 全仓挂单成交那一刻报「现金不足」并自动撤单 | `estimateReserve()` 里加 `impactCost` |
 
 ## 新增配置参数（四处都要改）
 
@@ -66,7 +69,7 @@ node --check public/app.js
 server.js          HTTP 入口、静态文件、SSE、tickPayload
 src/engine.js      stepMarket 主循环（顺序敏感：噪声→新闻→漂移→特质→回归→情绪→冲击）
 src/trading.js     开平仓、保证金、爆仓、资金冲击、止盈止损触发
-src/orders.js      限价单、撮合队列（每轮每票只成交 1 张）
+src/orders.js      限价单、撮合队列（风控单优先 → 价格优先；每玩家每票每方向限额）
 src/api.js         全部 REST + payload 组装 + 管理接口
 src/fundamentals.js 财报生成、估值 fair、预览
 src/store.js       db 加载/保存/migrate

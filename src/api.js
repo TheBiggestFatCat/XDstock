@@ -5,7 +5,7 @@ import { candlesFromSeries, changesFor, timeOfTick } from './engine.js';
 import { TIMEFRAMES } from './config.js';
 import { getBuild } from './build.js';
 import { playerEquity, positionPnl } from './trading.js';
-import { placeLimitOrder, cancelOrder } from './orders.js';
+import { placeLimitOrder, cancelOrder, orderLimitBlocked, consumeOrderSlot } from './orders.js';
 import { reportPayload } from './fundamentals.js';
 
 const TOKEN_TTL = 30 * 24 * 3600 * 1000;
@@ -106,16 +106,6 @@ function publicPlayer(p, db) {
     income: (p.workEarned || 0) + (p.stealEarned || 0),
     createdAt: p.createdAt
   };
-}
-
-function orderLimitBlocked(db, player) {
-  const max = Number(db.config.maxOrdersPerTick ?? 1);
-  if (!(max > 0)) return null;
-  const sameTick = player.orderTick === db.tick;
-  const used = sameTick ? (player.orderCount || 0) : 0;
-  if (used < max) return null;
-  const secs = Math.max(1, Math.round((db.config.tickMs || 5000) / 1000));
-  return `每轮只能操作 ${max} 次，等下一轮（约 ${secs} 秒）`;
 }
 
 function auth(ctx) {
@@ -825,13 +815,7 @@ export async function handleApi(ctx) {
   }
 
   // ---- 每轮下单次数限制（防止刷成交额把小灯证券抬上去）----
-  const orderBlocked = orderLimitBlocked(db, me);
-  const consumeSlot = () => {
-    const same = me.orderTick === db.tick;
-    const prev = same ? (me.orderCount || 0) : 0;
-    me.orderTick = db.tick;
-    me.orderCount = Math.min(prev + 1, 1e6);
-  };
+  // 逻辑在 src/orders.js，挂单成功后必须调用 consumeOrderSlot 才算用掉一次机会
 
   if (pathname === '/api/work/collect' && method === 'POST') {
     const bank = Math.max(0, Number(me.workBank) || 0);
@@ -960,8 +944,12 @@ export async function handleApi(ctx) {
   }
 
   if (pathname === '/api/order/limit' && method === 'POST') {
+    const blocked = orderLimitBlocked(db, me);
+    if (blocked) return json(res, 429, { error: blocked });
     const r = placeLimitOrder(db, me, body);
-    if (!r.ok) return json(res, 400, r);
+    if (!r.ok) return json(res, r.status || 400, r);
+    // 成功挂出去才算用掉一次操作机会
+    consumeOrderSlot(db, me);
     saveDb();
     return json(res, 200, { ok: true, order: r.order, player: publicPlayer(me, db) });
   }

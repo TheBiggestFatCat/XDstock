@@ -1544,7 +1544,7 @@ function setLimitPrice(price, { manual = true } = {}) {
 // 自动定价：在这个方向稍微让一点价，保证下一轮能成交
 //   买入/平空 → 限价挂在现价上方（愿意多付一点）
 //   卖出/平多 → 限价挂在现价下方（愿意少收一点）
-const AUTO_LIMIT_SLIP = getSlipPct() / 100;   // 玩家自填的让利
+// 让利比例必须每次现读，不能做成模块级常量——否则玩家改了要刷新才生效
 
 /** 当前真正要下的方向：开仓看 state.side，平仓看持仓方向 */
 function effectiveSide() {
@@ -1569,24 +1569,45 @@ function getSlipPct() {
   return 0.5;
 }
 
-function setSlipPct(v) {
-  const n = Math.max(0, Math.min(3, Number(v) || 0));
+/** 保存让利比例（0~3%），立刻重算挂单价
+ *  normalize=false 时不回写输入框，避免打字过程中被改写 */
+function setSlipPct(v, normalize = true) {
+  const raw = Number(v);
+  const n = Number.isFinite(raw) ? Math.max(0, Math.min(3, raw)) : getSlipPct();
   localStorage.setItem('xd_slip', String(n));
   const inp = $('#slipInput');
-  if (inp && Number(inp.value) !== n) inp.value = String(n);
+  if (normalize && inp && Number(inp.value) !== n) inp.value = String(n);
   syncLimitPrice(true);
+  return n;
 }
 
 function initSlipInput() {
   const el = $('#slipInput');
-  if (el) el.value = String(getSlipPct());
+  if (!el) return;
+  el.value = String(getSlipPct());
+  // 以前这里没有任何监听：输入框是死的，改了既不保存也不重算挂单价
+  el.addEventListener('input', () => {
+    if (el.value === '') return;
+    const n = Number(el.value);
+    if (!Number.isFinite(n)) return;
+    setSlipPct(n, false);
+  });
+  el.addEventListener('change', () => {
+    setSlipPct(el.value === '' ? getSlipPct() : el.value);
+  });
 }
 
 function autoLimitPrice() {
   const st = state.market?.stocks?.[state.code];
   if (!st || !(st.price > 0)) return 0;
-  const p = isBuySide() ? st.price * (1 + AUTO_LIMIT_SLIP) : st.price * (1 - AUTO_LIMIT_SLIP);
-  return Math.round(p * 100) / 100;
+  const price = Number(st.price);
+  const slip = getSlipPct() / 100;
+  const buy = isBuySide();
+  let p = Math.round((buy ? price * (1 + slip) : price * (1 - slip)) * 100) / 100;
+  // 低价股 0.01 就占 1%：四舍五入可能把让利抹平，这时至少让一跳
+  if (buy && p <= price) p = Math.round((price + 0.01) * 100) / 100;
+  if (!buy && p >= price) p = Math.max(0.01, Math.round((price - 0.01) * 100) / 100);
+  return p;
 }
 
 // 挂单价默认跟随现价（让利后），玩家手动改过就不再覆盖
@@ -2496,49 +2517,93 @@ function syncLeverageLimits() {
   updateCostPreview();
 }
 
-/** 当前现金 + 当前杠杆下能买的最大股数（已扣手续费和印花税） */
+/** 服务端冲击成本费率（口径必须和 src/trading.js#impactCostRate 一致） */
+function impactRate(notional) {
+  const cfg = state.market?.config || {};
+  const coef = Math.max(0, Number(cfg.impactCostCoef ?? 6));
+  if (coef <= 0) return 0;
+  const ref = Math.max(1, Number(cfg.playerImpactRef ?? 300000));
+  const strength = Math.max(0, Number(cfg.playerImpactStrength ?? 0.0009));
+  const maxRate = Math.max(0, Number(cfg.impactCostMax ?? 0.06));
+  return Math.min(maxRate, (Math.abs(notional) / ref) * strength * coef);
+}
+
+/** 冲击成本：指数按权重拆腿后各腿单独算，个股直接算 */
+function impactCost(notional) {
+  const st = state.market?.stocks?.[state.code] || {};
+  if (!st.isIndex) return notional * impactRate(notional);
+  const weights = state.market?.index?.weights || [];
+  let sum = 0;
+  for (const w of weights) {
+    const leg = notional * Number(w.weight || 0);
+    sum += leg * impactRate(leg);
+  }
+  return sum;
+}
+
+/** 下单成本拆解，口径与服务端冻结一致（含冲击成本） */
+function orderCostParts(qty, price) {
+  const cfg = state.market?.config || {};
+  const lev = Math.max(1, Number($('#orderLev')?.value) || 1);
+  const notional = Math.max(0, qty) * price;
+  const margin = notional / lev;
+  const fee = notional * (cfg.feeRate || 0);
+  const stamp = state.side === 'short' ? notional * (cfg.stampDuty || 0) : 0;
+  const impact = notional > 0 ? impactCost(notional) : 0;
+  return { notional, margin, fee, stamp, impact, total: margin + fee + stamp + impact };
+}
+
+/** 参考价：买单按限价（成交价最高就是限价），卖单取限价与现价里更高的那个 */
+function orderRefPrice() {
+  const st = state.market?.stocks?.[state.code];
+  const limitPx = Math.round(Number($('#orderLimit')?.value) * 100) / 100;
+  const rawPrice = limitPx > 0 ? limitPx : Number(st?.price) || 0;
+  return isBuySide() ? rawPrice : Math.max(rawPrice, Number(st?.price) || 0);
+}
+
+/** 当前现金 + 当前杠杆下能买的最大股数（含手续费、印花税、冲击成本） */
 function maxAffordableQty() {
   const st = state.market?.stocks?.[state.code];
   if (!st) return 0;
-  const lev = Number($('#orderLev').value) || 1;
-  const cash = state.market?.me?.cash || 0;
-  const cfg = state.market?.config || {};
-  // 每 1 股要花：保证金 + 手续费 + 卖出方向的印花税
-  // 价格口径必须和服务端冻结的一致：买单按限价（成交价最高就是限价），
-  // 否则「全仓」算出来的股数会比冻结金额多一点点，下单就报押金不足
-  const limitPx = Math.round(Number($('#orderLimit')?.value) * 100) / 100;
-  const rawPrice = limitPx > 0 ? limitPx : st.price;
-  const refPrice = isBuySide() ? rawPrice : Math.max(rawPrice, st.price);
-  const perShare = refPrice / lev
-    + refPrice * (cfg.feeRate || 0)
-    + refPrice * (state.side === 'short' ? (cfg.stampDuty || 0) : 0);
-  if (!(perShare > 0)) return 0;
-  // 再留 0.2% 余量，防浮点误差
-  return Math.max(0, Math.floor((cash * 0.998) / perShare));
+  const cash = Number(state.market?.me?.cash) || 0;
+  if (!(cash > 0)) return 0;
+  const refPrice = orderRefPrice();
+  if (!(refPrice > 0)) return 0;
+  const budget = cash * 0.998;          // 留 0.2% 余量，防浮点误差
+  const fits = (q) => orderCostParts(q, refPrice).total <= budget;
+  if (!fits(1)) return 0;
+  // 冲击成本随成交额非线性增长，用二分找真正买得起的股数
+  let hi = 1;
+  while (fits(hi) && hi < 1e9) hi *= 2;
+  if (hi === 1) return 1;
+  let lo = Math.floor(hi / 2);
+  hi = Math.floor(hi);
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi + 1) / 2);
+    if (fits(mid)) lo = mid; else hi = mid - 1;
+  }
+  return Math.max(0, lo);
 }
 
 function updateCostPreview() {
   const st = state.market?.stocks?.[state.code];
   if (!st) return;
   const qty = Number($('#orderQty').value) || 0;
-  const lev = Number($('#orderLev').value) || 1;
+  const lev = Math.max(1, Number($('#orderLev').value) || 1);
   const cfg = state.market.config || {};
-  // 和服务端冻结口径一致：买单按限价估（成交价最高就是限价），卖单取更高的那个
-  const limitPx = Math.round(Number($('#orderLimit')?.value) * 100) / 100;
-  const rawPrice = limitPx > 0 ? limitPx : st.price;
-  const refPrice = isBuySide() ? rawPrice : Math.max(rawPrice, st.price);
-  const notional = qty * refPrice;
-  const margin = notional / lev;
-  const fee = notional * (cfg.feeRate || 0);
-  const stamp = state.side === 'short' ? notional * (cfg.stampDuty || 0) : 0;
-  $('#costNotional').textContent = money(notional);
-  $('#costMargin').textContent = money(margin + fee + stamp);
-  $('#costFee').textContent = money(fee + stamp);
+  const refPrice = orderRefPrice();
+  const parts = orderCostParts(qty, refPrice);
+  $('#costNotional').textContent = money(parts.notional);
+  $('#costMargin').textContent = money(parts.total);
+  $('#costFee').textContent = money(parts.fee + parts.stamp);
+  const ci = $('#costImpact');
+  if (ci) ci.textContent = money(parts.impact);
   const levMin = Number(cfg.minLeverage ?? 1);
   const levMax = Number(cfg.maxLeverage ?? 20);
   $('#levLabel').textContent = `${lev}x（${levMin}~${levMax} 倍）`;
-  // 爆仓价：保证金亏光的位置 = 现价 ×(1 ∓ 1/杠杆)
-  const liqPx = state.side === 'long' ? st.price * (1 - 1 / lev) : st.price * (1 + 1 / lev);
+  // 爆仓价按「实际开仓价」算：挂了限价就按限价，而不是现价
+  const basePx = refPrice > 0 ? refPrice : st.price;
+  const liqPx = state.side === 'long' ? basePx * (1 - 1 / lev) : basePx * (1 + 1 / lev);
   if (liqPx <= 0.01) {
     $('#costLiq').textContent = '不会爆仓';
     $('#costLiq').className = 'flat';
