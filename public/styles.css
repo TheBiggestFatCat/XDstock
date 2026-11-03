@@ -279,7 +279,7 @@ textarea { resize: vertical; }
 .market-grid > .panel { min-height: 0; }
 
 /* ---------- 股票列表 ---------- */
-/* 行情卡片：标题固定，列表撑满剩余高度并在内部滚动 */
+/* 行情卡片：高度固定（和之前一致），股票多了在卡片内滚动 */
 .stock-list-panel {
   display: flex;
   flex-direction: column;
@@ -288,7 +288,7 @@ textarea { resize: vertical; }
   display: flex; flex-direction: column; gap: 6px;
   flex: 1 1 auto;
   min-height: 0;
-  max-height: none;
+  max-height: 620px;          /* 页面高度不再随股票数量增长 */
   /* 保留纵向滚动条，只禁掉横向 */
   overflow-y: auto;
   overflow-x: hidden;
