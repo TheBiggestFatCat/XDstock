@@ -5,7 +5,7 @@
 // 只 import src/*，不读写 data/db.json。
 
 import { createDb } from '../src/store.js';
-import { pushNotice, noticeAlive, HJF_NOTICE_TICKS } from '../src/engine.js';
+import { pushNotice, noticeAlive, LOTTERY_NOTICE_TICKS } from '../src/engine.js';
 
 let fails = 0;
 let passes = 0;
@@ -61,10 +61,10 @@ log('=== 3 老公告（没有 expireTick）走 24 小时口径 ===');
 log('');
 log('=== 4 哈基蜂业固定 30 轮 ===');
 {
-  check('常量是 30', HJF_NOTICE_TICKS === 30, `HJF_NOTICE_TICKS=${HJF_NOTICE_TICKS}`);
+  check('常量是 30', LOTTERY_NOTICE_TICKS === 30, `LOTTERY_NOTICE_TICKS=${LOTTERY_NOTICE_TICKS}`);
   db.tick = 2000;
   // 模拟 engine 里的调用方式
-  const n = pushNotice(db, '哈基蜂业盘面异动，直线拉升 25%，全场哗然', HJF_NOTICE_TICKS, { kind: 'up' });
+  const n = pushNotice(db, '哈基蜂业盘面异动，直线拉升 25%，全场哗然', LOTTERY_NOTICE_TICKS, { kind: 'up' });
   check('expireTick = 2030', n.expireTick === 2030, `expireTick=${n.expireTick}`);
   check('kind 字段保留', n.kind === 'up');
   db.tick = 2029;

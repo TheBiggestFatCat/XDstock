@@ -6,8 +6,8 @@ import { now } from './store.js';
 
 /** 公告最多留几条（超出就丢最老的） */
 const NOTICE_MAX = 20;
-/** 哈基蜂业盘面异动公告的固定显示时长（轮）：30 轮 = 2.5 分钟 */
-export const HJF_NOTICE_TICKS = 30;
+/** 抽奖型个股（原哈基蜂业那种）盘面异动公告的固定显示时长（轮）：30 轮 = 2.5 分钟 */
+export const LOTTERY_NOTICE_TICKS = 30;
 
 /**
  * 公告是否还该显示。
@@ -566,7 +566,7 @@ export function stepMarket(db) {
     pushNotice(
       db,
       `${st.name}盘面异动，${up ? '直线拉升' : '闪崩下杀'} ${(Math.abs(movePct) * 100).toFixed(0)}%，全场哗然`,
-      HJF_NOTICE_TICKS,
+      LOTTERY_NOTICE_TICKS,
       { kind: up ? 'up' : 'down' }
     );
   }

@@ -91,7 +91,15 @@ function makeDb() {
   db.notices = [];
   db.volumeAvg = 0;
   db.fx = { rate: 0, prevRate: 0, base: 0, at: 0 };
-  for (const c of ['PVZ', 'HJF']) {
+  // 天气股已经下市（戴夫种业 / 哈基蜂业），这里自己造两只同样体质的票
+  for (const [c, nm, sh] of [['PVZ', '测试种业', 4e8], ['HJF', '测试蜂业', 2.6e8]]) {
+    db.stocks[c] = {
+      code: c, name: nm, industry: '农业种业', shares: sh, freeFloat: 0.5,
+      price: 20, fair: 20, initialPrice: 20, status: 'normal',
+      series: [20], streak: 0, flow: 0, brokerMid: 100000,
+      trait: { id: 'weather', name: '靠天吃饭', desc: '测试用', volMult: 1, revMult: 1, swing: 0.5, anticipate: 0.001 },
+      sentiment: { v: 0, nextRoll: 1e12, nextApply: 1e12 }
+    };
     const st = db.stocks[c];
     st.price = 20;
     st.fair = 20;

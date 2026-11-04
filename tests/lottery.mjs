@@ -86,7 +86,21 @@ log('=== 4 实跑引擎：两轮彩票只可能是 15.625 / 10 / 6.4（旧版是
     }
   }
   db.events = [];
-  const hjf = db.stocks.HJF;
+  db.events = [];
+  // 抽奖型个股（原哈基蜂业 HJF 已经下市，这里自己造一只同样体质的票）
+  const hjf = {
+    code: 'LOT', name: '测试抽奖股', industry: '农业种业',
+    shares: 260000000, freeFloat: 0.5, price: 10, fair: 10, initialPrice: 10,
+    status: 'normal', series: [10], streak: 0, flow: 0, nextReportTick: 1e12,
+    brokerMid: 100000,
+    sentiment: { v: 0, nextRoll: 1e12, nextApply: 1e12 },
+    trait: {
+      id: 'weather', name: '靠天吃饭', desc: '测试用', volMult: 1, revMult: 1,
+      swing: 0.0001, anticipate: 0,
+      lottery: 1, lotteryChance: 0.0006, lotteryLo: 0.12, lotteryHi: 0.40
+    }
+  };
+  db.stocks.LOT = hjf;
   hjf.price = 10;
 
   const realLog = console.log;

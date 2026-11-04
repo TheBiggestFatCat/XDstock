@@ -139,52 +139,6 @@ export const STOCK_SEED = {
       track: 0.06       // 每轮向目标价靠拢的比例
     }
   },
-  PVZ: {
-    code: 'PVZ',
-    name: '戴夫种业',
-    icon: '/assets/stocks/PVZ.png',
-    industry: '农业种业',
-    shares: 400000000,   // 总股本 4 亿股
-    freeFloat: 0.55,
-    desc: '种子研发、作物种植、农业科技',
-    initialPrice: 60,
-    trait: {
-      id: 'weather',
-      name: '靠天吃饭',
-      desc: '看天吃饭：天气好就是大丰收，天气差就颗粒无收；所有人都提前知道天气',
-      volMult: 0.9,
-      revMult: 1.0,
-      // 天气对营收增速的影响幅度（±50%）
-      swing: 0.5,
-      // 市场提前靠拢预期的速度（每轮）。别开太大：
-      // 0.004 会让合理价在两次财报之间被拖低 27%，相当于天气影响算了两遍
-      anticipate: 0.001
-    }
-  },
-  HJF: {
-    code: 'HJF',
-    name: '哈基蜂业',
-    icon: '/assets/stocks/HJF.jpg',
-    industry: '农业种业',
-    shares: 260000000,   // 总股本 2.6 亿股
-    freeFloat: 0.5,
-    desc: '蜂蜜、蜂产品、授粉服务',
-    initialPrice: 45,
-    trait: {
-      id: 'weather',
-      name: '靠天吃饭',
-      desc: '和戴夫种业共用同一片天；蜜蜂脾气不定，偶尔突然疯涨暴跌',
-      volMult: 1.0,
-      revMult: 1.0,
-      swing: 0.5,
-      anticipate: 0.001,
-      // 抽奖：每轮概率触发一次暴涨或暴跌
-      lottery: 1,
-      lotteryChance: 0.0006,
-      lotteryLo: 0.12,
-      lotteryHi: 0.40
-    }
-  },
   XD: {
     code: 'XD',
     name: '小灯证券',
