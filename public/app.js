@@ -3217,7 +3217,8 @@ const REASON_LABEL = {
   liquidated: ['爆仓', 'pill short'],
   delisted: ['退市', 'pill short'],
   steal: ['偷来的', 'pill long'],
-  stolen: ['被偷了', 'pill short']
+  stolen: ['被偷了', 'pill short'],
+  dividend: ['派息', 'pill long']
 };
 
 function fmtTime(ts) {
@@ -3245,8 +3246,11 @@ async function loadTrades() {
           ${d.rows.map((t) => {
             const [label, klass] = REASON_LABEL[t.reason] || ['手动', 'pill gray'];
             const isSteal = t.action === 'steal' || t.action === 'stolen';
+            const isDividend = t.action === 'dividend';
             const isOpen = t.action === 'open';
-            const pnlCell = (t.action === 'close' || isSteal)
+            // 股息不是成交：数量照显示，价格/杠杆/手续费都留空
+            const noFill = isSteal || isDividend;
+            const pnlCell = (t.action === 'close' || isSteal || isDividend)
               ? `<span class="${cls(t.pnl)}">${money(t.pnl)}</span>`
               : '<span class="stock-code">—</span>';
             // 手续费 = 交易手续费 + 印花税（做空开仓、平多卖出时才有印花税）
@@ -3263,16 +3267,23 @@ async function loadTrades() {
             const amountCell = t.action === 'close'
               ? money(t.returned ?? 0)
               : money(t.margin ?? 0);
+            const actionText = isSteal
+              ? (t.action === 'steal' ? '偷钱' : '被偷')
+              : isDividend
+                ? (t.side === 'short' ? '补股息' : '股息')
+                : isOpen ? '开仓' : '平仓';
             return `<tr>
               <td class="stock-code">${fmtTime(t.at)}</td>
               <td>${escapeHtml(t.name || t.code)}${t.code ? ` <span class="stock-code">${t.code}</span>` : ''}</td>
-              <td>${isSteal ? (t.action === 'steal' ? '偷钱' : '被偷') : isOpen ? '开仓' : '平仓'}</td>
+              <td>${actionText}</td>
               <td>${isSteal ? '<span class="stock-code">—</span>' : `<span class="pill ${t.side}">${t.side === 'long' ? '多' : '空'}</span>`}</td>
               <td>${isSteal ? '—' : t.qty}</td>
-              <td>${isSteal ? '—' : Number(t.price).toFixed(2)}</td>
-              <td>${isSteal ? '—' : (t.leverage || 1).toFixed(1) + 'x'}</td>
-              <td>${isSteal ? money(t.amount || 0) : amountCell}${bonusFee > 0 ? `<i class="fee-bonus">🐂 +${money(bonusFee)}</i>` : ''}</td>
-              <td>${isSteal ? '<span class="stock-code">—</span>' : feeCell}</td>
+              <td>${noFill ? '<span class="stock-code">—</span>' : Number(t.price).toFixed(2)}</td>
+              <td>${noFill ? '<span class="stock-code">—</span>' : (t.leverage || 1).toFixed(1) + 'x'}</td>
+              <td>${isSteal ? money(t.amount || 0) : isDividend
+                ? `<span class="${cls(t.amount)}" title="${Number(t.price).toFixed(2)} 元/股">${money(t.amount || 0)}</span>`
+                : amountCell}${bonusFee > 0 ? `<i class="fee-bonus">🐂 +${money(bonusFee)}</i>` : ''}</td>
+              <td>${noFill ? '<span class="stock-code">—</span>' : feeCell}</td>
               <td>${pnlCell}</td>
               <td><span class="${klass}">${label}</span></td>
             </tr>`;

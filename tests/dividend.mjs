@@ -230,6 +230,49 @@ log('=== 7 倍率 0 = 停发（不改股价）===');
     `${before.toFixed(2)} → ${st.price.toFixed(2)}`);
 }
 
+// ---------------------------------------------------------------- 8
+log('');
+log('=== 8 派息要写进交易记录（不然玩家只能看到一条一闪而过的提示）===');
+{
+  const db = createDb();
+  db.tick = 1000;
+  db.config.reportIntervalTicks = 720;
+  db.config.dividendRate = 1;
+  db.config.dividendCap = 0.015;
+  const st = seedStock(db, 'XD', { eps: 2, price: 70, industry: '金融' });
+  st.nextReportTick = 1000;
+  db.players = {
+    long1: { id: 'long1', nickname: '多头一号', cash: 0,
+      positions: { XD: { code: 'XD', side: 'long', qty: 1000, entry: 70, margin: 7000, leverage: 10, openedTick: 100 } } },
+    short1: { id: 'short1', nickname: '空头一号', cash: 500,
+      positions: { XD: { code: 'XD', side: 'short', qty: 400, entry: 70, margin: 2800, leverage: 10, openedTick: 100 } } },
+    fresh1: { id: 'fresh1', nickname: '刚开仓', cash: 0,
+      positions: { XD: { code: 'XD', side: 'long', qty: 900, entry: 70, margin: 6300, leverage: 10, openedTick: 990 } } }
+  };
+  // dps 在这一轮里是用**新一期**财报算的，所以不能拿跑之前的 dps 比，
+  // 只能拿记录自己的「每股 × 股数」互相校验，再跟 dividendEvents 对一下
+  const dps = dividendPerShare(st, { rate: 1, cap: 0.015 });
+  void dps;
+  runOneTick(db);
+  const divs = (db.trades || []).filter((t) => t.action === 'dividend');
+  check('交易记录里有派息记录', divs.length === 2, `共 ${divs.length} 条`);
+  const longRow = divs.find((t) => t.playerId === 'long1');
+  const shortRow = divs.find((t) => t.playerId === 'short1');
+  check('多头那条金额 = 股数 × 每股', !!longRow && near(longRow.amount, longRow.qty * longRow.price, 1e-6),
+    longRow ? `${longRow.amount.toFixed(4)} vs ${(longRow.qty * longRow.price).toFixed(4)}` : '没有多头记录');
+  check('多头那条带股数和每股金额', !!longRow && longRow.qty === 1000 && Number(longRow.price) > 0);
+  const longEvent = (db.dividendEvents || []).find((e) => e.playerId === 'long1');
+  check('跟 dividendEvents 的金额一致', !!longRow && !!longEvent && near(longRow.amount, longEvent.amount, 1e-9),
+    longRow && longEvent ? `${longRow.amount.toFixed(4)} / ${longEvent.amount.toFixed(4)}` : '缺数据');
+  check('多头那条 reason = dividend', !!longRow && longRow.reason === 'dividend');
+  check('多头那条 pnl 为正', !!longRow && longRow.pnl > 0);
+  check('空头那条金额为负（补息）', !!shortRow && shortRow.amount < 0,
+    shortRow ? shortRow.amount.toFixed(2) : '没有空头记录');
+  check('空头那条方向记的是空', !!shortRow && shortRow.side === 'short');
+  check('本期才开的仓没有派息记录', !divs.some((t) => t.playerId === 'fresh1'));
+  check('记录里带了昵称和股票名', !!longRow && longRow.nickname === '多头一号' && !!longRow.name);
+}
+
 console.log(out.join('\n'));
 console.log(`\n---- ${passes} 通过 / ${fails} 失败 ----`);
 if (fails > 0) process.exit(1);

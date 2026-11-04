@@ -1,6 +1,7 @@
 import { INDEX_BASE, SMALL_INDEX_STOCK } from './stocks.js';
 import { genNextReport, fairFromReport, impactFactor, industryMidGrowth, rollWeather, dividendPerShare } from './fundamentals.js';
 import { genMarketTrades } from './marketTrades.js';
+import { logTrade } from './trading.js';
 import { now } from './store.js';
 
 /** 公告最多留几条（超出就丢最老的） */
@@ -955,6 +956,14 @@ export function runReports(db) {
           db.dividendEvents.push({
             playerId: p.id, code: st.code, name: st.name, dps, side: 'long', amount: amt, tick: db.tick
           });
+          // 同时写进交易记录（不然玩家只能看到一条一闪而过的提示）
+          logTrade(db, {
+            playerId: p.id, nickname: p.nickname, action: 'dividend',
+            code: st.code, name: st.name, side: 'long',
+            qty: Number(pos.qty), price: dps, leverage: 1,
+            amount: amt, fee: 0, stamp: 0, impact: 0, margin: 0,
+            pnl: amt, reason: 'dividend'
+          });
         } else {
           const pay = Math.min(amt, Math.max(0, Number(p.cash) || 0));
           if (pay > 0) {
@@ -962,6 +971,13 @@ export function runReports(db) {
             p.dividendEarned = (Number(p.dividendEarned) || 0) - pay;
             db.dividendEvents.push({
               playerId: p.id, code: st.code, name: st.name, dps, side: 'short', amount: -pay, tick: db.tick
+            });
+            logTrade(db, {
+              playerId: p.id, nickname: p.nickname, action: 'dividend',
+              code: st.code, name: st.name, side: 'short',
+              qty: Number(pos.qty), price: dps, leverage: 1,
+              amount: -pay, fee: 0, stamp: 0, impact: 0, margin: 0,
+              pnl: -pay, reason: 'dividend'
             });
           }
         }
