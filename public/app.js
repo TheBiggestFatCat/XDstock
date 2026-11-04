@@ -205,6 +205,7 @@ async function refreshMarket() {
   state.market = d;
   state.me = d.me;
   syncThemeFromServer();
+  syncBackgroundFromServer();
   renderTopbar();
   if ($('#view-shop')?.classList.contains('active')) {
     renderShopTiers();
@@ -979,7 +980,7 @@ function pickBgImage() {
       try {
         await api('/api/shop/bg/save', { method: 'POST', body: JSON.stringify({ data }) });
         if (state.market?.me) state.market.me.background = data;
-        applyBackground(data);
+        applyBackground(data, state.market?.me?.bgOpacity);
         toast('背景已更新', 'ok');
         renderBgCard();
       } catch (e) { toast(e.message, 'err'); }
@@ -1194,6 +1195,13 @@ function syncThemeFromServer() {
   const t = state.market?.me?.theme;
   if (!t) return;
   if (t !== state.theme) applyTheme(t);
+}
+
+/** 服务端记录的自定义背景（含透明度）优先：进游戏就生效，不用先去商城 */
+function syncBackgroundFromServer() {
+  const me = state.market?.me;
+  if (!me) return;
+  applyBackground(me.background, me.bgOpacity);
 }
 
 async function chooseTheme(code) {
