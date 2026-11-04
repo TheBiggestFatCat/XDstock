@@ -325,6 +325,22 @@ function fmtAgo(ticks, tickMs) {
   return Math.floor(m / 60) + ' 小时 ' + (m % 60) + ' 分';
 }
 
+/** 用当前股价实时算市值 / PE / PB / 溢价（接口快照只有首屏那一次） */
+function liveValuation(st) {
+  const r = (st && st.report) || {};
+  const price = Number(st && st.price) || 0;
+  const shares = Number(r.shares || (st && st.shares)) || 0;
+  const eps = Number(r.eps) || 0;
+  const bps = Number(r.bps) || 0;
+  const fair = Number(r.fair || (st && st.fair)) || 0;
+  return {
+    cap: price * shares,
+    pe: eps > 0 ? price / eps : 0,
+    pb: bps > 0 ? price / bps : 0,
+    premium: fair > 0 ? (price / fair - 1) * 100 : 0
+  };
+}
+
 function renderReport() {
   const st = state.market?.stocks?.[state.code];
   const panel = $('#reportPanel');
@@ -373,10 +389,6 @@ function renderReport() {
     btn.classList.remove('hidden');
     btn.textContent = '📊 财报';
   }
-  if (capEl) capEl.textContent = `市值 ${fmtMoney(st.marketCap || 0)}`;
-
-  // 金融大鳄：提前 20 轮看到金融板块财报
-  const pv = st.preview;
 
   const r = st.report || {};
   const left = (Number(st.nextReportTick) || 0) - tick;
@@ -394,9 +406,15 @@ function renderReport() {
     }
   }
 
+  // 市值 / PE / PB / 溢价都要用**当前股价**现算：
+  // 接口只在首屏 marketPayload 里给一次快照，每轮推送不带这些字段，
+  // 直接用 r.marketCap 会让市值、PE 在页面上冻结不动
+  const live = liveValuation(st);
+  if (capEl) capEl.textContent = `市值 ${fmtMoney(live.cap)}`;
+
   if (!panel || panel.classList.contains('hidden')) return;
 
-  const prem = Number(r.premium) || 0;
+  const prem = live.premium;
   const cls2 = prem > 0 ? 'up' : prem < 0 ? 'down' : 'flat';
   const word = prem > 8 ? '高估' : prem < -8 ? '低估' : '接近合理';
   const g = Number(r.growth) || 0;
@@ -405,15 +423,15 @@ function renderReport() {
     <div class="rp-head">
       <span class="rp-ind">${escapeHtml(r.industry || '')}</span>
       <span class="rp-period">第 ${r.period} 期</span>
-      <span class="rp-cap">总市值 <b>${fmtMoney(r.marketCap || 0)}</b></span>
+      <span class="rp-cap">总市值 <b>${fmtMoney(live.cap)}</b></span>
     </div>
     <div class="rp-grid">
       <div><span>营业收入</span><b>${fmtMoney(r.revenue || 0)}</b></div>
       <div><span>净利润</span><b>${fmtMoney(r.netProfit || 0)}</b></div>
       <div><span>同比增速</span><b class="${g >= 0 ? 'up' : 'down'}">${g >= 0 ? '+' : ''}${(g * 100).toFixed(1)}%</b></div>
       <div><span>每股收益</span><b>$${Number(r.eps || 0).toFixed(3)}</b></div>
-      <div><span>市盈率 PE</span><b>${Number(r.pe || 0).toFixed(1)}</b></div>
-      <div><span>市净率 PB</span><b>${Number(r.pb || 0).toFixed(2)}</b></div>
+      <div><span>市盈率 PE</span><b>${live.pe ? live.pe.toFixed(1) : '—'}</b></div>
+      <div><span>市净率 PB</span><b>${live.pb ? live.pb.toFixed(2) : '—'}</b></div>
       <div><span>ROE</span><b>${((r.roe || 0) * 100).toFixed(1)}%</b></div>
       <div><span>资产负债率</span><b>${((r.debt || 0) * 100).toFixed(0)}%</b></div>
     </div>
