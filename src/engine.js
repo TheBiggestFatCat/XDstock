@@ -829,9 +829,10 @@ export function runReports(db) {
     }
     st.nextReportTick = db.tick + interval;
 
-    // 派息：本期 EPS × 派息率，再按现价封顶。
+    // 派息：本期 EPS × 行业派息率（× 后台倍率），再按现价封顶。
     // 只发给「持满一期」的仓位（本期才开的仓不参与），免得财报前买入、发完就卖白拿；
     // 空头补息（现实规则），现金不够就扣到 0，不追缴。
+    // 派完立刻除权：股价下调相同的每股金额，多头拿现金、持仓市值同额下跌，总资产不变。
     const dps = dividendPerShare(st, { rate: cfg.dividendRate, cap: cfg.dividendCap });
     if (dps > 0) {
       const since = db.tick - interval;
@@ -860,11 +861,19 @@ export function runReports(db) {
           }
         }
       }
+      // 除权（除息）：所有股份一起下调，不管有没有人持有
+      const exPrice = Math.max(0.01, Number((Number(st.price) - dps).toFixed(4)));
+      st.price = exPrice;
       if (paidTotal > 0) {
         const shown = paidTotal >= 1e8 ? (paidTotal / 1e8).toFixed(2) + ' 亿'
           : paidTotal >= 1e4 ? (paidTotal / 1e4).toFixed(1) + ' 万'
             : Math.round(paidTotal) + ' 元';
-        pushNotice(db, `${st.name}派息 ${dps.toFixed(3)} 元/股，合计派发 ${shown}`, 30, { kind: 'up' });
+        pushNotice(
+          db,
+          `${st.name}派息 ${dps.toFixed(2)} 元/股，合计派发 ${shown}（除权价 ${exPrice.toFixed(2)}）`,
+          30,
+          { kind: 'up' }
+        );
       }
     }
 

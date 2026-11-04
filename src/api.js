@@ -7,7 +7,7 @@ import { getBuild } from './build.js';
 import { playerEquity, positionPnl } from './trading.js';
 import { levelUpPlayer, withdrawFromBank, bankStatus } from './bank.js';
 import { placeLimitOrder, cancelOrder, orderLimitBlocked, consumeOrderSlot, fillCapFor } from './orders.js';
-import { reportPayload, dividendPerShare } from './fundamentals.js';
+import { reportPayload, dividendPerShare, dividendPayout } from './fundamentals.js';
 
 const TOKEN_TTL = 30 * 24 * 3600 * 1000;
 
@@ -230,8 +230,9 @@ function marketPayload(db, me) {
       freeCap: report ? report.freeCap : 0,
       fair: Number(st.fair) || 0,
       nextReportTick: Number(st.nextReportTick) || 0,
-      // 本期每股股息（含现价封顶，所以每轮都会变）
+      // 本期每股股息（含现价封顶，所以每轮都会变）与实际派息率
       dps: dividendPerShare(st, { rate: db.config.dividendRate, cap: db.config.dividendCap }),
+      payout: dividendPayout(st, db.config.dividendRate),
       // 天气（st.weather / st.weatherTarget）只给引擎和财报用，不下发给前端
       report,
       // 金融大鳄：提前看到金融板块的下一期财报

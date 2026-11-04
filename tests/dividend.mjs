@@ -1,12 +1,15 @@
-// 分红派息
+// 分红派息（含除权）
 //
 //   node tests/dividend.mjs
 //
-// 规则：每期财报公布时，按 max(0,EPS) × 派息率 派息，再按现价 × 封顶比例截断；
-//      持满一期的多头收钱，空头补息（扣到 0 为止），本期才开的仓不参与。
+// 规则：
+//   1. 每期财报公布时派息，金额 = max(0,EPS) × 行业派息率 × 后台倍率，
+//      再按「现价 × 封顶」截断
+//   2. 持满一期的多头收钱，空头补息（扣到 0 为止），本期才开的仓不参与
+//   3. 派完立刻除权：股价下调相同的每股金额，多头总资产不变
 
 import { createDb } from '../src/store.js';
-import { dividendPerShare } from '../src/fundamentals.js';
+import { dividendPerShare, dividendPayout } from '../src/fundamentals.js';
 import { runReports } from '../src/engine.js';
 
 let fails = 0;
@@ -19,14 +22,15 @@ function check(label, cond, detail = '') {
 }
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) < eps;
 
-function stock(eps, price, dividendRate = 0.35) {
-  return { price, fundamentals: { eps, dividendRate } };
+function mk(industry, eps, price) {
+  return { industry, price, fundamentals: { eps } };
 }
 
-/** 造一只带财报的股票；EPS 近似等于传入值，营收多给一点保证不贴地板 */
-function seedStock(db, code, { eps = 2, price = 70, dividendRate = 0.35 } = {}) {
+/** 造一只带财报的股票；EPS 近似等于传入值 */
+function seedStock(db, code, { eps = 2, price = 70, industry = '' } = {}) {
   const st = db.stocks[code];
   const shares = Number(st.shares) || 1;
+  if (industry) st.industry = industry;
   st.price = price;
   st.fundamentals = {
     period: 10,
@@ -40,12 +44,20 @@ function seedStock(db, code, { eps = 2, price = 70, dividendRate = 0.35 } = {}) 
     margin: 0.15,
     growth: 0,
     debt: 0.4,
-    dividendRate,
+    dividendRate: 0.35,   // 老字段，已经不用了
     reportAt: Date.now(),
     bias: 0,
     expectedGrowth: 0
   };
   return st;
+}
+
+/** 复现引擎：除权（4 位小数）→ 财报惊喜冲击（|shock| ≤ 0.0005 时不生效）→ 再 4 位小数 */
+function priceAfterEx(before, dps, st) {
+  const ex = Number((before - dps).toFixed(4));
+  const shock = Math.max(-0.06, Math.min(0.06, Number(st.lastSurprise || 0) * 0.8));
+  if (!(Math.abs(shock) > 0.0005)) return { price: ex, shock: 0 };
+  return { price: Number((ex * (1 + shock)).toFixed(4)), shock };
 }
 
 function runOneTick(db) {
@@ -59,83 +71,131 @@ function runOneTick(db) {
 }
 
 // ---------------------------------------------------------------- 1
-log('=== 1 每股股息 = EPS × 派息率，再按现价封顶 ===');
+log('=== 1 派息率按行业（参考现实：成长股少分、金融多分） ===');
 {
-  const s = stock(2, 400);        // 400×0.5% = 2.0，封顶不生效
-  check('未触发封顶：2 × 35% = 0.70', near(dividendPerShare(s, { rate: 0.35, cap: 0.005 }), 0.7),
-    dividendPerShare(s, { rate: 0.35, cap: 0.005 }).toFixed(4));
-  const cheap = stock(2, 20);      // 自然值 0.7，但 20×0.5% = 0.1
-  check('低 PE 被封顶：0.10', near(dividendPerShare(cheap, { rate: 0.35, cap: 0.005 }), 0.1),
-    dividendPerShare(cheap, { rate: 0.35, cap: 0.005 }).toFixed(4));
-  check('封顶填 0 = 不封顶', near(dividendPerShare(cheap, { rate: 0.35, cap: 0 }), 0.7));
-  check('派息率填 0 = 停发', dividendPerShare(s, { rate: 0, cap: 0.005 }) === 0);
-  check('亏损不分红', dividendPerShare(stock(-1, 100), { rate: 0.35, cap: 0.005 }) === 0);
-  check('没传 rate 时用个股自己的 dividendRate',
-    near(dividendPerShare(stock(2, 400, 0.5), { cap: 0.005 }), 1.0), '2×0.5');
+  const cases = [
+    ['金融', 0.4], ['消费娱乐', 0.45], ['科技AI', 0.12], ['传媒', 0.3], ['外汇经营', 0.35]
+  ];
+  for (const [ind, want] of cases) {
+    const got = dividendPayout(mk(ind, 2, 100), 1);
+    check(`${ind} → ${(want * 100).toFixed(0)}%`, near(got, want), (got * 100).toFixed(0) + '%');
+  }
+  check('倍率 2 → 翻倍', near(dividendPayout(mk('金融', 2, 100), 2), 0.8));
+  check('倍率 0 → 停发', dividendPayout(mk('金融', 2, 100), 0) === 0);
+  check('倍率超范围被夹住（5 → 100% 上限）',
+    near(dividendPayout(mk('消费娱乐', 2, 100), 9), 1), String(dividendPayout(mk('消费娱乐', 2, 100), 9)));
 }
 
 // ---------------------------------------------------------------- 2
 log('');
-log('=== 2 股价每轮变动 → 封顶后的每股股息跟着变 ===');
+log('=== 2 每股股息 = EPS × 派息率，再按现价封顶 1.5% ===');
 {
-  const s = stock(2, 20);
-  const a = dividendPerShare(s, { rate: 0.35, cap: 0.005 });   // 20 → 0.10
-  s.price = 40;
-  const b = dividendPerShare(s, { rate: 0.35, cap: 0.005 });   // 40 → 0.20
-  s.price = 200;
-  const c = dividendPerShare(s, { rate: 0.35, cap: 0.005 });   // 200 → 0.70（自然值）
-  check('20 元 → 0.10', near(a, 0.1), a.toFixed(4));
-  check('40 元 → 0.20', near(b, 0.2), b.toFixed(4));
-  check('200 元 → 0.70（自然值）', near(c, 0.7), c.toFixed(4));
+  const s = mk('消费娱乐', 2, 400);     // 2×0.45 = 0.9，封顶 400×1.5% = 6 → 不封顶
+  check('消费 45%：2 → 0.90', near(dividendPerShare(s, { rate: 1, cap: 0.015 }), 0.9),
+    dividendPerShare(s, { rate: 1, cap: 0.015 }).toFixed(4));
+  const cheap = mk('金融', 2, 20);      // 2×0.4 = 0.8，封顶 20×1.5% = 0.3
+  check('低 PE 被封顶：0.30', near(dividendPerShare(cheap, { rate: 1, cap: 0.015 }), 0.3),
+    dividendPerShare(cheap, { rate: 1, cap: 0.015 }).toFixed(4));
+  check('封顶填 0 = 不封顶', near(dividendPerShare(cheap, { rate: 1, cap: 0 }), 0.8));
+  check('亏损不分红', dividendPerShare(mk('金融', -1, 100), { rate: 1, cap: 0.015 }) === 0);
+  check('倍率控制总量', near(dividendPerShare(s, { rate: 2, cap: 0.015 }), 1.8));
 }
 
 // ---------------------------------------------------------------- 3
 log('');
-log('=== 3 实跑引擎：多头收钱、空头补息、本期新开仓不参与 ===');
+log('=== 3 股价每轮变动 → 封顶后的每股股息跟着变 ===');
 {
-  const db = createDb();
-  db.tick = 1000;
-  db.config.reportIntervalTicks = 720;
-  db.config.dividendRate = 0.35;
-  db.config.dividendCap = 0.005;
-  const st = seedStock(db, 'XD', { eps: 2, price: 70 });   // 封顶 70×0.5% = 0.35
-  db.players = {
-    p1: { id: 'p1', nickname: '多头', cash: 0, positions: { XD: { code: 'XD', side: 'long', qty: 1000, entry: 70, margin: 7000, leverage: 10, openedTick: 100 } } },
-    p2: { id: 'p2', nickname: '空头', cash: 1000, positions: { XD: { code: 'XD', side: 'short', qty: 500, entry: 70, margin: 3500, leverage: 10, openedTick: 100 } } },
-    p3: { id: 'p3', nickname: '刚开', cash: 0, positions: { XD: { code: 'XD', side: 'long', qty: 800, entry: 70, margin: 5600, leverage: 10, openedTick: 900 } } },
-    p4: { id: 'p4', nickname: '没仓位', cash: 0, positions: {} }
-  };
-  st.nextReportTick = 1000;
-  runOneTick(db);
-
-  const ev = db.dividendEvents || [];
-  const dps = ev.length ? ev[0].dps : 0;
-  check('每股股息被现价封顶到 0.35 附近', Math.abs(dps - 0.35) < 0.02, `dps=${dps.toFixed(4)}`);
-  check('多头现金 = 1000 × dps', near(db.players.p1.cash, 1000 * dps), db.players.p1.cash.toFixed(2));
-  check('多头累计股息同步', near(db.players.p1.dividendEarned, 1000 * dps),
-    db.players.p1.dividendEarned.toFixed(2));
-  check('空头补息 = 500 × dps', near(db.players.p2.cash, 1000 - 500 * dps), db.players.p2.cash.toFixed(2));
-  check('空头累计为负', near(db.players.p2.dividendEarned, -500 * dps),
-    db.players.p2.dividendEarned.toFixed(2));
-  check('本期新开仓不参与', db.players.p3.cash === 0, String(db.players.p3.cash));
-  check('没仓位的人不受影响', db.players.p4.cash === 0);
-  check('事件只有 2 条（多头 + 空头）', ev.length === 2, ev.map((e) => e.playerId).join(','));
-  check('事件里带 playerId / dps / amount / side',
-    ev.every((e) => e.playerId && e.dps > 0 && Number.isFinite(e.amount) && e.side));
-  check('推了派息公告', (db.notices || []).some((n) => String(n.text || '').includes('派息')),
-    JSON.stringify((db.notices || []).slice(-1)));
+  const s = mk('金融', 2, 20);
+  const a = dividendPerShare(s, { rate: 1, cap: 0.015 });   // 20 → 0.30
+  s.price = 40;
+  const b = dividendPerShare(s, { rate: 1, cap: 0.015 });   // 40 → 0.60
+  s.price = 100;
+  const c = dividendPerShare(s, { rate: 1, cap: 0.015 });   // 100 → 0.80（自然值）
+  check('20 元 → 0.30', near(a, 0.3), a.toFixed(4));
+  check('40 元 → 0.60', near(b, 0.6), b.toFixed(4));
+  check('100 元 → 0.80（自然值）', near(c, 0.8), c.toFixed(4));
 }
 
 // ---------------------------------------------------------------- 4
 log('');
-log('=== 4 空头现金不够：扣到 0 为止，不追缴 ===');
+log('=== 4 实跑引擎：派息 + 除权，多头总资产不变 ===');
 {
   const db = createDb();
   db.tick = 1000;
   db.config.reportIntervalTicks = 720;
-  db.config.dividendRate = 0.35;
-  db.config.dividendCap = 0.005;
-  const st = seedStock(db, 'XD', { eps: 2, price: 70 });
+  db.config.dividendRate = 1;
+  db.config.dividendCap = 0.015;
+  const st = seedStock(db, 'XD', { eps: 2, price: 70, industry: '金融' });
+  st.nextReportTick = 1000;
+  db.players = {
+    p1: { id: 'p1', nickname: '多头', cash: 0, positions: { XD: { code: 'XD', side: 'long', qty: 1000, entry: 70, margin: 7000, leverage: 10, openedTick: 100 } } },
+    p2: { id: 'p2', nickname: '空头', cash: 1000, positions: { XD: { code: 'XD', side: 'short', qty: 500, entry: 70, margin: 3500, leverage: 10, openedTick: 100 } } },
+    p3: { id: 'p3', nickname: '刚开', cash: 0, positions: { XD: { code: 'XD', side: 'long', qty: 800, entry: 70, margin: 5600, leverage: 10, openedTick: 900 } } }
+  };
+  const priceBefore = st.price;
+  runOneTick(db);
+
+  const ev = db.dividendEvents || [];
+  const dps = ev.length ? ev[0].dps : 0;
+  const epsNow = st.fundamentals.eps;
+  const natural = Math.min(epsNow * 0.4, priceBefore * 0.015);
+  check('派息率按金融 40%（EPS × 40%，未撞封顶）', near(dps, natural, 1e-6),
+    `dps=${dps.toFixed(4)}，EPS=${epsNow.toFixed(3)}`);
+  check('多头现金 = 1000 × dps', near(db.players.p1.cash, 1000 * dps), db.players.p1.cash.toFixed(2));
+  check('空头补息 = 500 × dps', near(db.players.p2.cash, 1000 - 500 * dps), db.players.p2.cash.toFixed(2));
+  check('本期新开仓不参与', db.players.p3.cash === 0);
+  check('事件 2 条', ev.length === 2, ev.map((e) => e.playerId).join(','));
+
+  // 除权：价格先减 dps，再乘财报惊喜冲击（±6%）
+  const exp = priceAfterEx(priceBefore, dps, st);
+  const shock = exp.shock;
+  const expectPrice = exp.price;
+  check('除权：股价先减掉每股股息', near(st.price, expectPrice, 1e-4),
+    `${priceBefore.toFixed(2)} 除权 ${(priceBefore - dps).toFixed(2)} 后冲击 → ${st.price.toFixed(2)}（预期 ${expectPrice}）`);
+  // 多头：拿到现金 1000×dps，持仓市值因除权跌掉 1000×dps（剩下的差额来自 ±6% 财报冲击）
+  const exPrice = shock > 0 || shock < 0 ? st.price / (1 + shock) : st.price;
+  const posLoss = (priceBefore - exPrice) * 1000;
+  check('持仓市值跌幅 = 拿到的现金（总资产中性）', near(posLoss, 1000 * dps, 0.2),
+    `现金 +${(1000 * dps).toFixed(2)}，持仓 ${posLoss.toFixed(2)}`);
+  check('推了派息公告（含除权价）',
+    (db.notices || []).some((n) => String(n.text || '').includes('派息') && String(n.text || '').includes('除权价')),
+    JSON.stringify((db.notices || []).slice(-1)));
+}
+
+// ---------------------------------------------------------------- 5
+log('');
+log('=== 5 没人持有也要除权（现实中所有股份都除权）===');
+{
+  const db = createDb();
+  db.tick = 1000;
+  db.config.reportIntervalTicks = 720;
+  db.config.dividendRate = 1;
+  db.config.dividendCap = 0.015;
+  const st = seedStock(db, 'XD', { eps: 2, price: 70, industry: '金融' });
+  st.nextReportTick = 1000;
+  db.players = {};
+  const before = st.price;
+  runOneTick(db);
+  const dps = Math.min(st.fundamentals.eps * 0.4, before * 0.015);
+  const exp = priceAfterEx(before, dps, st);
+  const shock = exp.shock;
+  const expectPrice = exp.price;
+  check('价格照样下调', near(st.price, expectPrice, 1e-4),
+    `${before.toFixed(2)} 除权 ${(before - dps).toFixed(2)} 后 → ${st.price.toFixed(2)}（预期 ${expectPrice}）`);
+  check('没人持有就不发公告', !(db.notices || []).some((n) => String(n.text || '').includes('派息')));
+  check('没有派息事件', (db.dividendEvents || []).length === 0);
+}
+
+// ---------------------------------------------------------------- 6
+log('');
+log('=== 6 空头现金不够：扣到 0 为止，不追缴 ===');
+{
+  const db = createDb();
+  db.tick = 1000;
+  db.config.reportIntervalTicks = 720;
+  db.config.dividendRate = 1;
+  db.config.dividendCap = 0.015;
+  const st = seedStock(db, 'XD', { eps: 2, price: 70, industry: '金融' });
   st.nextReportTick = 1000;
   db.players = {
     p1: {
@@ -149,31 +209,25 @@ log('=== 4 空头现金不够：扣到 0 为止，不追缴 ===');
     db.players.p1.dividendEarned.toFixed(2));
 }
 
-// ---------------------------------------------------------------- 5
+// ---------------------------------------------------------------- 7
 log('');
-log('=== 5 关掉分红（派息率 0）就什么都不发 ===');
+log('=== 7 倍率 0 = 停发（不改股价）===');
 {
   const db = createDb();
   db.tick = 1000;
   db.config.reportIntervalTicks = 720;
   db.config.dividendRate = 0;
-  const st = seedStock(db, 'XD', { eps: 2, price: 70 });
+  const st = seedStock(db, 'XD', { eps: 2, price: 70, industry: '金融' });
   st.nextReportTick = 1000;
   db.players = {
     p1: { id: 'p1', nickname: '多头', cash: 0, positions: { XD: { code: 'XD', side: 'long', qty: 1000, entry: 70, margin: 7000, leverage: 10, openedTick: 100 } } }
   };
+  const before = st.price;
   runOneTick(db);
-  check('派息率 0 → 不发钱', db.players.p1.cash === 0 && db.dividendEvents.length === 0,
-    `cash=${db.players.p1.cash} events=${db.dividendEvents.length}`);
-}
-
-// ---------------------------------------------------------------- 6
-log('');
-log('=== 6 每股股息小于 0.001 也要照发（不截断） ===');
-{
-  const s = stock(0.01, 100);   // 0.01×0.35 = 0.0035
-  const v = dividendPerShare(s, { rate: 0.35, cap: 0.005 });
-  check('0.0035 保留精度', near(v, 0.0035, 1e-9), v.toFixed(6));
+  const shock = Math.max(-0.06, Math.min(0.06, Number(st.lastSurprise || 0) * 0.8));
+  check('不发钱', db.players.p1.cash === 0 && (db.dividendEvents || []).length === 0);
+  check('也不除权（只有财报冲击）', near(st.price, Number((before * (1 + shock)).toFixed(4)), 1e-4),
+    `${before.toFixed(2)} → ${st.price.toFixed(2)}`);
 }
 
 console.log(out.join('\n'));

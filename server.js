@@ -13,7 +13,7 @@ import { checkDelist } from './src/delist.js';
 import { fetchAudJpy } from './src/fx.js';
 import { handleApi } from './src/api.js';
 import { NEWS_POOL } from './src/news.js';
-import { dividendPerShare } from './src/fundamentals.js';
+import { dividendPerShare, dividendPayout } from './src/fundamentals.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -222,7 +222,8 @@ function tickPayload(forPlayerId) {
       changes: changesFor(st.series, TIMEFRAMES),
       status: st.status,
       // 本期每股股息（跟着现价每轮变，前端财报面板直接显示）
-      dps: st.isIndex ? 0 : dividendPerShare(st, { rate: d.config.dividendRate, cap: d.config.dividendCap })
+      dps: st.isIndex ? 0 : dividendPerShare(st, { rate: d.config.dividendRate, cap: d.config.dividendCap }),
+      payout: st.isIndex ? 0 : dividendPayout(st, d.config.dividendRate)
     };
     // 金融大鳄：每轮都下发预览状态，否则前端只在刷新时才知道
     if (isTycoon && !st.isIndex) {

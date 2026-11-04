@@ -9,13 +9,13 @@
  *     每 10 万元净买入带来的单轮涨幅 ∝ (参考流通市值 / 本公司流通市值)^0.6
  */
 
-/** 行业：合理市盈率 + 净利率区间 + 营收增速区间 */
+/** 行业：合理市盈率 + 净利率区间 + 营收增速区间 + 派息率（参考现实：成长股少分、金融多分） */
 export const INDUSTRY = {
-  消费: { pe: 18, margin: [0.06, 0.16], growth: [-0.08, 0.16] },
-  科技: { pe: 25, margin: [0.10, 0.28], growth: [-0.06, 0.42] },
-  金融: { pe: 10, margin: [0.18, 0.35], growth: [-0.06, 0.12] },
-  传媒: { pe: 15, margin: [0.08, 0.22], growth: [-0.10, 0.22] },
-  外汇: { pe: 12, margin: [0.12, 0.25], growth: [-0.05, 0.10] }
+  消费: { pe: 18, margin: [0.06, 0.16], growth: [-0.08, 0.16], payout: 0.45 },
+  科技: { pe: 25, margin: [0.10, 0.28], growth: [-0.06, 0.42], payout: 0.12 },
+  金融: { pe: 10, margin: [0.18, 0.35], growth: [-0.06, 0.12], payout: 0.40 },
+  传媒: { pe: 15, margin: [0.08, 0.22], growth: [-0.10, 0.22], payout: 0.30 },
+  外汇: { pe: 12, margin: [0.12, 0.25], growth: [-0.05, 0.10], payout: 0.35 }
 };
 
 /** 每家公司的天生体质：有的能长大，有的注定萎缩 */
@@ -296,23 +296,34 @@ export function nextBps(prevBps, eps, { pe = 18, growth = 0, retain = 0.225, shr
 }
 
 /**
- * 本期每股股息。
+ * 实际派息率（净利的多少比例分掉）。
  *
- * = max(0, EPS) × 派息率，再按「现价 × 封顶比例」截断。
- * 因为封顶跟着现价走，所以这个数每轮都在变（前端显示的就是它）。
- * 亏损公司（EPS ≤ 0）不分红；派息率或封顶填 0 都能关掉分红。
+ * 按行业取现实里的水平：金融 40%、消费 45%、传媒 30%、外汇 35%、科技 12%。
+ * `mult` 是后台的「派息倍率」（1 = 按行业标准，0 = 停发，2 = 全部翻倍）。
+ * 于是 股息率 = 派息率 ÷ 市盈率 —— 跟现实一致：越便宜的票股息率越高。
  */
-export function dividendPerShare(st, { rate, cap } = {}) {
+export function dividendPayout(st, mult = 1) {
+  const ind = industryOf(st);
+  const base = clamp(Number(ind.payout) || 0, 0, 1);
+  const k = clamp(Number(mult) || 0, 0, 5);
+  return clamp(base * k, 0, 1);
+}
+
+/**
+ * 本期每股股息 = max(0, EPS) × 派息率，再按「现价 × 封顶比例」截断。
+ * 因为封顶跟着现价走，所以这个数每轮都在变（前端显示的就是它）。
+ * 亏损公司（EPS ≤ 0）不分红；派息倍率填 0 就停发。
+ */
+export function dividendPerShare(st, { rate = 1, cap = 0.015 } = {}) {
   const f = (st && st.fundamentals) || {};
   const eps = Math.max(0, Number(f.eps) || 0);
-  const payout = clamp(Number(rate ?? f.dividendRate) || 0, 0, 1);
-  const price = Math.max(0, Number(st && st.price) || 0);
-  const capRate = clamp(Number(cap) || 0, 0, 0.5);
+  const payout = dividendPayout(st, rate);
   const raw = eps * payout;
   if (!(raw > 0)) return 0;
+  const price = Math.max(0, Number(st && st.price) || 0);
+  const capRate = clamp(Number(cap) || 0, 0, 0.5);
   if (!(capRate > 0)) return raw;          // 封顶填 0 = 不封顶
-  const top = price * capRate;
-  return Math.min(raw, top);
+  return Math.min(raw, price * capRate);
 }
 
 /** 资金影响能力：流通盘越小越容易被推动 */

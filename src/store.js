@@ -219,6 +219,15 @@ export function migrate(d) {
     if (cleaned) console.log(`  清理了个股情绪默认值 ${cleaned} 项，改为跟随全局参数`);
   }
 
+  // 分红语义升级：以前 dividendRate 是「绝对派息率」（0.35），现在改成「倍率」（1 = 行业标准）。
+  // 老存档里的 0.1~1 会被误当成倍率（等于几乎停发），这里一次性重置。
+  if (!merged.dividendMigrated) {
+    merged.config.dividendRate = 1;
+    if (!(Number(merged.config.dividendCap) > 0.005)) merged.config.dividendCap = 0.015;
+    merged.dividendMigrated = true;
+    console.log('  分红参数升级为「行业派息率 × 倍率」：倍率 1、封顶 1.5%/期');
+  }
+
   // 老存档补上股本与财报（按现价倒推，让 fair ≈ 现价）
   for (const st of Object.values(merged.stocks)) {
     if (st.isIndex) continue;

@@ -341,23 +341,26 @@ function liveValuation(st) {
   };
 }
 
-/** 财报面板里的派息行：每股派多少、股息率、有没有撞到封顶（每轮随股价变） */
+/** 财报面板里的派息行：每股派多少、派息率、股息率、除权价（每轮随股价变） */
 function renderDividendLine(st) {
   const cfg = state.market?.config || {};
   const dps = Math.max(0, Number(st && st.dps) || 0);
   const price = Number(st && st.price) || 0;
   const eps = Math.max(0, Number(st && st.report && st.report.eps) || 0);
   const cap = Number(cfg.dividendCap ?? 0);
-  const rate = Number(cfg.dividendRate ?? 0);
+  const mult = Number(cfg.dividendRate ?? 0);
+  const payout = Number(st && st.payout) || 0;
   if (!(dps > 0)) {
-    return `<span class="rp-div-none">${rate > 0 ? '本期不分红（EPS ≤ 0）' : '分红已关闭'}</span>`;
+    return `<span class="rp-div-none">${mult > 0 ? '本期不分红（EPS ≤ 0）' : '分红已关闭'}</span>`;
   }
   const yld = price > 0 ? (dps / price) * 100 : 0;
   // 和「没封顶时该发多少」比，避免用四舍五入后的现价判断出现误差
-  const natural = eps * rate;
+  const natural = eps * payout;
   const capped = cap > 0 && natural > 0 && dps < natural - 1e-9;
-  return `每 1 股派 <b>$${dps.toFixed(3)}</b>`
-    + `<span class="rp-div-sub">派息率 ${(rate * 100).toFixed(0)}% · 股息率 ${yld.toFixed(3)}%`
+  const exPrice = Math.max(0, price - dps);
+  return `每 1 股派 <b>$${dps.toFixed(2)}</b>`
+    + `<span class="rp-div-sub">派息率 ${(payout * 100).toFixed(0)}% · 股息率 ${yld.toFixed(2)}%`
+    + ` · 除权价 $${exPrice.toFixed(2)}`
     + (capped ? ` · 已到 ${(cap * 100).toFixed(2)}% 封顶` : '')
     + '</span>';
 }
@@ -2662,7 +2665,7 @@ function handleDividends(list) {
     const amt = Number(e.amount) || 0;
     const sign = amt >= 0 ? '+' : '−';
     const label = e.side === 'short' ? '补股息' : '股息';
-    toast(`💰 ${e.name} ${label} ${sign}${money(Math.abs(amt))}（${Number(e.dps).toFixed(3)} 元/股）`,
+    toast(`💰 ${e.name} ${label} ${sign}${money(Math.abs(amt))}（${Number(e.dps).toFixed(2)} 元/股）`,
       amt >= 0 ? 'ok' : 'err');
   }
 }
@@ -3761,9 +3764,9 @@ async function loadAdmin() {
     },
     {
       title: '分红派息',
-      desc: '每期财报按 EPS 派息，持满一期的多头收钱、空头补息',
+      desc: '每期财报按行业派息率 × EPS 派息，派完即除权（股价下调相同金额）',
       fields: [
-        ['dividendRate', '派息率(0=停发)'],
+        ['dividendRate', '派息倍率(1=标准 0=停发)'],
         ['dividendCap', '单期股息率封顶(0=不限)']
       ]
     },
