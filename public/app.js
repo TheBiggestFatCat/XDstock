@@ -869,27 +869,83 @@ async function levelUp() {
 function renderBgCard() {
   const me = state.market?.me || {};
   const unlocked = !!me.bgUnlocked;
+  const has = !!me.background;
   $('#bgBuy')?.classList.toggle('hidden', unlocked);
   $('#bgUpload')?.classList.toggle('hidden', !unlocked);
+  // 透明度和「取消背景」只有真的有一张图时才显示
+  $('#bgOpacityRow')?.classList.toggle('hidden', !(unlocked && has));
+  $('#bgClear')?.classList.toggle('hidden', !(unlocked && has));
+  const opacity = Math.max(0, Math.min(100, Number(me.bgOpacity ?? 100)));
+  const slider = $('#bgOpacity');
+  if (slider && has) {
+    slider.value = String(100 - opacity);           // 滑条是「透明度」：100 = 全透明
+    slider.dataset.saved = String(100 - opacity);
+  }
+  const valEl = $('#bgOpacityVal');
+  if (valEl) valEl.textContent = (100 - opacity) + '%';
   const hint = $('#bgHint');
   if (hint) {
     hint.textContent = unlocked
-      ? (me.background ? '当前已使用自定义背景，可以随时换一张' : '已解锁，选一张图片上传吧')
+      ? (has ? '当前已使用自定义背景，可以随时换一张或取消' : '已解锁，选一张图片上传吧')
       : '解锁后可以随时更换背景';
   }
-  applyBackground(me.background);
+  applyBackground(me.background, opacity);
 }
 
-function applyBackground(data) {
-  const bg = document.body;
+/** 把自定义背景画到 body::before 上（用 CSS 变量控制图片和透明度） */
+function applyBackground(data, opacityPct) {
+  const root = document.documentElement;
+  const op = Math.max(0, Math.min(100, Number(opacityPct ?? 100)));
   if (data) {
-    bg.style.backgroundImage = `url(${data})`;
-    bg.style.backgroundSize = 'cover';
-    bg.style.backgroundPosition = 'center';
-    bg.style.backgroundAttachment = 'fixed';
+    root.style.setProperty('--custom-bg', `url(${data})`);
+    root.style.setProperty('--custom-bg-opacity', String(op / 100));
   } else {
-    bg.style.backgroundImage = '';
+    root.style.setProperty('--custom-bg', 'none');
+    root.style.setProperty('--custom-bg-opacity', '0');
   }
+}
+
+/** 拖动透明度滑条：先本地实时预览，松手再存 */
+function onBgOpacityInput() {
+  const slider = $('#bgOpacity');
+  if (!slider) return;
+  const transparency = Math.max(0, Math.min(100, Number(slider.value) || 0));
+  const opacity = 100 - transparency;
+  const valEl = $('#bgOpacityVal');
+  if (valEl) valEl.textContent = transparency + '%';
+  const me = state.market?.me;
+  if (me) me.bgOpacity = opacity;
+  applyBackground(me?.background, opacity);
+}
+
+async function saveBgOpacity() {
+  const slider = $('#bgOpacity');
+  if (!slider) return;
+  const transparency = Math.max(0, Math.min(100, Number(slider.value) || 0));
+  if (slider.dataset.saved === String(transparency)) return;   // 没变就不发请求
+  slider.dataset.saved = String(transparency);
+  try {
+    const r = await api('/api/shop/bg/opacity', {
+      method: 'POST',
+      body: JSON.stringify({ opacity: 100 - transparency })
+    });
+    if (state.market?.me) state.market.me.bgOpacity = r.bgOpacity;
+    toast(`透明度已设为 ${transparency}%`, 'ok');
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
+/** 取消背景：清掉图片，保留「已解锁」 */
+async function clearBg() {
+  try {
+    await api('/api/shop/bg/clear', { method: 'POST' });
+    if (state.market?.me) state.market.me.background = '';
+    applyBackground('', 0);
+    toast('背景已取消，底图恢复成主题配色', 'ok');
+    await refreshMarket();
+    renderBgCard();
+  } catch (e) { toast(e.message, 'err'); }
 }
 
 async function buyBg() {
@@ -4361,6 +4417,9 @@ function bind() {
   $('#levelUpBtn')?.addEventListener('click', levelUp);
   $('#bgBuy')?.addEventListener('click', buyBg);
   $('#bgUpload')?.addEventListener('click', pickBgImage);
+  $('#bgClear')?.addEventListener('click', clearBg);
+  $('#bgOpacity')?.addEventListener('input', onBgOpacityInput);
+  $('#bgOpacity')?.addEventListener('change', saveBgOpacity);
   $('#renameBuy')?.addEventListener('click', buyRename);
   $('#renameInput')?.addEventListener('input', updateRenameCount);
   $('#renameInput')?.addEventListener('keydown', (e) => {

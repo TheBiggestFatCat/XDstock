@@ -93,6 +93,8 @@ function publicPlayer(p, db) {
     level: Math.max(1, Math.floor(Number(p.level) || 1)),
     bgUnlocked: !!p.bgUnlocked,
     background: p.background || '',
+    // 自定义背景的不透明度（0~100）；前端用 1 减它当作「透明度」
+    bgOpacity: Number.isFinite(Number(p.bgOpacity)) ? Math.max(0, Math.min(100, Number(p.bgOpacity))) : 100,
     renameReadyAt: Number(p.renameReadyAt) || 0,
     themeChangedTick: p.themeChangedTick || 0,
     themes: Array.isArray(p.themes) ? p.themes : [],
@@ -123,6 +125,16 @@ function publicPlayer(p, db) {
     income: (p.workEarned || 0) + (p.stealEarned || 0),
     createdAt: p.createdAt
   };
+}
+
+/**
+ * 自定义背景的不透明度：夹到 0~100 的整数。
+ * 非数字返回 null（调用方据此报错）。
+ */
+export function normalizeBgOpacity(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(100, Math.round(n)));
 }
 
 /**
@@ -1237,8 +1249,27 @@ export async function handleApi(ctx) {
       return json(res, 413, { error: '图片太大，换个小的（建议 500KB 以内）' });
     }
     me.background = data;
+    if (!Number.isFinite(Number(me.bgOpacity))) me.bgOpacity = 100;
     saveDb();
-    return json(res, 200, { ok: true, size: data.length });
+    return json(res, 200, { ok: true, size: data.length, bgOpacity: me.bgOpacity });
+  }
+
+  // 背景不透明度（0~100）
+  if (pathname === '/api/shop/bg/opacity' && method === 'POST') {
+    if (!me.bgUnlocked) return json(res, 400, { error: '还没解锁自定义背景' });
+    const op = normalizeBgOpacity(body.opacity);
+    if (op === null) return json(res, 400, { error: '不透明度要是数字' });
+    me.bgOpacity = op;
+    saveDb();
+    return json(res, 200, { ok: true, bgOpacity: me.bgOpacity });
+  }
+
+  // 取消背景（保留「已解锁」，随时可以再传一张）
+  if (pathname === '/api/shop/bg/clear' && method === 'POST') {
+    if (!me.bgUnlocked) return json(res, 400, { error: '还没解锁自定义背景' });
+    me.background = '';
+    saveDb();
+    return json(res, 200, { ok: true, cleared: true });
   }
 
   // ---------- 改名卡 ----------

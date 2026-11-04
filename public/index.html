@@ -587,6 +587,14 @@
             <input id="bgFile" type="file" accept="image/*" class="bg-file" />
             <button id="bgBuy" class="btn btn-primary btn-block">解锁</button>
             <button id="bgUpload" class="btn btn-ghost btn-block hidden">上传新背景</button>
+            <div id="bgOpacityRow" class="bg-opacity-row hidden">
+              <label class="bg-opacity-label" for="bgOpacity">
+                透明度 <b id="bgOpacityVal">0%</b>
+                <i class="bg-opacity-tip">0% = 原图，100% = 完全透明</i>
+              </label>
+              <input id="bgOpacity" type="range" min="0" max="100" step="1" value="0" />
+            </div>
+            <button id="bgClear" class="btn btn-ghost btn-block hidden">取消背景</button>
             <p id="bgHint" class="field-hint"></p>
           </div>
 
