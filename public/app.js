@@ -3952,10 +3952,11 @@ async function loadRank(force = false) {
               } else if (r.cash <= 0) {
                 parts.push('<span class="stock-code">没现金</span>');
               } else {
-                // 偷钱上限只看交易资产，银行里的钱偷不到
-                const capByEquity = Math.floor(r.equity * Number(cfg.stealCapRatio ?? 0.001));
-                const maxTake = Math.max(0, Math.min(capByEquity, r.cash));
-                parts.push(`<button class="steal-btn" data-steal="${r.id}" data-name="${escapeHtml(r.nickname)}" title="总资产 0.1% = ${money(capByEquity)}，实际最多能拿走 ${money(maxTake)}">偷钱</button>`);
+                // 偷钱上限挂「对方现金」（不是总资产）：持仓里的钱偷不到
+                const ratio = Number(cfg.stealCapRatio ?? 0.001);
+                const capByCash = Math.floor(r.cash * ratio);
+                const maxTake = Math.max(0, Math.min(capByCash, r.cash));
+                parts.push(`<button class="steal-btn" data-steal="${r.id}" data-name="${escapeHtml(r.nickname)}" title="现金 ${(ratio * 100).toFixed(1)}% = ${money(capByCash)}，实际最多能拿走 ${money(maxTake)}（持仓偷不到）">偷钱</button>`);
               }
               // 暗中调查：装备了这个主题才会出现，就在「偷钱」旁边
               if (probeActive) {
@@ -4349,7 +4350,7 @@ async function loadAdmin() {
       fields: [
         ['stealMin', '最少金额'],
         ['stealMax', '最多金额'],
-        ['stealCapRatio', '上限比例(占对方总资产)'],
+        ['stealCapRatio', '上限比例(占对方现金)'],
         ['stealCooldownTicks', '冷却(轮)']
       ]
     },

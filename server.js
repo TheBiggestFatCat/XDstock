@@ -16,6 +16,7 @@ import { handleApi } from './src/api.js';
 import { NEWS_POOL } from './src/news.js';
 import { dividendPerShare, dividendPayout } from './src/fundamentals.js';
 import { pushNotify, notifyList, unreadCount } from './src/notify.js';
+import { stealAmount } from './src/steal.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -562,18 +563,14 @@ function loop() {
       continue;
     }
 
-    // 边界二：上限按「总资产」算，但总资产可能是负的（浮亏爆表），先夹到 0
-    const equity = Math.max(0, playerEquity(d, victim));
-    const cap = equity * capRatio;
-
-    // 边界三：随机区间可能小于 0（配置写反），兜一下
-    const lo = Math.max(0, Math.min(stealMin, stealMax));
-    const hi = Math.max(lo, stealMax);
-    const want = lo + Math.random() * (hi - lo);
-
-    // 边界四：取三者最小，再保证不超过对方现金、不出现负数
-    let amount = Math.floor(Math.min(want, cap, victimCash));
-    if (!Number.isFinite(amount) || amount < 0) amount = 0;
+    // 上限按「对方现金」算（不是总资产）：持仓里的钱偷不到，
+    // 所以百分比挂在现金上——对方现金越多，能摸走的越多
+    let amount = stealAmount({
+      victimCash,
+      capRatio,
+      stealMin,
+      stealMax
+    });
 
     // 边界五：兜底 1 块钱以下的变动没意义，直接算空手
     if (amount < 1 || victimCash <= 0) {
