@@ -58,6 +58,18 @@ export function shopGate(me, key) {
   };
 }
 
+/**
+ * 保镖订单：把「买几份」折算成总价和总时长。
+ * 商城有「购买」和「一次买十份」两个按钮，但服务端只认 qty ——
+ * 这样两个按钮的算法不会跑偏，也挡住前端乱传份数。
+ */
+export function bodyguardOrder(cfg, qty) {
+  const unitPrice = Math.max(1, Number(cfg?.shopBodyguardPrice ?? 50000));
+  const unitTicks = Math.max(1, Math.round(Number(cfg?.shopBodyguardTicks ?? 720)));
+  const n = Math.max(1, Math.min(10, Math.round(Number(qty) || 1)));
+  return { qty: n, unitPrice, total: unitPrice * n, unitTicks, addTicks: unitTicks * n };
+}
+
 // 登录失败计数：同一 IP + 昵称 连错 5 次，锁 60 秒
 const loginFailures = new Map();
 const LOGIN_MAX_FAIL = 5;
@@ -1503,25 +1515,29 @@ export async function handleApi(ctx) {
   if (pathname === '/api/shop/bodyguard' && method === 'POST') {
     const gate = shopGate(me, 'bodyguard');
     if (gate) return json(res, 403, gate);
-    const price = Number(db.config.shopBodyguardPrice ?? 50000);
-    const ticks = Math.max(1, Math.round(Number(db.config.shopBodyguardTicks ?? 720)));
+    // qty 缺省 1；前端「一次买十份」传 10，价格和时长按份数等比放大（不打折）
+    const { qty, unitPrice, total, addTicks } = bodyguardOrder(db.config, body.qty);
 
-    if (me.cash < price) {
+    if (me.cash < total) {
       return json(res, 400, {
-        error: `现金不足，售价 $${price.toLocaleString()}，你只有 $${me.cash.toFixed(2)}`
+        error: qty > 1
+          ? `现金不足，买 ${qty} 份要 $${total.toLocaleString()}，你只有 $${me.cash.toFixed(2)}`
+          : `现金不足，售价 $${total.toLocaleString()}，你只有 $${me.cash.toFixed(2)}`
       });
     }
 
-    me.cash -= price;
-    me.shopSpent = (me.shopSpent || 0) + price;
+    me.cash -= total;
+    me.shopSpent = (me.shopSpent || 0) + total;
     // 还在保护期内再买一次就叠加时长
     const base = Math.max(Number(me.guardUntil || 0), db.tick);
-    me.guardUntil = base + ticks;
+    me.guardUntil = base + addTicks;
     saveDb();
 
     return json(res, 200, {
       ok: true,
-      price,
+      qty,
+      unitPrice,
+      price: total,
       guardUntil: me.guardUntil,
       leftTicks: me.guardUntil - db.tick,
       cash: me.cash

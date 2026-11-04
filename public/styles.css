@@ -1693,6 +1693,11 @@ input.tpsl-input {
   margin-top: 8px;
 }
 .btn-ghost:hover { background: var(--hl-4); border-color: var(--bd-accent); }
+.btn-ghost:disabled {
+  opacity: .55; cursor: not-allowed;
+  color: var(--ink-3); border-style: dashed;
+  background: var(--soft-1);
+}
 
 .my-orders { margin-top: 14px; }
 .my-orders-head {

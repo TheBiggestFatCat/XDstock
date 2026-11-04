@@ -1388,6 +1388,22 @@ function renderShop() {
       : (guardLeft > 0 ? '再续一小时' : '购买保镖');
   }
 
+  // 一次买十份：总价 = 单价 × 10，保护时长也 × 10（不打折）
+  const bg10 = $('#bodyguardBuy10');
+  if (bg10) {
+    const bulk = bgPrice * 10;
+    const poor10 = cash < bulk;
+    bg10.disabled = poor10;
+    bg10.textContent = poor10
+      ? `买十份还差 ${money0(bulk - cash)}`
+      : `一次买十份 · ${money0(bulk)}`;
+  }
+  const bg10Hint = $('#bodyguardBulkHint');
+  if (bg10Hint) {
+    const hours = ((bgTicks * 10 * (state.market?.config?.tickMs || 5000)) / 3600000).toFixed(1);
+    bg10Hint.textContent = `十份 = 保护 ${bgTicks * 10} 轮（约 ${hours} 小时），保护期内再买继续叠加`;
+  }
+
   // ---- 交易专属通道 ----
   const chBase = Number(cfg.shopChannelBasePrice ?? 300000);
   const chRatio = Number(cfg.shopChannelRatio ?? 1.5);
@@ -1534,19 +1550,22 @@ function renderShop() {
   applyShopGates();
 }
 
-async function buyBodyguard() {
-  const btn = $('#bodyguardBuy');
+async function buyBodyguard(qty = 1) {
+  const n = Math.max(1, Math.min(10, Math.round(Number(qty) || 1)));
+  const btn = $(n > 1 ? '#bodyguardBuy10' : '#bodyguardBuy');
   if (!btn || btn.disabled) return;
   btn.disabled = true;
   const old = btn.textContent;
-  btn.textContent = '雇佣中…';
+  btn.textContent = n > 1 ? `雇佣 ${n} 份中…` : '雇佣中…';
   try {
-    const r = await api('/api/shop/bodyguard', { method: 'POST' });
+    const r = await api('/api/shop/bodyguard', { method: 'POST', body: JSON.stringify({ qty: n }) });
     if (state.market?.me) {
       state.market.me.guardUntil = r.guardUntil;
       state.market.me.cash = r.cash;
     }
-    toast(`🛡️ 保镖已就位，保护 ${r.leftTicks} 轮`, 'ok');
+    toast(n > 1
+      ? `🛡️ ${r.qty} 份保镖就位，保护 ${r.leftTicks} 轮`
+      : `🛡️ 保镖已就位，保护 ${r.leftTicks} 轮`, 'ok');
     refreshMarket();
   } catch (e) {
     toast(e.message, 'err');
@@ -4628,7 +4647,8 @@ function bind() {
     });
   });
   $('#fakeNewsBuy')?.addEventListener('click', buyFakeNews);
-  $('#bodyguardBuy')?.addEventListener('click', buyBodyguard);
+  $('#bodyguardBuy')?.addEventListener('click', () => buyBodyguard(1));
+  $('#bodyguardBuy10')?.addEventListener('click', () => buyBodyguard(10));
   $('#banSearch')?.addEventListener('input', renderBanList);
   $('#channelBuy')?.addEventListener('click', buyChannel);
   $('#mBackBtn')?.addEventListener('click', () => {
