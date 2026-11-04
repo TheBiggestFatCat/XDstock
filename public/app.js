@@ -3878,6 +3878,7 @@ async function loadAdmin() {
         ['sentimentStrength', '基准偏移(0.004=0.4%)'],
         ['sentimentTicks', '每多少轮施加一次'],
         ['sentimentDrift', '方向分量(0=纯随机 1=纯方向)'],
+        ['sentimentEdge', '顶端难度(0=均匀, 3=默认)'],
         ['sentimentRollMin', '重掷周期下限(轮)'],
         ['sentimentRollMax', '重掷周期上限(轮)']
       ]
@@ -4032,11 +4033,12 @@ const TRAIT_LABELS = {
   sentTicks: ['情绪作用间隔(轮)', '每多少轮施加一次偏移，12=1分钟'],
   sentRollMin: ['情绪重掷周期下限(轮)', '每次重掷从「下限~上限」里随机抽一个周期，480=40分钟'],
   sentRollMax: ['情绪重掷周期上限(轮)', '和下限一起决定随机区间，960=80分钟'],
-  sentDrift: ['情绪方向分量', '0=纯随机（只决定抖多大），1=纯方向（情绪直接决定涨跌），留空跟随全局']
+  sentDrift: ['情绪方向分量', '0=纯随机（只决定抖多大），1=纯方向（情绪直接决定涨跌），留空跟随全局'],
+  sentEdge: ['情绪顶端难度', '越靠 ±1 越难抽到；0=均匀，3=默认（|v| 均值 0.50→0.39），留空跟随全局']
 };
 
 /** 这些个股参数是「可选覆盖」：留空就跟随全局参数 */
-const OPTIONAL_TRAITS = ['sentStrength', 'sentTicks', 'sentRollMin', 'sentRollMax', 'sentDrift'];
+const OPTIONAL_TRAITS = ['sentStrength', 'sentTicks', 'sentRollMin', 'sentRollMax', 'sentDrift', 'sentEdge'];
 
 function renderTraitForm(stocks) {
   const box = $('#traitForm');
@@ -4059,7 +4061,8 @@ function renderTraitForm(stocks) {
       sentTicks: cfg.sentimentTicks,
       sentRollMin: cfg.sentimentRollMin,
       sentRollMax: cfg.sentimentRollMax,
-      sentDrift: cfg.sentimentDrift
+      sentDrift: cfg.sentimentDrift,
+      sentEdge: cfg.sentimentEdge
     };
     const fields = keys.map((k) => {
       const [label, hint] = TRAIT_LABELS[k];

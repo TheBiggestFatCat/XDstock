@@ -378,6 +378,7 @@ function marketPayload(db, me) {
       sentimentEnabled: db.config.sentimentEnabled ?? 1,
       sentimentStrength: db.config.sentimentStrength ?? 0.004,
       sentimentDrift: db.config.sentimentDrift ?? 0.6,
+      sentimentEdge: db.config.sentimentEdge ?? 3,
       sentimentTicks: db.config.sentimentTicks ?? 12,
       sentimentRollMin: db.config.sentimentRollMin ?? 480,
       sentimentRollMax: db.config.sentimentRollMax ?? 960,
@@ -733,7 +734,7 @@ export async function handleApi(ctx) {
       'lotteryChance', 'lotteryLo', 'lotteryHi',
       'floorRatio', 'floorBoost',
       // 散户情绪：只在这个个股上覆盖全局参数（留空 = 跟随全局）
-      'sentStrength', 'sentTicks', 'sentRollMin', 'sentRollMax', 'sentRollTicks', 'sentDrift',
+      'sentStrength', 'sentTicks', 'sentRollMin', 'sentRollMax', 'sentRollTicks', 'sentDrift', 'sentEdge',
       // 实时汇率（留美外汇）
       'coef', 'lev', 'fxEnabled', 'refreshMs', 'track'
     ];
@@ -890,7 +891,7 @@ export async function handleApi(ctx) {
       'stPrice', 'stDelistTicks',
       'marketTradesEnabled',
       'sentimentEnabled', 'sentimentStrength', 'sentimentTicks', 'sentimentRollTicks',
-      'sentimentRollMin', 'sentimentRollMax', 'sentimentDrift',
+      'sentimentRollMin', 'sentimentRollMax', 'sentimentDrift', 'sentimentEdge',
       'marketTradesRate', 'weatherLotteryChance', 'weatherLotteryLo', 'weatherLotteryHi', 'redBonusRate', 'redBonusMinTicks', 'bearBonusRate', 'bearBonusMinTicks',
       'fxEnabled', 'fxCoef', 'fxLeverage', 'fxRefreshMs', 'fxTrack',
       'impactCostCoef', 'impactCostMax', 'playerImpactTail',

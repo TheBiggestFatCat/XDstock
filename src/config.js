@@ -125,6 +125,9 @@ export const DEFAULT_CONFIG = {
   // 方向分量：swing = v × strength × (drift + (1-drift)×U(-1,1))
   // drift = 0 是纯随机（旧行为，v 只决定抖动大小）；1 是纯方向（v 决定涨跌）
   sentimentDrift: 0.6,
+  // 情绪值的「顶端难度」：v 本来是均匀抽 -1~1，套一层对数后越靠两端越难抽到
+  // 0 = 保持均匀；越大越难到 ±1（默认 3，约把均值从 0.50 压到 0.39）
+  sentimentEdge: 3,
   // 重掷周期改成随机范围（轮）：每次重掷从 [min, max] 里重新抽一个间隔
   // 默认 480~960 轮 ≈ 40~80 分钟，均值仍是原来的 1 小时
   sentimentRollMin: 480,

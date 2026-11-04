@@ -156,6 +156,29 @@ export function liveIndexWeights(db, indexKey = 'index') {
   return out;
 }
 
+/** 情绪值「顶端难度」的默认值（0 = 均匀分布） */
+const DEFAULT_SENT_EDGE = 3;
+
+/**
+ * 掷一个情绪值 v ∈ [-1, 1]。
+ * 原来直接 `Math.random()*2-1`（均匀），极端值 ±1 和中间值一样容易抽到；
+ * 这里套一层对数把值往 0 压 —— 越接近两端越难抽，中间更容易：
+ *
+ *   取 r ~ 均匀(-1,1)，t = 1-|r|（0 最极端、1 最中间），
+ *   |v| = 1 - ln(1 + k·t) / ln(1 + k)
+ *
+ * `hard`（k）= 0 退化成原来的均匀分布；k=3 时 |v| 均值 0.50 → 0.39，
+ * k=9 时 → 0.32，抽到 |v| > 0.8 的概率从 20% 降到 6% / 2%。
+ */
+export function rollSentimentV(hard = DEFAULT_SENT_EDGE) {
+  const r = Math.random() * 2 - 1;
+  const k = Math.max(0, Number(hard) || 0);
+  if (!(k > 0)) return r;
+  const t = 1 - Math.abs(r);
+  const mapped = 1 - Math.log(1 + k * t) / Math.log(1 + k);
+  return (r < 0 ? -1 : 1) * Math.max(0, Math.min(1, mapped));
+}
+
 /** 单只股票走一步 */
 function stepStock(st, cfg, events, brokerDrift, fxData, db) {
   const t = st.trait || {};
@@ -241,6 +264,8 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
     // 方向分量：0 = 纯随机（v 只决定抖多大），1 = 纯方向（v 决定涨还是跌）
     // 个股 trait.sentDrift 可以单独覆盖全局 config.sentimentDrift
     const drift = Math.max(0, Math.min(1, Number(t2.sentDrift ?? cfg.sentimentDrift ?? 0.6)));
+    // 顶端难度：越靠两端越难抽到（0 = 原来的均匀分布）
+    const edge = Math.max(0, Number(t2.sentEdge ?? cfg.sentimentEdge ?? DEFAULT_SENT_EDGE));
     if (!st.sentiment || typeof st.sentiment !== 'object') {
       st.sentiment = { v: 0, nextRoll: 0, nextApply: 0 };
     }
@@ -249,7 +274,7 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
       // 每次重掷都重新抽一个周期，不再固定
       const rollEvery = sentimentRollInterval(db, st);
       st.sentiment = {
-        v: Math.random() * 2 - 1,
+        v: rollSentimentV(edge),
         nextRoll: db.tick + rollEvery,
         nextApply: db.tick,
         rollEvery,
