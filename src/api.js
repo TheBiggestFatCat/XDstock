@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
-import { candlesFromSeries, changesFor, timeFromAxis, tickTimeAxis, pushNotice, noticeAlive, sentimentView } from './engine.js';
+import { candlesFromSeries, changesFor, timeFromAxis, tickTimeAxis, pushNotice, noticeAlive, sentimentView, liveIndexWeights } from './engine.js';
 import { TIMEFRAMES } from './config.js';
 import { getBuild } from './build.js';
 import { playerEquity, positionPnl } from './trading.js';
@@ -287,21 +287,25 @@ function marketPayload(db, me) {
       changes: changesFor(db.index.series, TIMEFRAMES),
       nextRebalanceTick: Number(db.index.nextRebalanceTick) || 0,
       rebalanceTick: Number(db.index.rebalanceTick) || 0,
-      weights: Object.entries(db.index.weights || {})
-        .map(([code, w]) => {
-          const st2 = db.stocks[code] || {};
-          const sh = Number(st2.shares) || 0;
-          const px2 = Number(st2.price) || 0;
-          return {
-            code,
-            name: st2.name || code,
-            weight: w,
-            price: px2,
-            marketCap: px2 * sh,
-            freeCap: px2 * sh * (Number(st2.freeFloat) || 0.45)
-          };
-        })
-        .sort((a, b) => b.weight - a.weight)
+      weights: (() => {
+        const live = liveIndexWeights(db, 'index');
+        return Object.entries(db.index.weights || {})
+          .map(([code, w]) => {
+            const st2 = db.stocks[code] || {};
+            const sh = Number(st2.shares) || 0;
+            const px2 = Number(st2.price) || 0;
+            return {
+              code,
+              name: st2.name || code,
+              weight: w,
+              liveWeight: Number(live[code]) || 0,
+              price: px2,
+              marketCap: px2 * sh,
+              freeCap: px2 * sh * (Number(st2.freeFloat) || 0.45)
+            };
+          })
+          .sort((a, b) => b.weight - a.weight);
+      })()
     },
     stocks,
     events: db.events
@@ -427,8 +431,11 @@ function marketPayload(db, me) {
       workOnlineMultiplier: db.config.workOnlineMultiplier ?? 2,
       workBankTicks: db.config.workBankTicks ?? 1440,
       stealMin: db.config.stealMin ?? 100,
-      dividendRate: db.config.dividendRate ?? 0.35,
-      dividendCap: db.config.dividendCap ?? 0.005,
+      dividendRate: db.config.dividendRate ?? 1,
+      dividendCap: db.config.dividendCap ?? 0.015,
+      growthCeiling: db.config.growthCeiling ?? 8,
+      maxPremium: db.config.maxPremium ?? 2.5,
+      indexRebalanceTicks: db.config.indexRebalanceTicks ?? 2160,
       stealMax: db.config.stealMax ?? 10000,
       stealCapRatio: db.config.stealCapRatio ?? 0.001,
       stealCooldownTicks: db.config.stealCooldownTicks ?? 60,
@@ -871,6 +878,7 @@ export async function handleApi(ctx) {
       'tickMs', 'baseVolatility', 'meanReversion', 'eventImpactScale',
       'feeRate', 'stampDuty', 'minLeverage', 'maxLeverage',
       'dividendRate', 'dividendCap',
+      'growthCeiling', 'maxPremium', 'indexRebalanceTicks',
       'eventChance', 'localEventChance', 'eventDurationMin', 'eventDurationMax', 'globalEventScale',
       'workRatePerTick', 'workOnlineMultiplier', 'workBankTicks', 'stealMin', 'stealMax', 'stealCapRatio', 'stealCooldownTicks',
       'equitySampleTicks', 'equityMaxPoints',

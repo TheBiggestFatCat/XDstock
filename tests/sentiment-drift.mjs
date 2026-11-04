@@ -25,7 +25,9 @@ function runSentiment({ drift, v, n = 300, strength = 0.004, every = 1 }) {
   Object.assign(db.config, {
     baseVolatility: 0, meanReversion: 0, eventChance: 0, localEventChance: 0,
     marketTradesRate: 0, playerImpactEnabled: 0,
-    sentimentEnabled: 1, sentimentStrength: strength, sentimentTicks: every, sentimentDrift: drift
+    sentimentEnabled: 1, sentimentStrength: strength, sentimentTicks: every, sentimentDrift: drift,
+    // 这段只测情绪本身，把「估值上限」关掉，否则涨到 2.5 倍 fair 就被压住了
+    maxPremium: 1e9
   });
   const st = db.stocks.TGW;
   st.price = 100;

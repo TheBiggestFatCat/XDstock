@@ -132,6 +132,30 @@ export function sentimentView(st, db) {
   };
 }
 
+/**
+ * 指数成分的「实时权重」（按当前流通市值算）。
+ *
+ * 指数本身用的是**调仓时冻结**的权重（`db.index.weights`），这里只给前端做参考，
+ * 让玩家能看出「谁被调仓冻结卡住了、谁已经涨上来了」。
+ */
+export function liveIndexWeights(db, indexKey = 'index') {
+  const idx = indexKey === 'smallIndex' ? db.smallIndex : db.index;
+  const codes = Object.keys(idx?.weights || {});
+  const caps = {};
+  let total = 0;
+  for (const code of codes) {
+    const st = db.stocks[code] || {};
+    const cap = (Number(st.price) || 0) * (Number(st.shares) || 0) * (Number(st.freeFloat) || 0.45);
+    if (cap > 0) {
+      caps[code] = cap;
+      total += cap;
+    }
+  }
+  const out = {};
+  if (total > 0) for (const [code, cap] of Object.entries(caps)) out[code] = cap / total;
+  return out;
+}
+
 /** 单只股票走一步 */
 function stepStock(st, cfg, events, brokerDrift, fxData, db) {
   const t = st.trait || {};
@@ -263,6 +287,15 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
 
   if (!Number.isFinite(p) || p <= 0) p = st.price;
   p = Math.max(0.01, p);
+
+  // 估值上限：价格可以炒，但永远不超过 fair × maxPremium（无限接近这条线）
+  // 只压上限、不管下限——跌深了交给均值回归和护盘
+  const fairNow = Number(st.fair) || 0;
+  const maxPrem = Math.max(1.05, Number(cfg.maxPremium ?? 2.5));
+  if (fairNow > 0) {
+    const ceilP = fairNow * maxPrem;
+    if (p > ceilP) p = ceilP;
+  }
 
   // 连击计数
   const prev = st.price;
@@ -776,7 +809,8 @@ export function runReports(db) {
       const ctxP = {
         volumeFactor: (Number(db.volumeAvg) || 0) / 2,
         fxFactor: (Number(db.fxVolAvg) || 0) / 0.004,
-        fxReturn: fxBaseP > 0 ? fxNowP / fxBaseP - 1 : 0
+        fxReturn: fxBaseP > 0 ? fxNowP / fxBaseP - 1 : 0,
+        growthCeiling: cfg.growthCeiling
       };
       st.pendingReport = genNextReport(st, ctxP);
     }
@@ -791,7 +825,8 @@ export function runReports(db) {
     const fxBase = Number(db.fx?.reportBase) || fxNow;
     const fxReturn = fxBase > 0 ? fxNow / fxBase - 1 : 0;
     st.fundamentals = st.pendingReport || genNextReport(st, {
-      volumeFactor, fxFactor, fxReturn, weather: st.weather?.score || 0
+      volumeFactor, fxFactor, fxReturn, weather: st.weather?.score || 0,
+      growthCeiling: cfg.growthCeiling
     });
     // 这一期结束后，汇率基准往前推
     if (db.fx) db.fx.reportBase = fxNow;

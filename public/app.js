@@ -602,16 +602,23 @@ function renderIndexWeights() {
     <div class="rp-head">
       <span class="rp-ind">成分权重</span>
       <span class="rp-period">共 ${list.length} 只</span>
-      <span class="rp-cap">季度调仓 · 期内权重冻结</span>
+      <span class="rp-cap">调仓时冻结 · 实时市值仅供参考</span>
     </div>
     <div class="iw-list">
-      ${list.map((w) => `
+      ${list.map((w) => {
+        const live = Number(w.liveWeight);
+        const drift = Number.isFinite(live) && live > 0 ? (live - w.weight) * 100 : null;
+        const liveTxt = drift === null ? ''
+          : `<span class="iw-live ${drift > 0.5 ? 'up' : drift < -0.5 ? 'down' : 'flat'}">实时 ${(live * 100).toFixed(2)}%</span>`;
+        return `
         <div class="iw-row">
           <span class="iw-name">${escapeHtml(w.name)}</span>
           <span class="iw-bar"><i style="width:${(w.weight * 100).toFixed(1)}%"></i></span>
           <span class="iw-pct">${(w.weight * 100).toFixed(2)}%</span>
           <span class="iw-cap">${fmtMoney(w.freeCap || 0)}</span>
-        </div>`).join('')}
+          ${liveTxt}
+        </div>`;
+      }).join('')}
     </div>
   `;
 }
@@ -3794,7 +3801,16 @@ async function loadAdmin() {
       fields: [
         ['tickMs', 'tick 间隔(ms)'],
         ['baseVolatility', '基础波动率'],
-        ['meanReversion', '均值回归强度']
+        ['meanReversion', '均值回归强度'],
+        ['indexRebalanceTicks', '指数调仓间隔(轮)']
+      ]
+    },
+    {
+      title: '公司成长 / 估值上限',
+      desc: '给每家公司一条「无限接近但不超过」的线',
+      fields: [
+        ['growthCeiling', '营收天花板(基准的几倍)'],
+        ['maxPremium', '股价上限(合理价的几倍)']
       ]
     },
     {

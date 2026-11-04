@@ -37,6 +37,8 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const BPS_RETAIN = [0.15, 0.3];
 /** 账面价值过高时，每期向「盈利估值×2」收敛的比例（半衰期约 230 期） */
 const BOOK_SHRINK = 0.003;
+/** 营收天花板：最多长到基准营收的多少倍（会无限接近但不超过） */
+const DEFAULT_GROWTH_CEILING = 8;
 
 /**
  * 掷一次天气（-1 ~ 1），农业股共用。
@@ -199,6 +201,16 @@ export function genNextReport(st, ctx = {}) {
 
   growth = clamp(growth, -0.35, 0.9);
 
+  // 规模天花板：营收只能「无限接近」baseRev × growthCeiling，永远不超过。
+  // 越接近天花板，正向增速被压得越低（负增长不受影响，该萎缩还是会萎缩）。
+  const ceilMult = Math.max(1.2,
+    Number(ctx.growthCeiling) || Number(st.growthCeiling) || DEFAULT_GROWTH_CEILING);
+  const revCeil = baseRev * ceilMult;
+  if (growth > 0) {
+    const room = Math.max(0, 1 - (Number(f.revenue) || baseRev) / revCeil);
+    growth *= room;
+  }
+
   let margin = (Number(f.margin) || (ind.margin[0] + ind.margin[1]) / 2) + rand(-0.02, 0.02);
   // 券商成交火爆时净利率也会抬一点
   if (trait === 'broker') {
@@ -222,8 +234,8 @@ export function genNextReport(st, ctx = {}) {
     revenue += (Number(f.revenue) || 1) * (1 + growth) * 0.3;
   }
 
-  // 跌到基准的 25% 就不再往下掉，避免公司直接归零
-  revenue = Math.max(revenue, baseRev * 0.25);
+  // 跌到基准的 25% 就不再往下掉，避免公司直接归零；涨到天花板也上不去
+  revenue = Math.min(Math.max(revenue, baseRev * 0.25), revCeil);
 
   let netProfit = revenue * margin;
   let tradePnl = 0;

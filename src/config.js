@@ -61,6 +61,10 @@ export const DEFAULT_CONFIG = {
   dividendRate: 1,     // 派息倍率：1 = 按行业标准（金融40% 消费45% 传媒30% 外汇35% 科技12%），0 = 停发
   dividendCap: 0.015,  // 单期股息率封顶（0.015 = 最多发现价的 1.5%；0 = 不封顶）
 
+  // ---- 公司成长 / 估值上限 ----
+  growthCeiling: 8,    // 营收天花板：最多长到基准营收的多少倍（无限接近，不超过）
+  maxPremium: 2.5,     // 估值上限：股价最多是 fair 的多少倍（超过会被压回这条线）
+
   // ---- 实时汇率（留美外汇的驱动）----
   fxEnabled: 1,        // 1=开启 0=纯随机
   fxRefreshMs: 60000,  // 多久抓一次汇率
@@ -116,8 +120,7 @@ export const DEFAULT_CONFIG = {
   globalEventScale: 0.2,
 
   // 散户情绪：每隔一段随机周期重掷方向，按 tick 间隔施加随机偏移
-  sentimentEnabled: 1,
-  sentimentStrength: 0.004,    // 情绪 1.0 时的基准偏移（0.4%）
+  sentimentEnabled: 1,  sentimentStrength: 0.004,    // 情绪 1.0 时的基准偏移（0.4%）
   sentimentTicks: 12,          // 每多少 tick 施加一次
   // 方向分量：swing = v × strength × (drift + (1-drift)×U(-1,1))
   // drift = 0 是纯随机（旧行为，v 只决定抖动大小）；1 是纯方向（v 决定涨跌）
