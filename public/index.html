@@ -347,292 +347,129 @@
     </div>
 
     <!-- ---------- 商城 ---------- -->
+    <!-- ---------- 商城 ---------- -->
     <div class="view" id="view-shop">
       <div class="shop-hero">
         <h2>商 城</h2>
         <p>有些东西，钱能买到</p>
       </div>
 
-      <div class="shop-tiers" id="shopTiers">
-        <button class="shop-tier-btn active" data-tier-tab="1">Lv.1 商店</button>
-        <button class="shop-tier-btn" data-tier-tab="2">Lv.2 商店</button>
-        <button class="shop-tier-btn" data-tier-tab="3">Lv.3 商店</button>
+      <div class="shop-cats" id="shopCats">
+        <button class="shop-cat-btn active" data-shop-cat="theme">🎨 主题</button>
+        <button class="shop-cat-btn" data-shop-cat="item">🧰 道具</button>
+        <button class="shop-cat-btn" data-shop-cat="other">🏅 其他</button>
       </div>
 
-      <div class="shop-locked hidden" id="shopLocked">
-        <span class="lock-icon">🔒</span>
-        <p id="shopLockedText">需要更高的账号等级</p>
-      </div>
-
-      <div class="shop-grid" data-tier="1">
-        <div class="shop-card" id="fakeNewsCard">
-          <div class="shop-card-head">
-            <span class="shop-icon">📰</span>
-            <div>
-              <h3>假新闻</h3>
-              <p class="shop-sub">编一条消息，让它像真新闻一样出现在快讯里</p>
+      <div class="shop-panel" data-shop-panel="theme">
+        <div class="shop-panel-head"><b>主题皮肤</b><span>买断制，换配色 + 专属技能</span></div>
+        <div class="shop-grid">
+          <div class="shop-card theme-card" data-theme-code="tycoon">
+            <div class="shop-card-head">
+              <span class="shop-icon">🐊</span>
+              <div>
+                <h3>金融大鳄</h3>
+                <p class="shop-sub">黄绿配色，老练的猎手<br />
+                  <b class="perk">技能：提前 20 轮看到金融板块（券商/外汇）的财报和预期，先人一步布局</b>
+                </p>
+              </div>
+              <span class="shop-price">$2,000,000</span>
             </div>
-            <span class="shop-price" id="fakeNewsPrice">$500,000</span>
-          </div>
-
-          <label class="field">
-            <span>新闻内容</span>
-            <textarea id="fakeNewsText" rows="2" maxlength="120"
-              placeholder="例如：小灯证券宣布收购月球地产，估值飙升"></textarea>
-          </label>
-
-          <div class="shop-dir">
-            <span>方向</span>
-            <button class="dir-btn active" data-dir="1">利好</button>
-            <button class="dir-btn" data-dir="-1">利空</button>
-          </div>
-
-          <div class="shop-target">
-            <span>影响标的 <i class="field-hint">不选 = 全市场</i></span>
-            <div class="chip-select" id="fakeNewsTargets"></div>
-          </div>
-
-          <p class="shop-warn">
-            花钱买一条挂名新闻：<b>一定会显示在快讯里</b>，但只有
-            <b id="fakeNewsChance">20%</b> 的概率真的影响市场。<br />
-            用完后冷却 <b id="fakeNewsCd">120</b> 轮。
-          </p>
-
-          <button id="fakeNewsBuy" class="btn btn-primary btn-block">购买并发布</button>
-        </div>
-
-        <div class="shop-card" id="bodyguardCard">
-          <div class="shop-card-head">
-            <span class="shop-icon">🛡️</span>
-            <div>
-              <h3>保镖</h3>
-              <p class="shop-sub">雇一队人跟着你，期间谁也别想偷你的钱</p>
+            <p class="theme-cd hidden" data-cd-for="tycoon"></p>
+            <div class="theme-preview">
+              <span class="tp-tycoon-1">背景</span>
+              <span class="tp-tycoon-2">强调色</span>
+              <span class="tp-tycoon-3">面板</span>
             </div>
-            <span class="shop-price" id="bodyguardPrice">$50,000</span>
+            <button class="btn btn-primary btn-block theme-btn" data-theme-code="tycoon">购买</button>
           </div>
 
-          <div class="guard-status" id="guardStatus">当前没有保护</div>
-
-          <p class="shop-warn">
-            购买后 <b id="guardTicks">720</b> 轮（约 1 小时）内，<b>任何人偷你都偷不到</b>。<br />
-            保护期内重复购买会叠加时长。
-          </p>
-
-          <button id="bodyguardBuy" class="btn btn-primary btn-block">购买保镖</button>
-        </div>
-
-        <div class="shop-card" id="channelCard">
-          <div class="shop-card-head">
-            <span class="shop-icon">⚡</span>
-            <div>
-              <h3>交易专属通道</h3>
-              <p class="shop-sub">跑得更快，一单吃得更深</p>
+          <div class="shop-card theme-card" data-theme-code="hermit">
+            <div class="shop-card-head">
+              <span class="shop-icon">🧙</span>
+              <div>
+                <h3>隐世仙人</h3>
+                <p class="shop-sub">青紫雾气，来去无踪<br />
+                  <b class="perk">技能：你的成交有 50% 概率不会出现在成交记录里，别人看不出来你在进出</b>
+                </p>
+              </div>
+              <span class="shop-price">$2,000,000</span>
             </div>
-            <span class="shop-price" id="channelPrice">$300,000</span>
-          </div>
-
-          <div class="channel-status">
-            <div><span>当前单笔上限</span><b id="channelCapNow">$300,000</b></div>
-            <div><span>已购买</span><b id="channelLevel">0 级</b></div>
-            <div><span>买完提升到</span><b id="channelCapNext">$400,000</b></div>
-          </div>
-
-          <p class="shop-warn">
-            每购买一次，<b>单笔成交上限 +$100,000</b>，永久有效。<br />
-            价格每级 ×1.5 递增，买得越多越贵。
-          </p>
-
-          <button id="channelBuy" class="btn btn-primary btn-block">购买通道</button>
-        </div>
-
-        <div class="shop-card theme-card" data-theme-code="tycoon">
-          <div class="shop-card-head">
-            <span class="shop-icon">🐊</span>
-            <div>
-              <h3>金融大鳄</h3>
-              <p class="shop-sub">黄绿配色，老练的猎手<br />
-                <b class="perk">技能：提前 20 轮看到金融板块（券商/外汇）的财报和预期，先人一步布局</b>
-              </p>
+            <p class="theme-cd hidden" data-cd-for="hermit"></p>
+            <div class="theme-preview">
+              <span class="tp-hermit-1">背景</span>
+              <span class="tp-hermit-2">强调色</span>
+              <span class="tp-hermit-3">面板</span>
             </div>
-            <span class="shop-price">$2,000,000</span>
+            <button class="btn btn-primary btn-block theme-btn" data-theme-code="hermit">购买</button>
           </div>
-          <p class="theme-cd hidden" data-cd-for="tycoon"></p>
-          <div class="theme-preview">
-            <span class="tp-tycoon-1">背景</span>
-            <span class="tp-tycoon-2">强调色</span>
-            <span class="tp-tycoon-3">面板</span>
-          </div>
-          <button class="btn btn-primary btn-block theme-btn" data-theme-code="tycoon">购买</button>
-        </div>
 
-        <div class="shop-card" id="levelCard">
-          <div class="shop-card-head">
-            <span class="shop-icon">🏅</span>
-            <div>
-              <h3>账号等级 <span id="levelNow" class="lv-badge">Lv.1</span></h3>
-              <p class="shop-sub">升级能解锁更高级的商店<br />
-                <b class="perk">费用 = 你当前总资产的 <span id="levelRatio">60%</span></b><br />
-                <b class="perk">这笔钱会存进丰川银行，总资产低于门槛时可以取出来</b><br />
-                <b class="perk">每个等级提供 <span id="levelFillText">+1,000,000</span> 单笔成交上限</b>
-              </p>
+          <div class="shop-card theme-card" data-theme-code="red">
+            <div class="shop-card-head">
+              <span class="shop-icon">🐂</span>
+              <div>
+                <h3>红红的牛<span class="theme-owned hidden" data-owned="red">已拥有</span></h3>
+                <p class="shop-sub">满屏血红，涨得像头牛<br />
+                  <b class="perk">技能：指数处于上升趋势（价 &gt; MA5 &gt; MA10 &gt; MA30）时平仓，额外返 1% 成交额</b>
+                </p>
+                <p class="theme-earned">累计已返 <b id="redEarned">$0</b></p>
+              </div>
+              <span class="shop-price">$2,000,000</span>
             </div>
-            <span class="shop-price" id="levelPrice">—</span>
+            <div class="theme-preview">
+              <span class="tp-red-1">背景</span>
+              <span class="tp-red-2">强调色</span>
+              <span class="tp-red-3">面板</span>
+            </div>
+            <button class="btn btn-primary btn-block theme-btn" data-theme-code="red">购买</button>
           </div>
-          <p id="levelHint" class="field-hint"></p>
-          <button id="levelUpBtn" class="btn btn-primary btn-block">升级</button>
-        </div>
 
-        <div class="shop-card theme-card" data-theme-code="hermit">
-          <div class="shop-card-head">
-            <span class="shop-icon">🧙</span>
-            <div>
-              <h3>隐世仙人</h3>
-              <p class="shop-sub">青紫雾气，来去无踪<br />
-                <b class="perk">技能：你的成交有 50% 概率不会出现在成交记录里，别人看不出来你在进出</b>
-              </p>
+          <div class="shop-card theme-card" data-theme-code="bear">
+            <div class="shop-card-head">
+              <span class="shop-icon">🐻</span>
+              <div>
+                <h3>绿绿的熊<span class="theme-owned hidden" data-owned="bear">已拥有</span></h3>
+                <p class="shop-sub">满屏深绿，跌得像头熊<br />
+                  <b class="perk">技能：指数处于下跌趋势（价 &lt; MA5 &lt; MA10 &lt; MA30）时平仓，额外返 1% 成交额</b>
+                </p>
+                <p class="theme-earned">累计已返 <b id="bearEarned">$0</b></p>
+              </div>
+              <span class="shop-price">$2,000,000</span>
             </div>
-            <span class="shop-price">$2,000,000</span>
+            <div class="theme-preview">
+              <span class="tp-bear-1">背景</span>
+              <span class="tp-bear-2">强调色</span>
+              <span class="tp-bear-3">面板</span>
+            </div>
+            <button class="btn btn-primary btn-block theme-btn" data-theme-code="bear">购买</button>
           </div>
-          <p class="theme-cd hidden" data-cd-for="hermit"></p>
-          <div class="theme-preview">
-            <span class="tp-hermit-1">背景</span>
-            <span class="tp-hermit-2">强调色</span>
-            <span class="tp-hermit-3">面板</span>
-          </div>
-          <button class="btn btn-primary btn-block theme-btn" data-theme-code="hermit">购买</button>
-        </div>
 
-        <div class="shop-card theme-card" data-theme-code="red">
-          <div class="shop-card-head">
-            <span class="shop-icon">🐂</span>
-            <div>
-              <h3>红红的牛<span class="theme-owned hidden" data-owned="red">已拥有</span></h3>
-              <p class="shop-sub">满屏血红，涨得像头牛<br />
-                <b class="perk">技能：指数处于上升趋势（价 &gt; MA5 &gt; MA10 &gt; MA30）时平仓，额外返 1% 成交额</b>
-              </p>
-              <p class="theme-earned">累计已返 <b id="redEarned">$0</b></p>
+          <div class="shop-card theme-card" data-theme-code="dark">
+            <div class="shop-card-head">
+              <span class="shop-icon">🕶️</span>
+              <div>
+                <h3>暗黑大手<span class="theme-owned hidden" data-owned="dark">已拥有</span></h3>
+                <p class="shop-sub">幕后操盘手的专属皮肤<br /><b class="perk">技能：你的成交对市场冲击额外 +5%，撬动价格比常人更狠</b></p>
+              </div>
+              <span class="shop-price">$2,000,000</span>
             </div>
-            <span class="shop-price">$2,000,000</span>
+            <div class="theme-preview">
+              <span class="tp-dark-1">背景</span>
+              <span class="tp-dark-2">面板</span>
+              <span class="tp-dark-3">强调色</span>
+            </div>
+            <button class="btn btn-primary btn-block theme-btn" data-theme-code="dark">购买</button>
           </div>
-          <div class="theme-preview">
-            <span class="tp-red-1">背景</span>
-            <span class="tp-red-2">强调色</span>
-            <span class="tp-red-3">面板</span>
-          </div>
-          <button class="btn btn-primary btn-block theme-btn" data-theme-code="red">购买</button>
-        </div>
 
-                <div class="shop-card theme-card" data-theme-code="bear">
-          <div class="shop-card-head">
-            <span class="shop-icon">🐻</span>
-            <div>
-              <h3>绿绿的熊<span class="theme-owned hidden" data-owned="bear">已拥有</span></h3>
-              <p class="shop-sub">满屏深绿，跌得像头熊<br />
-                <b class="perk">技能：指数处于下跌趋势（价 &lt; MA5 &lt; MA10 &lt; MA30）时平仓，额外返 1% 成交额</b>
-              </p>
-              <p class="theme-earned">累计已返 <b id="bearEarned">$0</b></p>
+          <div class="shop-card">
+            <div class="shop-card-head">
+              <span class="shop-icon">🎨</span>
+              <div>
+                <h3>经典配色</h3>
+                <p class="shop-sub">默认的清新绿，随时可以换回来</p>
+              </div>
             </div>
-            <span class="shop-price">$2,000,000</span>
-          </div>
-          <div class="theme-preview">
-            <span class="tp-bear-1">背景</span>
-            <span class="tp-bear-2">强调色</span>
-            <span class="tp-bear-3">面板</span>
-          </div>
-          <button class="btn btn-primary btn-block theme-btn" data-theme-code="bear">购买</button>
-        </div>
-
-<div class="shop-card theme-card" data-theme-code="dark">
-          <div class="shop-card-head">
-            <span class="shop-icon">🕶️</span>
-            <div>
-              <h3>暗黑大手<span class="theme-owned hidden" data-owned="dark">已拥有</span></h3>
-              <p class="shop-sub">幕后操盘手的专属皮肤<br /><b class="perk">技能：你的成交对市场冲击额外 +5%，撬动价格比常人更狠</b></p>
-            </div>
-            <span class="shop-price">$2,000,000</span>
-          </div>
-          <div class="theme-preview">
-            <span class="tp-dark-1">背景</span>
-            <span class="tp-dark-2">面板</span>
-            <span class="tp-dark-3">强调色</span>
-          </div>
-          <button class="btn btn-primary btn-block theme-btn" data-theme-code="dark">购买</button>
-        </div>
-
-        <div class="shop-card">
-          <div class="shop-card-head">
-            <span class="shop-icon">🎨</span>
-            <div>
-              <h3>经典配色</h3>
-              <p class="shop-sub">默认的清新绿，随时可以换回来</p>
-            </div>
-          </div>
-          <button class="btn btn-ghost btn-block theme-btn" data-theme-code="default">使用经典配色</button>
+            <button class="btn btn-ghost btn-block theme-btn" data-theme-code="default">使用经典配色</button>
         
-        </div>
-
-        <!-- ===== 2 级商店（等级不足时整块隐藏） ===== -->
-        <div class="shop-grid" id="shopGrid2" data-tier="2">
-          <div class="shop-card" id="bgCard">
-            <div class="shop-card-head">
-              <span class="shop-icon">🖼️</span>
-              <div>
-                <h3>自定义背景</h3>
-                <p class="shop-sub">给整个游戏换一张底图<br />
-                  <b class="perk">一次买断，永久可用</b>
-                </p>
-              </div>
-              <span class="shop-price">$5,000,000</span>
-            </div>
-            <input id="bgFile" type="file" accept="image/*" class="bg-file" />
-            <button id="bgBuy" class="btn btn-primary btn-block">解锁</button>
-            <button id="bgUpload" class="btn btn-ghost btn-block hidden">上传新背景</button>
-            <div id="bgOpacityRow" class="bg-opacity-row hidden">
-              <label class="bg-opacity-label" for="bgOpacity">
-                透明度 <b id="bgOpacityVal">0%</b>
-                <i class="bg-opacity-tip">0% = 原图，100% = 完全透明</i>
-              </label>
-              <input id="bgOpacity" type="range" min="0" max="100" step="1" value="0" />
-            </div>
-            <button id="bgClear" class="btn btn-ghost btn-block hidden">取消背景</button>
-            <p id="bgHint" class="field-hint"></p>
-          </div>
-
-          <div class="shop-card" id="renameCard">
-            <div class="shop-card-head">
-              <span class="shop-icon">✏️</span>
-              <div>
-                <h3>改名卡</h3>
-                <p class="shop-sub">改一次名字，2000 轮冷却<br />
-                  <b class="perk">买完立刻生效</b>
-                </p>
-              </div>
-              <span class="shop-price">$1,000,000</span>
-            </div>
-            <label class="field rename-field">
-              <span class="rename-label">新名字<i id="renameCount" class="rename-count">0/12</i></span>
-              <input id="renameInput" class="rename-input" type="text" maxlength="12"
-                placeholder="2~12 个字，取个响亮的名号" autocomplete="off" spellcheck="false" />
-            </label>
-            <button id="renameBuy" class="btn btn-primary btn-block">改名 · $1,000,000</button>
-            <p id="renameHint" class="field-hint"></p>
-          </div>
-
-          <div class="shop-card" id="autoDcaCard">
-            <div class="shop-card-head">
-              <span class="shop-icon">📈</span>
-              <div>
-                <h3>自动定投<span id="autoDcaOwned" class="theme-owned hidden">已启用</span></h3>
-                <p class="shop-sub">打工钱袋一满，就自动挂单买入灯证指数<br />
-                  <b class="perk">挂单价 = 现价 +3%，下一轮必成交；押金按挂单价冻结，成交后余款自动退回现金</b><br />
-                  <b class="perk">离线也生效，随时可以暂停</b>
-                </p>
-              </div>
-              <span class="shop-price" id="autoDcaPrice">$5,000,000</span>
-            </div>
-            <p id="autoDcaHint" class="field-hint"></p>
-            <button id="autoDcaBuy" class="btn btn-primary btn-block">购买</button>
-            <button id="autoDcaToggle" class="btn btn-ghost btn-block hidden">暂停定投</button>
           </div>
 
           <div class="shop-card theme-card" data-theme-code="probe">
@@ -698,10 +535,176 @@
             <button class="btn btn-primary btn-block theme-btn" data-theme-code="night">购买</button>
           </div>
         </div>
+      </div>
 
-        <!-- ===== 3 级商店 ===== -->
-        <div class="shop-grid" data-tier="3">
-          <div class="shop-card">
+      <div class="shop-panel hidden" data-shop-panel="item">
+        <div class="shop-panel-head"><b>道具</b><span>消耗品与功能，一次买断或按次收费</span></div>
+        <div class="shop-grid">
+          <div class="shop-card" data-shop-item="fakeNews" id="fakeNewsCard">
+            <div class="shop-card-head">
+              <span class="shop-icon">📰</span>
+              <div>
+                <h3>假新闻</h3>
+                <p class="shop-sub">编一条消息，让它像真新闻一样出现在快讯里</p>
+              </div>
+              <span class="shop-price" id="fakeNewsPrice">$500,000</span>
+            </div>
+
+            <label class="field">
+              <span>新闻内容</span>
+              <textarea id="fakeNewsText" rows="2" maxlength="120"
+                placeholder="例如：小灯证券宣布收购月球地产，估值飙升"></textarea>
+            </label>
+
+            <div class="shop-dir">
+              <span>方向</span>
+              <button class="dir-btn active" data-dir="1">利好</button>
+              <button class="dir-btn" data-dir="-1">利空</button>
+            </div>
+
+            <div class="shop-target">
+              <span>影响标的 <i class="field-hint">不选 = 全市场</i></span>
+              <div class="chip-select" id="fakeNewsTargets"></div>
+            </div>
+
+            <p class="shop-warn">
+              花钱买一条挂名新闻：<b>一定会显示在快讯里</b>，但只有
+              <b id="fakeNewsChance">20%</b> 的概率真的影响市场。<br />
+              用完后冷却 <b id="fakeNewsCd">120</b> 轮。
+            </p>
+
+            <button id="fakeNewsBuy" class="btn btn-primary btn-block">购买并发布</button>
+          </div>
+
+          <div class="shop-card" data-shop-item="bodyguard" id="bodyguardCard">
+            <div class="shop-card-head">
+              <span class="shop-icon">🛡️</span>
+              <div>
+                <h3>保镖</h3>
+                <p class="shop-sub">雇一队人跟着你，期间谁也别想偷你的钱</p>
+              </div>
+              <span class="shop-price" id="bodyguardPrice">$50,000</span>
+            </div>
+
+            <div class="guard-status" id="guardStatus">当前没有保护</div>
+
+            <p class="shop-warn">
+              购买后 <b id="guardTicks">720</b> 轮（约 1 小时）内，<b>任何人偷你都偷不到</b>。<br />
+              保护期内重复购买会叠加时长。
+            </p>
+
+            <button id="bodyguardBuy" class="btn btn-primary btn-block">购买保镖</button>
+          </div>
+
+          <div class="shop-card" data-shop-item="channel" id="channelCard">
+            <div class="shop-card-head">
+              <span class="shop-icon">⚡</span>
+              <div>
+                <h3>交易专属通道</h3>
+                <p class="shop-sub">跑得更快，一单吃得更深</p>
+              </div>
+              <span class="shop-price" id="channelPrice">$300,000</span>
+            </div>
+
+            <div class="channel-status">
+              <div><span>当前单笔上限</span><b id="channelCapNow">$300,000</b></div>
+              <div><span>已购买</span><b id="channelLevel">0 级</b></div>
+              <div><span>买完提升到</span><b id="channelCapNext">$400,000</b></div>
+            </div>
+
+            <p class="shop-warn">
+              每购买一次，<b>单笔成交上限 +$100,000</b>，永久有效。<br />
+              价格每级 ×1.5 递增，买得越多越贵。
+            </p>
+
+            <button id="channelBuy" class="btn btn-primary btn-block">购买通道</button>
+          </div>
+
+          <div class="shop-card" data-shop-item="bg" id="bgCard">
+            <div class="shop-card-head">
+              <span class="shop-icon">🖼️</span>
+              <div>
+                <h3>自定义背景</h3>
+                <p class="shop-sub">给整个游戏换一张底图<br />
+                  <b class="perk">一次买断，永久可用</b>
+                </p>
+              </div>
+              <span class="shop-price">$5,000,000</span>
+            </div>
+            <input id="bgFile" type="file" accept="image/*" class="bg-file" />
+            <button id="bgBuy" class="btn btn-primary btn-block">解锁</button>
+            <button id="bgUpload" class="btn btn-ghost btn-block hidden">上传新背景</button>
+            <div id="bgOpacityRow" class="bg-opacity-row hidden">
+              <label class="bg-opacity-label" for="bgOpacity">
+                透明度 <b id="bgOpacityVal">0%</b>
+                <i class="bg-opacity-tip">0% = 原图，100% = 完全透明</i>
+              </label>
+              <input id="bgOpacity" type="range" min="0" max="100" step="1" value="0" />
+            </div>
+            <button id="bgClear" class="btn btn-ghost btn-block hidden">取消背景</button>
+            <p id="bgHint" class="field-hint"></p>
+          </div>
+
+          <div class="shop-card" data-shop-item="rename" id="renameCard">
+            <div class="shop-card-head">
+              <span class="shop-icon">✏️</span>
+              <div>
+                <h3>改名卡</h3>
+                <p class="shop-sub">改一次名字，2000 轮冷却<br />
+                  <b class="perk">买完立刻生效</b>
+                </p>
+              </div>
+              <span class="shop-price">$1,000,000</span>
+            </div>
+            <label class="field rename-field">
+              <span class="rename-label">新名字<i id="renameCount" class="rename-count">0/12</i></span>
+              <input id="renameInput" class="rename-input" type="text" maxlength="12"
+                placeholder="2~12 个字，取个响亮的名号" autocomplete="off" spellcheck="false" />
+            </label>
+            <button id="renameBuy" class="btn btn-primary btn-block">改名 · $1,000,000</button>
+            <p id="renameHint" class="field-hint"></p>
+          </div>
+
+          <div class="shop-card" data-shop-item="autoDca" id="autoDcaCard">
+            <div class="shop-card-head">
+              <span class="shop-icon">📈</span>
+              <div>
+                <h3>自动定投<span id="autoDcaOwned" class="theme-owned hidden">已启用</span></h3>
+                <p class="shop-sub">打工钱袋一满，就自动挂单买入灯证指数<br />
+                  <b class="perk">挂单价 = 现价 +3%，下一轮必成交；押金按挂单价冻结，成交后余款自动退回现金</b><br />
+                  <b class="perk">离线也生效，随时可以暂停</b>
+                </p>
+              </div>
+              <span class="shop-price" id="autoDcaPrice">$5,000,000</span>
+            </div>
+            <p id="autoDcaHint" class="field-hint"></p>
+            <button id="autoDcaBuy" class="btn btn-primary btn-block">购买</button>
+            <button id="autoDcaToggle" class="btn btn-ghost btn-block hidden">暂停定投</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="shop-panel hidden" data-shop-panel="other">
+        <div class="shop-panel-head"><b>其他</b><span>账号等级和后续商品</span></div>
+        <div class="shop-grid">
+          <div class="shop-card" data-shop-item="levelUp" id="levelCard">
+            <div class="shop-card-head">
+              <span class="shop-icon">🏅</span>
+              <div>
+                <h3>账号等级 <span id="levelNow" class="lv-badge">Lv.1</span></h3>
+                <p class="shop-sub">升级能解锁更高级的商店<br />
+                  <b class="perk">费用 = 你当前总资产的 <span id="levelRatio">60%</span></b><br />
+                  <b class="perk">这笔钱会存进丰川银行，总资产低于门槛时可以取出来</b><br />
+                  <b class="perk">每个等级提供 <span id="levelFillText">+1,000,000</span> 单笔成交上限</b>
+                </p>
+              </div>
+              <span class="shop-price" id="levelPrice">—</span>
+            </div>
+            <p id="levelHint" class="field-hint"></p>
+            <button id="levelUpBtn" class="btn btn-primary btn-block">升级</button>
+          </div>
+
+          <div class="shop-card" data-shop-item="comingSoon">
             <div class="shop-card-head">
               <span class="shop-icon">✨</span>
               <div>
@@ -714,7 +717,6 @@
             <button class="btn btn-ghost btn-block" disabled>暂未开放</button>
           </div>
         </div>
-
       </div>
     </div>
 

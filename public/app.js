@@ -40,7 +40,7 @@ const state = {
   shopDir: 1,
   fakeNewsTargets: [],
   tradeTab: 'order',
-  shopTier: 1,
+  shopCat: 'theme',
   tickBucket: null,
   tickKey: '',
   eqFitted: false,
@@ -208,7 +208,7 @@ async function refreshMarket() {
   syncBackgroundFromServer();
   renderTopbar();
   if ($('#view-shop')?.classList.contains('active')) {
-    renderShopTiers();
+    renderShopCats();
     renderLevelCard();
     renderRenameHint();
   }
@@ -760,62 +760,94 @@ function lvBadgeHtml(lv) {
   return `<span class="lv-badge" style="--lv:${c}">Lv.${n}</span>`;
 }
 
-/** 商店按等级显示：低等级看不到高等级商品 */
-
-/** 切换商店等级 */
-function switchShopTier(n) {
-  state.shopTier = Math.max(1, Math.min(3, Number(n) || 1));
-  renderShopTiers();
+/** 商店分三个分页面：主题 / 道具 / 其他 */
+function switchShopCat(cat) {
+  state.shopCat = ["theme", "item", "other"].includes(cat) ? cat : "theme";
+  renderShopCats();
 }
 
-/** 把三个商店网格都挂到 #view-shop 下（防止 HTML 嵌套导致隐藏时连带被藏） */
-function normalizeShopDom() {
-  const view = $('#view-shop');
-  if (!view) return;
-  document.querySelectorAll('.shop-grid[data-tier]').forEach((el) => {
-    if (el.parentElement !== view) view.appendChild(el);
-  });
-}
-
-function renderShopTiers() {
-  normalizeShopDom();
-  const lv = Math.max(1, Math.floor(Number(state.market?.me?.level) || 1));
-  const cur = Math.max(1, Math.min(3, Number(state.shopTier) || 1));
-
-  // 顶部三个等级按钮：没解锁的显示锁，并且不可点
-  document.querySelectorAll('[data-tier-tab]').forEach((b) => {
-    const need = Number(b.dataset.tierTab) || 1;
-    const locked = lv < need;
-    b.classList.toggle('locked', locked);
-    b.textContent = locked ? `🔒 Lv.${need} 商店` : `Lv.${need} 商店`;
-    b.classList.toggle('active', need === cur);
-  });
-
-  // 只显示当前这一档（display 用 inline style 兜底，避免被 .shop-grid 的 grid 覆盖）
-  document.querySelectorAll('.shop-grid[data-tier]').forEach((el) => {
-    const need = Number(el.dataset.tier) || 1;
-    const on = need === cur && lv >= need;
-    el.classList.toggle('hidden', !on);
-    el.style.display = on ? '' : 'none';
-  });
-
-  // 等级不够：显示提示，不显示任何商品
-  const lockBox = $('#shopLocked');
-  const lockText = $('#shopLockedText');
-  const need = cur;
-  if (lv < need) {
-    if (lockText) {
-      lockText.textContent = `Lv.${need} 商店需要账号等级 ${need}，你现在是 Lv.${lv}`;
-    }
-    lockBox?.classList.remove('hidden');
-  } else {
-    lockBox?.classList.add('hidden');
+/** 某个商品卡需要的等级：道具看 config.shopItems，主题看 config.themeNeedLevel */
+function cardNeedLevel(card) {
+  const cfg = state.market?.config || {};
+  const item = card.dataset.shopItem;
+  if (item) return Math.max(1, Number((cfg.shopItems || {})[item]) || 1);
+  const theme = card.dataset.themeCode;
+  if (theme && theme !== "default") {
+    return Math.max(1, Number((cfg.themeNeedLevel || {})[theme]) || 1);
   }
-  const badge = $('#lvBadge');
+  return 1;
+}
+
+/**
+ * 等级不够的商品：**照样显示**（方便预览以后能买什么），但置灰 + 锁标 + 所有交互元素禁用。
+ * 只负责「禁用」，不负责恢复——恢复交给 renderShop() 里原有的价格/冷却逻辑，
+ * 这样「等级不够」永远不会盖掉「现金不足 / 冷却中」这些真实状态。
+ */
+function applyShopGates() {
+  const lv = Math.max(1, Math.floor(Number(state.market?.me?.level) || 1));
+  document.querySelectorAll("#view-shop .shop-card").forEach((card) => {
+    const need = cardNeedLevel(card);
+    const locked = lv < need;
+    card.dataset.needLevel = String(need);
+    card.classList.toggle("tier-locked", locked);
+
+    let badge = card.querySelector(".shop-lock-badge");
+    if (locked) {
+      if (!badge) {
+        badge = document.createElement("span");
+        badge.className = "shop-lock-badge";
+        card.appendChild(badge);
+      }
+      badge.textContent = "🔒 Lv." + need + " 解锁";
+    } else if (badge) {
+      badge.remove();
+    }
+    if (!locked) return;
+    card.querySelectorAll("button, input, textarea, select").forEach((el) => {
+      el.disabled = true;
+    });
+  });
+}
+
+function renderShopCats() {
+  const cat = ["theme", "item", "other"].includes(state.shopCat) ? state.shopCat : "theme";
+  const lv = Math.max(1, Math.floor(Number(state.market?.me?.level) || 1));
+
+  document.querySelectorAll("[data-shop-cat]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.shopCat === cat);
+  });
+  document.querySelectorAll("[data-shop-panel]").forEach((el) => {
+    const on = el.dataset.shopPanel === cat;
+    el.classList.toggle("hidden", !on);
+    el.style.display = on ? "" : "none";
+  });
+
+  // 每个分类标签上写一句「本分类还有几个是锁着的」
+  document.querySelectorAll("[data-shop-panel]").forEach((panel) => {
+    const cards = [...panel.querySelectorAll(".shop-card")];
+    const locked = cards.filter((c) => lv < cardNeedLevel(c)).length;
+    const btn = document.querySelector('[data-shop-cat="' + panel.dataset.shopPanel + '"]');
+    if (!btn) return;
+    let n = btn.querySelector("i.shop-cat-lock");
+    if (locked > 0) {
+      if (!n) {
+        n = document.createElement("i");
+        n.className = "shop-cat-lock";
+        btn.appendChild(n);
+      }
+      n.textContent = "🔒 " + locked;
+    } else if (n) {
+      n.remove();
+    }
+  });
+
+  applyShopGates();
+
+  const badge = $("#lvBadge");
   if (badge) {
     const c = LV_COLORS[Math.min(lv - 1, LV_COLORS.length - 1)];
-    badge.textContent = `Lv.${lv}`;
-    badge.style.setProperty('--lv', c);
+    badge.textContent = "Lv." + lv;
+    badge.style.setProperty("--lv", c);
   }
 }
 
@@ -873,7 +905,7 @@ async function levelUp() {
     const r = await api('/api/shop/level-up', { method: 'POST' });
     toast(`升级成功！现在是 Lv.${r.level}，${money0(r.cost)} 已存进银行`, 'ok');
     await refreshMarket();
-    renderShopTiers();
+    renderShopCats();
     renderLevelCard();
     if ($('#view-bank')?.classList.contains('active')) renderBank();
   } catch (e) {
@@ -1397,7 +1429,7 @@ function renderShop() {
 
   // ---- 主题 ----
   // 账号等级 / 分级商店
-  renderShopTiers();
+  renderShopCats();
   renderLevelCard();
   renderBgCard();
   renderRenameHint();
@@ -1492,6 +1524,10 @@ function renderShop() {
   $$('.dir-btn').forEach((b) => {
     b.classList.toggle('active', Number(b.dataset.dir) === state.shopDir);
   });
+
+  // 最后再套一次等级锁：保证「等级不够」压过前面那些价格/冷却文案，
+  // 且只禁用不启用，玩家升级后由上面各种 render 逻辑正常点亮
+  applyShopGates();
 }
 
 async function buyBodyguard() {
@@ -4526,8 +4562,8 @@ function bind() {
     $(sel)?.addEventListener('input', () => { state.tpslEdited = true; });
   });
   $('#reportBtn')?.addEventListener('click', toggleReportPanel);
-  document.querySelectorAll('[data-tier-tab]').forEach((b) => {
-    b.addEventListener('click', () => switchShopTier(b.dataset.tierTab));
+  document.querySelectorAll('[data-shop-cat]').forEach((b) => {
+    b.addEventListener('click', () => switchShopCat(b.dataset.shopCat));
   });
   $('#levelUpBtn')?.addEventListener('click', levelUp);
   $('#bgBuy')?.addEventListener('click', buyBg);

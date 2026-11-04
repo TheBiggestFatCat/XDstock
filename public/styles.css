@@ -3081,34 +3081,63 @@ body[data-theme="bear"] .brand-logo {
 }
 
 /* 商城等级切换 */
-.shop-tiers {
-  display: flex; gap: 8px; margin: 0 0 16px;
-  flex-wrap: wrap;
+/* 商店分类：主题 / 道具 / 其他 */
+.shop-cats {
+  display: flex; gap: 8px; margin: 0 0 16px; flex-wrap: wrap;
 }
-.shop-tier-btn {
-  padding: 8px 16px; border-radius: 10px; cursor: pointer;
+.shop-cat-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 18px; border-radius: 10px; cursor: pointer;
   border: 1px solid var(--line); background: var(--card);
-  color: var(--ink-2); font-size: 13px; font-weight: 600;
+  color: var(--ink-2); font-size: 13.5px; font-weight: 600;
   transition: all .15s;
 }
-.shop-tier-btn:hover { background: var(--soft-2); }
-.shop-tier-btn.active {
+.shop-cat-btn:hover { background: var(--soft-2); }
+.shop-cat-btn.active {
   background: var(--accent); border-color: var(--accent);
-  color: #fff; box-shadow: 0 4px 12px rgba(20,184,166,.25);
+  color: #fff; box-shadow: 0 4px 12px rgba(20, 184, 166, .25);
 }
-.shop-tier-btn.locked {
-  opacity: .55; cursor: not-allowed;
-  background: var(--soft-2); color: var(--ink-3);
+.shop-cat-btn .shop-cat-lock {
+  font-style: normal; font-size: 11px; font-weight: 700;
+  padding: 1px 6px; border-radius: 6px;
+  background: rgba(0, 0, 0, .08); color: inherit; opacity: .8;
 }
+.shop-cat-btn.active .shop-cat-lock { background: rgba(255, 255, 255, .22); }
 
-/* 未解锁提示 */
-.shop-locked {
-  display: flex; flex-direction: column; align-items: center; gap: 10px;
-  padding: 48px 20px; margin-bottom: 16px;
-  background: var(--card); border: 1px dashed var(--line); border-radius: var(--r);
+/* 每个分页的说明条 */
+.shop-panel-head {
+  display: flex; align-items: baseline; gap: 10px;
+  margin: 0 2px 10px; font-size: 12.5px; color: var(--ink-3);
 }
-.shop-locked .lock-icon { font-size: 34px; }
-.shop-locked p { margin: 0; color: var(--ink-2); font-size: 13.5px; }
+.shop-panel-head b { font-size: 14px; color: var(--ink); }
+
+/* 等级不够的商品：照样显示，但置灰 + 锁标（方便预览以后能买什么） */
+.shop-card.tier-locked {
+  position: relative;
+  opacity: .55;
+  filter: grayscale(.35);
+}
+.shop-card.tier-locked::after {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, .06) 0 8px, transparent 8px 16px);
+  pointer-events: none;
+}
+.shop-lock-badge {
+  position: absolute; top: 10px; right: 12px; z-index: 2;
+  padding: 3px 9px; border-radius: 8px;
+  font-size: 11px; font-weight: 700;
+  background: var(--ink); color: var(--card);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .18);
+}
+.shop-card.tier-locked button,
+.shop-card.tier-locked input,
+.shop-card.tier-locked textarea,
+.shop-card.tier-locked select {
+  cursor: not-allowed !important;
+}
+.shop-card.tier-locked button { pointer-events: none; }
 
 /* 标的管理：横向卡片 */
 .trait-form {

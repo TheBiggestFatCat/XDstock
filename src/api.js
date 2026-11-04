@@ -17,6 +17,47 @@ const THEMES = ['red', 'bear', 'dark', 'tycoon', 'hermit', 'probe', 'mind', 'nig
 /** 需要账号等级的主题（其余 Lv.1 就能买） */
 const THEME_NEED_LEVEL = { probe: 2, mind: 2, night: 2 };
 
+/**
+ * 商店里每个商品需要的账号等级。
+ *
+ * 这是**唯一一份**等级门槛配置：
+ *   - `marketPayload.config.shopItems` 会原样下发给前端 → 卡片上显示「Lv.N 解锁」并置灰
+ *   - 每个 `/api/shop/*` 接口进来先过 `shopGate()` → 前端绕过去也没用
+ * 主题的等级在 `THEME_NEED_LEVEL` 里另算（按主题 code 区分）。
+ */
+const SHOP_NEED_LEVEL = {
+  // 道具
+  fakeNews: 1,
+  bodyguard: 1,
+  channel: 1,
+  bg: 2,
+  rename: 2,
+  autoDca: 2,
+  // 其他
+  levelUp: 1,
+  comingSoon: 3
+};
+
+/** 商店商品的等级要求（至少 1 级） */
+export function shopNeedLevel(key) {
+  return Math.max(1, Number(SHOP_NEED_LEVEL[key]) || 1);
+}
+
+/**
+ * 等级不够就返回 { error, needLevel, level }，够了返回 null。
+ * 调用方：`const gate = shopGate(me, 'rename'); if (gate) return json(res, 403, gate);`
+ */
+export function shopGate(me, key) {
+  const need = shopNeedLevel(key);
+  const lv = Math.max(1, Math.floor(Number(me?.level) || 1));
+  if (lv >= need) return null;
+  return {
+    error: `这个商品要 Lv.${need} 才能买，你现在是 Lv.${lv}`,
+    needLevel: need,
+    level: lv
+  };
+}
+
 // 登录失败计数：同一 IP + 昵称 连错 5 次，锁 60 秒
 const loginFailures = new Map();
 const LOGIN_MAX_FAIL = 5;
@@ -449,6 +490,8 @@ function marketPayload(db, me) {
       nightEndHour: db.config.nightEndHour ?? 4,
       nightStealCooldown: db.config.nightStealCooldown ?? 5,
       themeNeedLevel: THEME_NEED_LEVEL,
+      // 道具/其他的等级门槛：前端照这个渲染「Lv.N 解锁」，服务端照这个拦
+      shopItems: SHOP_NEED_LEVEL,
       shopBgPrice: db.config.shopBgPrice ?? 5000000,
       shopRenamePrice: db.config.shopRenamePrice ?? 1000000,
       shopRenameCooldown: db.config.shopRenameCooldown ?? 2000,
@@ -1160,6 +1203,8 @@ export async function handleApi(ctx) {
 
   // ---------- 商城 ----------
   if (pathname === '/api/shop/fake-news' && method === 'POST') {
+    const gate = shopGate(me, 'fakeNews');
+    if (gate) return json(res, 403, gate);
     const price = Number(db.config.shopFakeNewsPrice ?? 100000);
     const chance = Math.max(0, Math.min(1, Number(db.config.shopFakeNewsChance ?? 0.2)));
     const cdTicks = Math.max(0, Number(db.config.shopFakeNewsCooldown ?? 120));
@@ -1256,9 +1301,8 @@ export async function handleApi(ctx) {
 
   // ---------- 自定义背景 ----------
   if (pathname === '/api/shop/bg' && method === 'POST') {
-    if (Math.max(1, Math.floor(Number(me.level) || 1)) < 2) {
-      return json(res, 403, { error: '需要 2 级商店' });
-    }
+    const gate = shopGate(me, 'bg');
+    if (gate) return json(res, 403, gate);
     if (me.bgUnlocked) return json(res, 200, { ok: true, already: true });
     const price = Number(db.config.shopBgPrice ?? 5000000);
     if (Number(me.cash) < price) {
@@ -1305,9 +1349,8 @@ export async function handleApi(ctx) {
 
   // ---------- 改名卡 ----------
   if (pathname === '/api/shop/rename' && method === 'POST') {
-    if (Math.max(1, Math.floor(Number(me.level) || 1)) < 2) {
-      return json(res, 403, { error: '需要 2 级商店' });
-    }
+    const gate = shopGate(me, 'rename');
+    if (gate) return json(res, 403, gate);
     const cd = Math.max(0, Number(db.config.shopRenameCooldown ?? 2000));
     const last = Number(me.renameReadyAt || 0);
     if (cd > 0 && last > db.tick) {
@@ -1329,6 +1372,8 @@ export async function handleApi(ctx) {
   }
 
   if (pathname === '/api/shop/channel' && method === 'POST') {
+    const gate = shopGate(me, 'channel');
+    if (gate) return json(res, 403, gate);
     const basePrice = Math.max(1, Number(db.config.shopChannelBasePrice ?? 300000));
     const ratio = Math.max(1, Number(db.config.shopChannelRatio ?? 1.5));
     const step = Math.max(0, Number(db.config.shopChannelStep ?? 100000));
@@ -1423,10 +1468,9 @@ export async function handleApi(ctx) {
 
   // ---------- 自动定投（Lv.2 道具）----------
   if (pathname === '/api/shop/auto-dca' && method === 'POST') {
+    const gate = shopGate(me, 'autoDca');
+    if (gate) return json(res, 403, gate);
     const price = Number(db.config.shopAutoDcaPrice ?? 5000000);
-    if ((Math.floor(Number(me.level)) || 1) < 2) {
-      return json(res, 403, { error: '自动定投要 Lv.2 才能买' });
-    }
     if (me.autoDca) {
       return json(res, 200, {
         ok: true, already: true, price, cash: me.cash,
@@ -1457,6 +1501,8 @@ export async function handleApi(ctx) {
   }
 
   if (pathname === '/api/shop/bodyguard' && method === 'POST') {
+    const gate = shopGate(me, 'bodyguard');
+    if (gate) return json(res, 403, gate);
     const price = Number(db.config.shopBodyguardPrice ?? 50000);
     const ticks = Math.max(1, Math.round(Number(db.config.shopBodyguardTicks ?? 720)));
 
