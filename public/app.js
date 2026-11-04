@@ -665,7 +665,15 @@ function renderStockList() {
   const m = state.market;
   if (!m) return;
   const wrap = $('#stockList');
-  const list = Object.values(m.stocks);
+  // 排序：指数永远钉在最上面（保持后台给的顺序），其余按市值从大到小
+  const all = Object.values(m.stocks);
+  const idxOrder = all.filter((s) => s.isIndex);
+  const stocks = all
+    .filter((s) => !s.isIndex)
+    .map((s, i) => ({ s, i, cap: (Number(s.price) || 0) * (Number(s.shares) || 0) }))
+    .sort((a, b) => (b.cap - a.cap) || (a.i - b.i))   // 市值一样时保持原顺序，避免来回跳
+    .map((x) => x.s);
+  const list = [...idxOrder, ...stocks];
   wrap.innerHTML = '';
   for (const st of list) {
     const chg = listChange(st);
