@@ -16,7 +16,8 @@ QQ 群风格的模拟炒股网页游戏。Node.js 零依赖、单文件 `data/db
 node server.js                       # 本地起服务
 node --check src/api.js              # 语法检查（改完必跑）
 node --check public/app.js
-node tests/order-audit.mjs           # 下单/撮合/押金回归（改下单必跑，55 条断言）
+node tests/order-audit.mjs           # 下单/撮合/押金回归（改下单必跑，62 条断言）
+node tests/shop-gate.mjs             # 商城等级门槛（改商城必跑，30 条断言）
 ```
 
 ## 铁律
@@ -84,7 +85,7 @@ public/styles.css  全部样式（主题变量 + 移动端媒体查询）
 - `playerImpactRef = 1000000`、`impactRefFreeCap = 100亿`
 - `levelBaseAsset = 1000万`、`levelGrowth = 2`、`levelUpRatio = 0.6`
 - `marketTradesRate = 3`、`sentimentRollTicks = 720`
-- 指数：DENG ≈ 2400（10 成分）、DENGS ≈ 1015（7 成分）
+- 指数：DENG ≈ 3000（9 成分，XJ 约 49% / MAMA 约 23%）、DENGS ≈ 1090（7 成分）
 
 ## 提交信息
 

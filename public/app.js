@@ -1295,8 +1295,12 @@ async function chooseTheme(code) {
 function renderShop() {
   const cfg = state.market?.config || {};
   const price = Number(cfg.shopFakeNewsPrice ?? 500000);
-  const chance = Number(cfg.shopFakeNewsChance ?? 0.2);
+  const chance = Math.max(0, Math.min(1, Number(cfg.shopFakeNewsChance ?? 0.2)));
   const cash = state.market?.me?.cash || 0;
+
+  // 顶部现金条：每个 tick 都会重画，和下面按钮上的「还差多少钱」永远对得上
+  const cashEl = $('#shopCash');
+  if (cashEl) cashEl.textContent = money0(cash);
 
   const pEl = $('#fakeNewsPrice');
   if (pEl) pEl.textContent = money0(price);
@@ -2857,6 +2861,8 @@ function onTick(d) {
   renderMind();
 
   if ($('#view-work').classList.contains('active')) renderWork();
+  // 商城每个 tick 重画一次：现金、还差多少钱、冷却、保镖剩余时间都在这儿算，
+  // 所以停在商城页时不刷新也能看到数字跟着变（切页面时 switchView 也会补一次）
   if ($('#view-shop').classList.contains('active')) renderShop();
   if ($('#view-bank').classList.contains('active')) renderBank();
   if (state.tradeTab === 'log' && $('#logPane') && !$('#logPane').classList.contains('hidden')) {
