@@ -365,7 +365,7 @@ function renderDividendLine(st) {
     + '</span>';
 }
 
-/** 情绪读心：当前标的的散户情绪（只有 mind 主题看得到） */
+/** 情绪读心：一条双向情绪条（中线 0，左绿=看空，右红=看多），不显示任何文字 */
 function renderMind() {
   const el = $('#mindBar');
   if (!el) return;
@@ -376,19 +376,14 @@ function renderMind() {
     el.innerHTML = '';
     return;
   }
-  const s = st.sent;
-  const v = Number(s.v) || 0;
-  const drift = Math.max(0, Math.min(1, Number(s.drift) || 0));
-  const every = Math.max(1, Number(s.every) || 12);
-  const word = v > 0.6 ? '狂热追涨' : v > 0.2 ? '偏多' : v > -0.2 ? '观望' : v > -0.6 ? '偏空' : '恐慌抛售';
-  const cls = v > 0.05 ? 'up' : v < -0.05 ? 'down' : 'flat';
-  const dir = drift > 0
-    ? `每 ${every} 轮按 v 推一次`
-    : '方向分量为 0，只影响波动';
+  const v = Math.max(-1, Math.min(1, Number(st.sent.v) || 0));
+  const width = (Math.abs(v) * 50).toFixed(2);
+  const side = v >= 0 ? 'up' : 'down';
   el.classList.remove('hidden');
-  el.innerHTML = `🧠 散户情绪 <b class="${cls}">${v >= 0 ? '+' : ''}${v.toFixed(2)}</b>`
-    + `<span class="mind-sub">${word} · 方向分量 ${(drift * 100).toFixed(0)}%`
-    + ` · ${s.rollIn} 轮后换方向 · ${s.applyIn} 轮后推价（${dir}）</span>`;
+  el.innerHTML = '<div class="mind-track">'
+    + `<i class="mind-fill ${side}" style="${v >= 0 ? 'left:50%' : 'right:50%'};width:${width}%"></i>`
+    + '<span class="mind-mid"></span>'
+    + '</div>';
 }
 
 function renderReport() {
