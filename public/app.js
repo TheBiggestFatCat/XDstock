@@ -2012,18 +2012,21 @@ function isBuySide() {
   return side === 'long';
 }
 
-/** 挂单让利百分比（0~3），默认 0.5%，存在本地长期有效 */
+/** 让利百分比之上限：不设业务上限，只留结构兜底（100% 会让挂单价变成 0） */
+const SLIP_MAX = 99;
+
+/** 挂单让利百分比，默认 0.5%，存在本地长期有效 */
 function getSlipPct() {
   const v = Number(localStorage.getItem('xd_slip'));
-  if (Number.isFinite(v) && v >= 0 && v <= 3) return v;
+  if (Number.isFinite(v) && v >= 0) return Math.min(SLIP_MAX, v);
   return 0.5;
 }
 
-/** 保存让利比例（0~3%），立刻重算挂单价
+/** 保存让利比例，立刻重算挂单价
  *  normalize=false 时不回写输入框，避免打字过程中被改写 */
 function setSlipPct(v, normalize = true) {
   const raw = Number(v);
-  const n = Number.isFinite(raw) ? Math.max(0, Math.min(3, raw)) : getSlipPct();
+  const n = Number.isFinite(raw) ? Math.max(0, Math.min(SLIP_MAX, raw)) : getSlipPct();
   localStorage.setItem('xd_slip', String(n));
   const inp = $('#slipInput');
   if (normalize && inp && Number(inp.value) !== n) inp.value = String(n);
