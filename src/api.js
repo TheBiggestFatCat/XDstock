@@ -15,6 +15,8 @@ const TOKEN_TTL = 30 * 24 * 3600 * 1000;
 /** 所有可购买的主题 */
 const THEMES = ['red', 'bear', 'dark', 'tycoon', 'hermit', 'probe', 'mind', 'night'];
 /** 需要账号等级的主题（其余 Lv.1 就能买） */
+import { notifyList, unreadCount, markNotifyRead } from './notify.js';
+
 const THEME_NEED_LEVEL = { probe: 2, mind: 2, night: 2 };
 
 /**
@@ -179,6 +181,9 @@ function publicPlayer(p, db) {
       autoDca: !!o.autoDca
     })),
     income: (p.workEarned || 0) + (p.stealEarned || 0),
+    // 站内通知：最新 20 条 + 未读数（止盈止损触发/成交、强平、被偷都在这儿）
+    notices: notifyList(p, 20),
+    notifyUnread: unreadCount(p),
     createdAt: p.createdAt
   };
 }
@@ -1033,6 +1038,18 @@ export async function handleApi(ctx) {
   if (pathname === '/api/me' && method === 'GET') {
     saveDb();
     return json(res, 200, { player: publicPlayer(me, db) });
+  }
+
+  // 站内通知：标已读（不传 ids = 全部已读）
+  if (pathname === '/api/notify/read' && method === 'POST') {
+    const n = markNotifyRead(me, Array.isArray(body.ids) ? body.ids : null);
+    saveDb();
+    return json(res, 200, {
+      ok: true,
+      marked: n,
+      notices: notifyList(me, 20),
+      notifyUnread: unreadCount(me)
+    });
   }
 
   if (pathname === '/api/logout' && method === 'POST') {

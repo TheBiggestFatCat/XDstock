@@ -81,6 +81,24 @@
         <span class="cash-label">总资产</span>
         <span id="equityValue" class="cash-value">$0</span>
       </div>
+      <div class="notify-wrap">
+        <button id="notifyBtn" class="notify-btn" title="通知">
+          🔔<span id="notifyBadge" class="notify-badge hidden">0</span>
+        </button>
+        <div id="notifyPanel" class="notify-panel hidden">
+          <div class="notify-head">
+            <b>通知</b>
+            <button id="notifyReadAll" class="btn-link">全部已读</button>
+          </div>
+          <div id="notifyList" class="notify-list">
+            <p class="notify-empty">暂时没有通知</p>
+          </div>
+          <label class="notify-desk">
+            <input id="notifyDeskToggle" type="checkbox" />
+            <span>同时弹系统通知（需浏览器允许）</span>
+          </label>
+        </div>
+      </div>
       <button id="avatarBtn" class="avatar-btn" title="更换头像">
         <img id="avatarImg" alt="" />
         <span id="avatarFallback">🐟</span>

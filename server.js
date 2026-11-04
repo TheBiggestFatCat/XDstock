@@ -15,6 +15,7 @@ import { fetchAudJpy } from './src/fx.js';
 import { handleApi } from './src/api.js';
 import { NEWS_POOL } from './src/news.js';
 import { dividendPerShare, dividendPayout } from './src/fundamentals.js';
+import { pushNotify, notifyList, unreadCount } from './src/notify.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -301,7 +302,10 @@ function tickPayload(forPlayerId) {
         createdAt: o.createdAt,
         auto: o.auto || null,
         autoDca: !!o.autoDca
-      }))
+      })),
+      // 站内通知：每轮都带最新一份，前端据此亮铃铛、对新的弹提示
+      notices: notifyList(p, 20),
+      notifyUnread: unreadCount(p)
     };
   }
   return {
@@ -443,6 +447,39 @@ function loop() {
   }
 
   const closes = checkPositions(d);
+
+  // 止盈止损「成交」：撮合把自动单打完时推一条（带盈亏）
+  for (const e of orderEvents) {
+    if (!e || e.type !== 'fill' || !e.auto) continue;
+    const owner = d.players[e.playerId];
+    if (!owner) continue;
+    const st = d.stocks[e.code];
+    const name = e.name || st?.name || e.code;
+    const word = e.auto === 'tp' ? '止盈' : e.auto === 'sl' ? '止损' : '风控';
+    const pnl = Number(e.pnl) || 0;
+    pushNotify(owner, d, {
+      kind: 'tpslFill',
+      code: e.code,
+      text: `${name} ${word}成交 · ${e.qty} 股 @${Number(e.price || 0).toFixed(2)}，`
+        + `${pnl >= 0 ? '盈利' : '亏损'} $${Math.abs(pnl).toFixed(2)}`
+        + (e.rest > 0 ? `，还剩 ${e.rest} 股在平` : '')
+    });
+  }
+
+  // 止盈止损「触发」：给本人推一条站内通知（不依赖他是否在线看 toast）
+  for (const c of closes) {
+    if (!c || !c.ok || !c.autoOrder || c.qty) continue;
+    const owner = d.players[c.playerId];
+    if (!owner) continue;
+    const st = d.stocks[c.code];
+    const name = st?.name || c.code;
+    const word = c.autoOrder === 'tp' ? '止盈' : '止损';
+    pushNotify(owner, d, {
+      kind: 'tpsl',
+      code: c.code,
+      text: `${name} ${word}触发 · 现价 ${Number(c.price || st?.price || 0).toFixed(2)}，已自动挂出平仓单`
+    });
+  }
 
   // 打工：自动往钱袋里攒，在线翻倍，攒满就不再涨
   const workRate = Math.max(0, Number(d.config.workRatePerTick ?? 50));
@@ -596,6 +633,20 @@ function loop() {
   const byPlayer = new Map();
   for (const c of closes) {
     if (!c || !c.ok) continue;
+    // 真正平掉时再推一条（带盈亏），和「触发」分开两条，玩家一眼能看出挂单有没有成交
+    const owner = d.players[c.playerId];
+    if (owner && c.qty) {
+      const st = d.stocks[c.code];
+      const name = st?.name || c.code;
+      const word = c.reason === 'tp' ? '止盈' : c.reason === 'sl' ? '止损' : c.reason === 'liq' ? '强平' : '平仓';
+      const pnl = Number(c.pnl) || 0;
+      pushNotify(owner, d, {
+        kind: c.reason === 'tp' || c.reason === 'sl' ? 'tpslFill' : 'close',
+        code: c.code,
+        text: `${name} ${word}成交 · ${c.qty} 股 @${Number(c.price || 0).toFixed(2)}，`
+          + `${pnl >= 0 ? '盈利' : '亏损'} $${Math.abs(pnl).toFixed(2)}`
+      });
+    }
     if (!byPlayer.has(c.playerId)) byPlayer.set(c.playerId, []);
     byPlayer.get(c.playerId).push({
       code: c.code,

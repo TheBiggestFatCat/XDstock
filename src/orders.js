@@ -448,7 +448,9 @@ export function processOrders(db) {
       price: px,
       limit: order.limit,
       pnl: r.pnl,
-      rest: order.qty
+      rest: order.qty,
+      // tp / sl：这张是止盈止损自动挂出来的单，用于站内通知和流水标记
+      auto: order.auto || null
     });
   }
 
