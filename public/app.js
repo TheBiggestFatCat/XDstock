@@ -1324,6 +1324,9 @@ function renderShop() {
   // 情绪读心单独定价，其余主题统一走 shopThemePrice
   const mindPrice = Number(cfg.mindThemePrice ?? 5000000);
   const priceOfTheme = (code) => (code === 'mind' ? mindPrice : themePrice);
+  // 需要账号等级的主题（后端也会校验，这里只是提前提示）
+  const needLevelOf = (code) => Math.max(1, Number((cfg.themeNeedLevel || {})[code]) || 1);
+  const myLevel = Math.max(1, Math.floor(Number(state.market?.me?.level) || 1));
   // 主题卡片的价格跟着配置走，统一不带小数
   document.querySelectorAll('.theme-card').forEach((card) => {
     const el = card.querySelector('.shop-price');
@@ -1362,6 +1365,12 @@ function renderShop() {
       return;
     }
     const myPrice = priceOfTheme(code);
+    const needLv = needLevelOf(code);
+    if (myLevel < needLv) {
+      b.textContent = `需要 Lv.${needLv}`;
+      b.disabled = true;
+      return;
+    }
     const poor = cash < myPrice;
     b.textContent = poor ? `现金不足（差 ${money0(myPrice - cash)}）` : '购买';
     b.disabled = poor;

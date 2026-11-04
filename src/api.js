@@ -11,6 +11,11 @@ import { reportPayload, dividendPerShare, dividendPayout } from './fundamentals.
 
 const TOKEN_TTL = 30 * 24 * 3600 * 1000;
 
+/** 所有可购买的主题 */
+const THEMES = ['red', 'bear', 'dark', 'tycoon', 'hermit', 'probe', 'mind'];
+/** 需要账号等级的主题（其余 Lv.1 就能买） */
+const THEME_NEED_LEVEL = { probe: 2, mind: 2 };
+
 // 登录失败计数：同一 IP + 昵称 连错 5 次，锁 60 秒
 const loginFailures = new Map();
 const LOGIN_MAX_FAIL = 5;
@@ -387,6 +392,7 @@ function marketPayload(db, me) {
       shopBodyguardTicks: db.config.shopBodyguardTicks ?? 720,
       shopThemePrice: db.config.shopThemePrice ?? 2000000,
       mindThemePrice: db.config.mindThemePrice ?? 5000000,
+      themeNeedLevel: THEME_NEED_LEVEL,
       shopBgPrice: db.config.shopBgPrice ?? 5000000,
       shopRenamePrice: db.config.shopRenamePrice ?? 1000000,
       shopRenameCooldown: db.config.shopRenameCooldown ?? 2000,
@@ -1283,8 +1289,6 @@ export async function handleApi(ctx) {
 
   // ---------- 主题配色 ----------
   // probe（暗中调查）是 Lv.2 主题，购买时要检查账号等级
-  const THEMES = ['red', 'bear', 'dark', 'tycoon', 'hermit', 'probe', 'mind'];
-  const THEME_NEED_LEVEL = { probe: 2, mind: 2 };
   // 个别主题单独定价（其余走 shopThemePrice）
   const THEME_PRICE = { mind: Number(db.config.mindThemePrice ?? 5000000) };
 
