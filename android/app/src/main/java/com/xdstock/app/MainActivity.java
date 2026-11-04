@@ -1,6 +1,10 @@
 package com.xdstock.app;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.os.Build;
 import android.os.Bundle;
@@ -14,8 +18,11 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.ContextCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 /**
@@ -23,11 +30,15 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
  *
  * 就是一个全屏 WebView，加载线上网页。
  * 网页更新后 App 不用重新发版，改完服务器就生效。
+ *
+ * 另外多干一件事：网页登录后会把 token 交给原生层（XDShell.enableAlerts），
+ * 由 AlertService 在后台盯「止盈止损」，触发时发系统通知。
  */
 public class MainActivity extends AppCompatActivity {
 
     /** 线上地址：换域名或换服务器只改这一行 */
     private static final String HOME_URL = "http://47.103.83.218/";
+    private static final int REQ_NOTIFY = 0x51;
 
     private WebView webView;
     private SwipeRefreshLayout swipe;
@@ -65,8 +76,9 @@ public class MainActivity extends AppCompatActivity {
         webView.setBackgroundColor(0xFFF4FAF8);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
 
-        // 网页把自己的滚动位置报上来，下拉刷新靠它判断「是不是已经在顶部」
-        webView.addJavascriptInterface(new ScrollReporter(), "XDShell");
+        // 网页把自己的滚动位置报上来，下拉刷新靠它判断「是不是已经在顶部」；
+        // 顺手把登录态交给原生层，用来在后台盯止盈止损
+        webView.addJavascriptInterface(new ShellBridge(), "XDShell");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -117,9 +129,75 @@ public class MainActivity extends AppCompatActivity {
         } else {
             webView.restoreState(savedInstanceState);
         }
+
+        // 通知权限（Android 13+）和「上次开着盯盘」的续启动
+        ensureNotifyPermission(false);
+        maybeRestartAlerts();
     }
 
-    /** 把网页的滚动位置持续报给原生层 */
+    // ------------------------------------------------------------ 通知 / 盯盘
+
+    /** Android 13+ 要动态申请通知权限；用户点了「允许」才真正能看到提醒 */
+    private void ensureNotifyPermission(boolean ask) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
+        boolean granted = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED;
+        if (granted || !ask) return;
+        requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, REQ_NOTIFY);
+    }
+
+    private boolean canNotify() {
+        if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) return false;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            return ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    == PackageManager.PERMISSION_GRANTED;
+        }
+        return true;
+    }
+
+    /** 上次登录过、且开着盯盘，就接着盯 */
+    private void maybeRestartAlerts() {
+        SharedPreferences sp = getSharedPreferences("xd_shell", MODE_PRIVATE);
+        if (!sp.getBoolean("alerts_on", false)) return;
+        if (sp.getString("token", "").isEmpty()) return;
+        if (!canNotify()) return;
+        startAlertService();
+    }
+
+    private void startAlertService() {
+        try {
+            Intent i = new Intent(this, AlertService.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(i);
+            } else {
+                startService(i);
+            }
+        } catch (Exception ignored) {
+            // 后台启动被系统拦了，下次进前台再试
+        }
+    }
+
+    private void stopAlertService() {
+        try {
+            Intent i = new Intent(this, AlertService.class);
+            i.putExtra("stop", true);
+            startService(i);
+            stopService(new Intent(this, AlertService.class));
+        } catch (Exception ignored) { /* ignore */ }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode != REQ_NOTIFY) return;
+        boolean ok = results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED;
+        Toast.makeText(this, ok ? "已开启止盈止损通知" : "没给通知权限，触发提醒会看不到", Toast.LENGTH_SHORT).show();
+        if (ok) startAlertService();
+    }
+
+    // ------------------------------------------------------------ JS 桥
+
+    /** 网页的滚动位置持续报给原生层 */
     private void installScrollReporter(WebView view) {
         String js = "(function(){"
                 + "if(window.__xdShellOn)return;window.__xdShellOn=1;"
@@ -137,10 +215,43 @@ public class MainActivity extends AppCompatActivity {
         view.evaluateJavascript(js, null);
     }
 
-    private class ScrollReporter {
+    private class ShellBridge {
+
         @JavascriptInterface
         public void reportScroll(int y) {
             pageScrollY = y;
+        }
+
+        /**
+         * 网页登录后调这个：把 token 和服务器地址交过来，原生层开始盯止盈止损。
+         * 同一个 token 重复调用是幂等的。
+         */
+        @JavascriptInterface
+        public void enableAlerts(String token, String base) {
+            if (token == null || token.isEmpty()) return;
+            String b = (base == null || base.isEmpty()) ? HOME_URL : base;
+            if (b.endsWith("/")) b = b.substring(0, b.length() - 1);
+
+            getSharedPreferences("xd_shell", MODE_PRIVATE).edit()
+                    .putString("token", token)
+                    .putString("base", b)
+                    .putBoolean("alerts_on", true)
+                    .apply();
+
+            runOnUiThread(() -> {
+                ensureNotifyPermission(true);
+                if (canNotify()) startAlertService();
+            });
+        }
+
+        /** 退出登录时调：停掉盯盘 */
+        @JavascriptInterface
+        public void disableAlerts() {
+            getSharedPreferences("xd_shell", MODE_PRIVATE).edit()
+                    .putBoolean("alerts_on", false)
+                    .putString("token", "")
+                    .apply();
+            runOnUiThread(MainActivity.this::stopAlertService);
         }
     }
 

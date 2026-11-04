@@ -11,7 +11,28 @@
 - 断网时显示「重试」页
 - 开启 DOM Storage（保存登录状态）、允许 HTTP 明文访问
 
-## 二、改服务器地址
+## 二、止盈止损通知（v1.2 新增）
+
+通知由 **App 自己发**，网页端不弹铃铛：
+
+```
+网页登录 → XDShell.enableAlerts(token, origin)   （JS 桥）
+        → AlertService 前台服务，每 20 秒拉一次 /api/market
+        → 比对 me.notices 里有没有新的 tpsl / tpslFill / close
+        → 有就发一条系统通知（锁屏也能看到）
+```
+
+- **为什么用前台服务**：WebView 退到后台会被系统冻结，JS 定时器不跑，
+  靠网页自己收不到提醒；前台服务 = 常驻通知 + 后台线程轮询，稳
+- **状态栏常驻的那条**「小灯证券正在盯盘」就是它，属于正常现象
+- **权限**：Android 13+ 首次登录会弹「允许通知」，点了才有提醒
+- **登录态**：token 存在 `SharedPreferences("xd_shell")`，网页退出登录会调
+  `XDShell.disableAlerts()` 停掉服务
+- **只提醒三类**：止盈止损触发（`tpsl`）、止盈止损成交（`tpslFill`）、强平/下市（`close`）
+- 数据来源：`/api/market` 的 `me.notices`（服务端 `src/notify.js`，最多 30 条）
+- 改轮询频率：`AlertService.POLL_MS`（默认 20 秒）
+
+## 三、改服务器地址
 
 只改一个地方：
 
@@ -20,7 +41,7 @@
 private static final String HOME_URL = "http://47.103.83.218/";
 ```
 
-## 三、怎么打包成 APK
+## 四、怎么打包成 APK
 
 三种方式，**推荐用 GitHub 云打包**：不用装任何东西，浏览器里点两下就出 APK。
 
@@ -112,7 +133,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 未签名版本在 `app/build/outputs/apk/release/`，需要自己的 keystore 签名后才能安装。
 
-## 四、目录结构
+## 五、目录结构
 
 ```
 android/
@@ -132,7 +153,7 @@ android/
             └── mipmap-*/                  启动图标（由 logo 生成）
 ```
 
-## 五、常见问题
+## 七、常见问题
 
 **Q：为什么用 WebView 而不是原生重写？**
 A：你现在所有功能都在网页里，重写一遍等于做两个产品。WebView 方案上线即生效，改 UI 不用发版。

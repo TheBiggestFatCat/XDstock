@@ -48,11 +48,6 @@ const state = {
   eqLastTime: 0,
   eqLastValue: 0,
   stockTradesLoaded: false,
-  // 站内通知（铃铛）
-  notices: [],
-  notifySeen: new Set(),
-  notifyOpen: false,
-  notifyDesk: false,
   stream: null
 };
 
@@ -197,6 +192,7 @@ async function upgradePin() {
 
 async function enterGame() {
   showMain();
+  syncShellSession();          // 安卓壳：把 token 交给原生层，止盈止损通知由它发
   await refreshMarket();
   buildChart();
   selectStock(state.code);
@@ -212,7 +208,6 @@ async function refreshMarket() {
   syncThemeFromServer();
   syncBackgroundFromServer();
   renderTopbar();
-  applyNotices(d.me?.notices, { toastNew: false });
   if ($('#view-shop')?.classList.contains('active')) {
     renderShopCats();
     renderLevelCard();
@@ -228,162 +223,16 @@ async function refreshMarket() {
   if (d.config) $('#startingCashHint').textContent = money(d.config.startingCash || 100000);
 }
 
-// ---------------- 站内通知（止盈止损触发/成交、强平、被偷…） ----------------
-
-/** 把服务端下发的通知列表铺到界面上；toastNew = 只对「第一次见到」的弹提示 */
-function applyNotices(list, { toastNew = false } = {}) {
-  if (!Array.isArray(list)) return;
-  const seen = state.notifySeen;
-  const fresh = toastNew ? list.filter((n) => n && n.id && !seen.has(n.id)) : [];
-  for (const n of list) if (n && n.id) seen.add(n.id);
-
-  state.notices = list;
-  const unread = list.filter((n) => n && !n.read).length;
-  const badge = $('#notifyBadge');
-  if (badge) {
-    badge.textContent = unread > 9 ? '9+' : String(unread);
-    badge.classList.toggle('hidden', unread === 0);
-  }
-  // 页面刚打开时把已有的都记成「见过」，之后只对新增的响
-  if (!toastNew) {
-    renderNotifyList();
-    return;
-  }
-  if (!fresh.length) {
-    renderNotifyList();
-    return;
-  }
-  for (const n of fresh.slice(0, 3)) {
-    toast(n.text, n.kind === 'tpslFill' || n.kind === 'close' ? 'ok' : 'info');
-  }
-  desktopNotify(fresh);
-  ringBell();
-  renderNotifyList();
-}
-
-/** 铃铛摇一下，让人注意到 */
-function ringBell() {
-  const btn = $('#notifyBtn');
-  if (!btn) return;
-  btn.classList.remove('ring');
-  void btn.offsetWidth;      // 强制重排，动画才能重放
-  btn.classList.add('ring');
-  setTimeout(() => btn.classList.remove('ring'), 800);
-}
-
-/** 浏览器系统通知（用户手动打开才用） */
-function desktopNotify(fresh) {
-  if (!state.notifyDesk || typeof Notification === 'undefined') return;
-  if (Notification.permission !== 'granted') return;
-  for (const n of fresh.slice(0, 2)) {
-    try {
-      const el = new Notification('XDstock', { body: n.text, tag: n.id });
-      setTimeout(() => el.close(), 6000);
-    } catch { /* 某些浏览器会拦，忽略 */ }
-  }
-}
-
-function fmtNotifyTime(at) {
-  const d = new Date(Number(at) || Date.now());
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  return `${hh}:${mm}`;
-}
-
-function renderNotifyList() {
-  const box = $('#notifyList');
-  if (!box) return;
-  const list = Array.isArray(state.notices) ? state.notices : [];
-  if (!list.length) {
-    box.innerHTML = '<p class="notify-empty">暂时没有通知</p>';
-    return;
-  }
-  box.innerHTML = list.map((n) => (
-    `<div class="notify-item ${n.read ? 'read' : 'unread'}" data-notify-id="${n.id}">`
-    + '<span class="ni-dot"></span>'
-    + `<span class="ni-body">${escapeHtml(n.text)}<span class="ni-time">${fmtNotifyTime(n.at)}</span></span>`
-    + '</div>'
-  )).join('');
-}
-
-/** 标已读：不传 ids = 全部已读 */
-async function markNoticesRead(ids) {
+// ---------------- 安卓壳（XDShell）----------------
+// 通知由 App 自己发：网页只负责把登录态和服务器地址交给它。
+// 浏览器里没有 XDShell，这里一律是 no-op。
+function syncShellSession() {
   try {
-    const r = await api('/api/notify/read', {
-      method: 'POST',
-      body: JSON.stringify(ids && ids.length ? { ids } : {})
-    });
-    state.notices = r.notices || [];
-    if (state.market?.me) {
-      state.market.me.notices = r.notices || [];
-      state.market.me.notifyUnread = r.notifyUnread || 0;
-    }
-    const badge = $('#notifyBadge');
-    if (badge) {
-      const unread = Number(r.notifyUnread) || 0;
-      badge.textContent = unread > 9 ? '9+' : String(unread);
-      badge.classList.toggle('hidden', unread === 0);
-    }
-    renderNotifyList();
-  } catch (e) {
-    toast(e.message, 'err');
-  }
-}
-
-function toggleNotifyPanel(force) {
-  const panel = $('#notifyPanel');
-  if (!panel) return;
-  const open = force === undefined ? panel.classList.contains('hidden') : !!force;
-  panel.classList.toggle('hidden', !open);
-  state.notifyOpen = open;
-  if (open) {
-    // 打开时**先不清未读**，让人看清哪几条是新的
-    renderNotifyList();
-  } else if ((state.notices || []).some((n) => n && !n.read)) {
-    // 关掉面板才算「看过了」
-    markNoticesRead();
-  }
-}
-
-function bindNotifyUi() {
-  const btn = $('#notifyBtn');
-  btn?.addEventListener('click', (e) => { e.stopPropagation(); toggleNotifyPanel(); });
-  document.addEventListener('click', (e) => {
-    if (!state.notifyOpen) return;
-    if (e.target.closest?.('.notify-wrap')) return;
-    toggleNotifyPanel(false);
-  });
-  $('#notifyReadAll')?.addEventListener('click', (e) => { e.stopPropagation(); markNoticesRead(); });
-  $('#notifyList')?.addEventListener('click', (e) => {
-    const item = e.target.closest?.('[data-notify-id]');
-    if (!item) return;
-    markNoticesRead([item.dataset.notifyId]);
-  });
-  // 系统通知开关：勾上时才申请权限
-  const desk = $('#notifyDeskToggle');
-  state.notifyDesk = localStorage.getItem('xd_notify_desk') === '1';
-  if (desk) {
-    desk.checked = state.notifyDesk;
-    desk.addEventListener('change', async () => {
-      if (!desk.checked) {
-        state.notifyDesk = false;
-        localStorage.setItem('xd_notify_desk', '0');
-        return;
-      }
-      if (typeof Notification === 'undefined') {
-        toast('这个浏览器不支持系统通知', 'err');
-        desk.checked = false;
-        return;
-      }
-      const perm = Notification.permission === 'granted'
-        ? 'granted'
-        : await Notification.requestPermission();
-      state.notifyDesk = perm === 'granted';
-      desk.checked = state.notifyDesk;
-      localStorage.setItem('xd_notify_desk', state.notifyDesk ? '1' : '0');
-      toast(state.notifyDesk ? '已开启系统通知' : '浏览器拒绝了通知权限', state.notifyDesk ? 'ok' : 'err');
-    });
-  }
+    if (typeof XDShell === 'undefined' || !XDShell) return;
+    const token = localStorage.getItem('xd_token');
+    if (!token || !XDShell.enableAlerts) return;
+    XDShell.enableAlerts(token, location.origin || 'http://47.103.83.218');
+  } catch { /* 壳里没这个方法就算了 */ }
 }
 
 function renderClosed() {
@@ -3008,7 +2857,6 @@ function onTick(d) {
   if (d.me) {
     m.me = { ...m.me, ...d.me };
     state.me = m.me;
-    if (Array.isArray(d.me.notices)) applyNotices(d.me.notices, { toastNew: true });
   }
 
   renderTopbar();
@@ -4666,6 +4514,8 @@ async function handleAvatarFile(file) {  const img = new Image();
 // ---------------- 事件绑定 ----------------
 async function doLogout() {
   try { await api('/api/logout', { method: 'POST' }); } catch { /* ignore */ }
+  // 安卓壳：退出登录就停掉后台盯盘，别拿别人的 token 继续提醒
+  try { if (typeof XDShell !== 'undefined' && XDShell?.disableAlerts) XDShell.disableAlerts(); } catch { /* ignore */ }
   localStorage.removeItem('xd_token');
   state.token = '';
   if (state.stream) state.stream.close();
@@ -4680,7 +4530,7 @@ function bind() {
   $('#loginNick').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#loginPin').focus(); });
 
   $('#logoutBtn').addEventListener('click', doLogout);
-  bindNotifyUi();
+  syncShellSession();
   $('#profileLogout')?.addEventListener('click', doLogout);
   $('#profileAvatarBtn')?.addEventListener('click', () => $('#avatarInput').click());
 
