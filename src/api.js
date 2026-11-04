@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
-import { candlesFromSeries, changesFor, timeFromAxis, tickTimeAxis, pushNotice, noticeAlive } from './engine.js';
+import { candlesFromSeries, changesFor, timeFromAxis, tickTimeAxis, pushNotice, noticeAlive, sentimentView } from './engine.js';
 import { TIMEFRAMES } from './config.js';
 import { getBuild } from './build.js';
 import { playerEquity, positionPnl } from './trading.js';
@@ -251,6 +251,8 @@ function marketPayload(db, me) {
           })()
         }
         : null,
+      // 情绪读心：只有这个主题能看到每只票当前的情绪（v / 剩余轮数 / 方向分量）
+      sent: (me && me.theme === 'mind') ? sentimentView(st, db) : null,
       // 按各 K 线周期算涨跌幅（前端跟着当前周期显示）
       changes: changesFor(st.series, TIMEFRAMES),
       changePct: prev ? ((st.price - prev) / prev) * 100 : 0,
@@ -366,6 +368,7 @@ function marketPayload(db, me) {
       marketTradesRate: db.config.marketTradesRate ?? 3,
       sentimentEnabled: db.config.sentimentEnabled ?? 1,
       sentimentStrength: db.config.sentimentStrength ?? 0.004,
+      sentimentDrift: db.config.sentimentDrift ?? 0.6,
       sentimentTicks: db.config.sentimentTicks ?? 12,
       sentimentRollMin: db.config.sentimentRollMin ?? 480,
       sentimentRollMax: db.config.sentimentRollMax ?? 960,
@@ -383,6 +386,7 @@ function marketPayload(db, me) {
       shopBodyguardPrice: db.config.shopBodyguardPrice ?? 50000,
       shopBodyguardTicks: db.config.shopBodyguardTicks ?? 720,
       shopThemePrice: db.config.shopThemePrice ?? 2000000,
+      mindThemePrice: db.config.mindThemePrice ?? 5000000,
       shopBgPrice: db.config.shopBgPrice ?? 5000000,
       shopRenamePrice: db.config.shopRenamePrice ?? 1000000,
       shopRenameCooldown: db.config.shopRenameCooldown ?? 2000,
@@ -716,7 +720,7 @@ export async function handleApi(ctx) {
       'lotteryChance', 'lotteryLo', 'lotteryHi',
       'floorRatio', 'floorBoost',
       // 散户情绪：只在这个个股上覆盖全局参数（留空 = 跟随全局）
-      'sentStrength', 'sentTicks', 'sentRollMin', 'sentRollMax', 'sentRollTicks',
+      'sentStrength', 'sentTicks', 'sentRollMin', 'sentRollMax', 'sentRollTicks', 'sentDrift',
       // 实时汇率（留美外汇）
       'coef', 'lev', 'fxEnabled', 'refreshMs', 'track'
     ];
@@ -865,14 +869,14 @@ export async function handleApi(ctx) {
       'workRatePerTick', 'workOnlineMultiplier', 'workBankTicks', 'stealMin', 'stealMax', 'stealCapRatio', 'stealCooldownTicks',
       'equitySampleTicks', 'equityMaxPoints',
       'shopFakeNewsPrice', 'shopFakeNewsChance', 'shopFakeNewsCooldown',
-      'shopBodyguardPrice', 'shopBodyguardTicks', 'shopThemePrice',
+      'shopBodyguardPrice', 'shopBodyguardTicks', 'shopThemePrice', 'mindThemePrice',
       'shopChannelBasePrice', 'shopChannelRatio', 'shopChannelStep',
       'shopAutoDcaPrice', 'shopAutoDcaPremium',
       'bankPoorThreshold', 'bankWithdrawRateMin', 'bankWithdrawRateMax', 'bankWithdrawFloor',
       'stPrice', 'stDelistTicks',
       'marketTradesEnabled',
       'sentimentEnabled', 'sentimentStrength', 'sentimentTicks', 'sentimentRollTicks',
-      'sentimentRollMin', 'sentimentRollMax',
+      'sentimentRollMin', 'sentimentRollMax', 'sentimentDrift',
       'marketTradesRate', 'weatherLotteryChance', 'weatherLotteryLo', 'weatherLotteryHi', 'redBonusRate', 'redBonusMinTicks', 'bearBonusRate', 'bearBonusMinTicks',
       'fxEnabled', 'fxCoef', 'fxLeverage', 'fxRefreshMs', 'fxTrack',
       'impactCostCoef', 'impactCostMax', 'playerImpactTail',
@@ -1279,8 +1283,10 @@ export async function handleApi(ctx) {
 
   // ---------- 主题配色 ----------
   // probe（暗中调查）是 Lv.2 主题，购买时要检查账号等级
-  const THEMES = ['red', 'bear', 'dark', 'tycoon', 'hermit', 'probe'];
-  const THEME_NEED_LEVEL = { probe: 2 };
+  const THEMES = ['red', 'bear', 'dark', 'tycoon', 'hermit', 'probe', 'mind'];
+  const THEME_NEED_LEVEL = { probe: 2, mind: 2 };
+  // 个别主题单独定价（其余走 shopThemePrice）
+  const THEME_PRICE = { mind: Number(db.config.mindThemePrice ?? 5000000) };
 
   if (pathname === '/api/shop/theme' && method === 'POST') {
     const code = String(body.theme || '').trim();
@@ -1291,7 +1297,7 @@ export async function handleApi(ctx) {
       return json(res, 403, { error: `这个主题要 Lv.${needLv} 才能买` });
     }
 
-    const price = Number(db.config.shopThemePrice ?? 2000000);
+    const price = Number(THEME_PRICE[code] ?? db.config.shopThemePrice ?? 2000000);
     if (!Array.isArray(me.themes)) me.themes = [];
 
     // 主题切换冷却

@@ -76,6 +76,7 @@ export const DEFAULT_CONFIG = {
   shopBodyguardPrice: 50000,   // 保镖售价
   shopBodyguardTicks: 720,     // 保护时长（720 轮 = 1 小时）
   shopThemePrice: 2000000,     // 主题配色售价
+  mindThemePrice: 5000000,     // 「情绪读心」主题售价（Lv.2 商店）
   shopBgPrice: 5000000,        // 自定义背景（一次买断）
   shopRenamePrice: 1000000,    // 改名卡
   shopRenameCooldown: 2000,    // 改名冷却（轮）
@@ -118,6 +119,9 @@ export const DEFAULT_CONFIG = {
   sentimentEnabled: 1,
   sentimentStrength: 0.004,    // 情绪 1.0 时的基准偏移（0.4%）
   sentimentTicks: 12,          // 每多少 tick 施加一次
+  // 方向分量：swing = v × strength × (drift + (1-drift)×U(-1,1))
+  // drift = 0 是纯随机（旧行为，v 只决定抖动大小）；1 是纯方向（v 决定涨跌）
+  sentimentDrift: 0.6,
   // 重掷周期改成随机范围（轮）：每次重掷从 [min, max] 里重新抽一个间隔
   // 默认 480~960 轮 ≈ 40~80 分钟，均值仍是原来的 1 小时
   sentimentRollMin: 480,

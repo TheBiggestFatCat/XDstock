@@ -113,6 +113,25 @@ export function sentimentRollInterval(db, st) {
   return min + Math.floor(Math.random() * (max - min + 1));
 }
 
+/**
+ * 「情绪读心」主题用的情绪视图：当前情绪、还有多久换方向、多久推一次、方向分量。
+ * 注意：情绪是引擎内部状态，只有在 me.theme === 'mind' 时才下发。
+ */
+export function sentimentView(st, db) {
+  const s = (st && st.sentiment) || {};
+  const tick = Number(db && db.tick) || 0;
+  const cfg = (db && db.config) || {};
+  const t = (st && st.trait) || {};
+  return {
+    v: Number(s.v) || 0,
+    rollIn: Math.max(0, (Number(s.nextRoll) || 0) - tick),
+    applyIn: Math.max(0, (Number(s.nextApply) || 0) - tick),
+    every: Math.max(1, Math.floor(Number(t.sentTicks ?? cfg.sentimentTicks ?? 12))),
+    drift: Number(s.drift) || 0,
+    swing: Number(s.lastSwing) || 0
+  };
+}
+
 /** 单只股票走一步 */
 function stepStock(st, cfg, events, brokerDrift, fxData, db) {
   const t = st.trait || {};
@@ -195,9 +214,13 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
     const t2 = st.trait || {};
     const strength = Math.max(0, Number(t2.sentStrength ?? cfg.sentimentStrength ?? 0.004));
     const every = Math.max(1, Math.floor(Number(t2.sentTicks ?? cfg.sentimentTicks ?? 12)));
+    // 方向分量：0 = 纯随机（v 只决定抖多大），1 = 纯方向（v 决定涨还是跌）
+    // 个股 trait.sentDrift 可以单独覆盖全局 config.sentimentDrift
+    const drift = Math.max(0, Math.min(1, Number(t2.sentDrift ?? cfg.sentimentDrift ?? 0.6)));
     if (!st.sentiment || typeof st.sentiment !== 'object') {
       st.sentiment = { v: 0, nextRoll: 0, nextApply: 0 };
     }
+    st.sentiment.drift = drift;
     if (!(Number(st.sentiment.nextRoll) > 0) || db.tick >= Number(st.sentiment.nextRoll)) {
       // 每次重掷都重新抽一个周期，不再固定
       const rollEvery = sentimentRollInterval(db, st);
@@ -205,11 +228,12 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
         v: Math.random() * 2 - 1,
         nextRoll: db.tick + rollEvery,
         nextApply: db.tick,
-        rollEvery
+        rollEvery,
+        drift
       };
     }
     if (db.tick >= Number(st.sentiment.nextApply || 0)) {
-      const swing = st.sentiment.v * strength * (Math.random() * 2 - 1);
+      const swing = st.sentiment.v * strength * (drift + (1 - drift) * (Math.random() * 2 - 1));
       // 注意：p 在上面的 `st.price * Math.exp(logRet)` 就算好了，
       // 这里改 logRet 没用（历史 bug），必须直接作用在 p 上
       p *= Math.exp(swing);

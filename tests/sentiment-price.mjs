@@ -136,7 +136,9 @@ log('=== 5 作用间隔 sentimentTicks 生效 ===');
 log('');
 log('=== 6 情绪会累积成趋势，不是一次性 ===');
 {
-  const db = setup({ sentimentStrength: 0.02 });
+  // 这段只验证「累积」本身，所以把方向分量关掉（纯随机时代的老口径）；
+  // 方向分量的行为由 tests/sentiment-drift.mjs 单独覆盖
+  const db = setup({ sentimentStrength: 0.02, sentimentDrift: 0 });
   const st = db.stocks.TGW;
   st.trait.sentStrength = 0.02;
   st.sentiment = { v: 1, nextRoll: 1e12, nextApply: 0 };

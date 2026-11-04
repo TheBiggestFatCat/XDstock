@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getDb, saveDb, now, backupDb } from './src/store.js';
 import { getBuild } from './src/build.js';
-import { stepMarket, seedHistory, changesFor, noticeAlive } from './src/engine.js';
+import { stepMarket, seedHistory, changesFor, noticeAlive, sentimentView } from './src/engine.js';
 import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, positionPnl, logTrade } from './src/trading.js';
 import { processOrders, fillCapFor } from './src/orders.js';
@@ -213,6 +213,7 @@ function tickPayload(forPlayerId) {
   const d = getDb();
   const tp = forPlayerId ? d.players[forPlayerId] : null;
   const isTycoon = tp && tp.theme === 'tycoon';
+  const isMind = tp && tp.theme === 'mind';
   const stocks = {};
   for (const [code, st] of Object.entries(d.stocks)) {
     const prev = st.series.length > 1 ? st.series[st.series.length - 2] : st.price;
@@ -228,6 +229,10 @@ function tickPayload(forPlayerId) {
     // 金融大鳄：每轮都下发预览状态，否则前端只在刷新时才知道
     if (isTycoon && !st.isIndex) {
       stocks[code].preview = tycoonPreview(st, d);
+    }
+    // 情绪读心：只有这个主题能看到当前情绪
+    if (isMind && !st.isIndex) {
+      stocks[code].sent = sentimentView(st, d);
     }
   }
   let me = null;
@@ -604,12 +609,15 @@ function loop() {
     // activity 里有 joined（我参没参加），必须按人算，不能共用 base
     const personal = tickPayload(c.playerId);
     const payload = { ...base, me: personal.me };
-    // 金融大鳄：公共 payload 里没有 preview（那是按人算的），这里补一份
-    if (cp && cp.theme === 'tycoon' && personal.stocks) {
+    // 金融大鳄 / 情绪读心：公共 payload 里没有按人算的 preview / sent，这里补一份
+    if (cp && (cp.theme === 'tycoon' || cp.theme === 'mind') && personal.stocks) {
       const merged = {};
       for (const [code, s] of Object.entries(base.stocks)) {
         const p = personal.stocks[code];
-        merged[code] = p && p.preview !== undefined ? { ...s, preview: p.preview } : s;
+        let row = s;
+        if (p && p.preview !== undefined) row = { ...row, preview: p.preview };
+        if (p && p.sent !== undefined) row = { ...row, sent: p.sent };
+        merged[code] = row;
       }
       payload.stocks = merged;
     }

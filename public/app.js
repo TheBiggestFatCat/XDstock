@@ -365,6 +365,32 @@ function renderDividendLine(st) {
     + '</span>';
 }
 
+/** 情绪读心：当前标的的散户情绪（只有 mind 主题看得到） */
+function renderMind() {
+  const el = $('#mindBar');
+  if (!el) return;
+  const me = state.market?.me;
+  const st = state.market?.stocks?.[state.code];
+  if (!me || me.theme !== 'mind' || !st || st.isIndex || !st.sent) {
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+  const s = st.sent;
+  const v = Number(s.v) || 0;
+  const drift = Math.max(0, Math.min(1, Number(s.drift) || 0));
+  const every = Math.max(1, Number(s.every) || 12);
+  const word = v > 0.6 ? '狂热追涨' : v > 0.2 ? '偏多' : v > -0.2 ? '观望' : v > -0.6 ? '偏空' : '恐慌抛售';
+  const cls = v > 0.05 ? 'up' : v < -0.05 ? 'down' : 'flat';
+  const dir = drift > 0
+    ? `每 ${every} 轮按 v 推一次`
+    : '方向分量为 0，只影响波动';
+  el.classList.remove('hidden');
+  el.innerHTML = `🧠 散户情绪 <b class="${cls}">${v >= 0 ? '+' : ''}${v.toFixed(2)}</b>`
+    + `<span class="mind-sub">${word} · 方向分量 ${(drift * 100).toFixed(0)}%`
+    + ` · ${s.rollIn} 轮后换方向 · ${s.applyIn} 轮后推价（${dir}）</span>`;
+}
+
 function renderReport() {
   const st = state.market?.stocks?.[state.code];
   const panel = $('#reportPanel');
@@ -1065,6 +1091,10 @@ const THEME_CHART = {
     text: '#6b5644', grid: 'rgba(232,220,206,.8)', border: 'rgba(232,220,206,.95)',
     cross: 'rgba(139,94,60,.42)', crossLabel: '#8b5e3c'
   },
+  mind: {
+    text: '#7a4a76', grid: 'rgba(246,224,244,.8)', border: 'rgba(246,224,244,.95)',
+    cross: 'rgba(192,38,211,.4)', crossLabel: '#c026d3'
+  },
 };
 
 /** 把主题套到 body 上，并同步图表配色 */
@@ -1291,9 +1321,13 @@ function renderShop() {
   const ownedThemes = state.market?.me?.themes || [];
   const curTheme = state.theme || state.market?.me?.theme || 'default';
   const themePrice = Number(cfg.shopThemePrice ?? 2000000);
+  // 情绪读心单独定价，其余主题统一走 shopThemePrice
+  const mindPrice = Number(cfg.mindThemePrice ?? 5000000);
+  const priceOfTheme = (code) => (code === 'mind' ? mindPrice : themePrice);
   // 主题卡片的价格跟着配置走，统一不带小数
-  document.querySelectorAll('.theme-card .shop-price').forEach((el) => {
-    el.textContent = money0(themePrice);
+  document.querySelectorAll('.theme-card').forEach((card) => {
+    const el = card.querySelector('.shop-price');
+    if (el) el.textContent = money0(priceOfTheme(card.dataset.themeCode));
   });
   // 主题切换冷却
   const themeCd = Number(cfg.shopThemeCooldown ?? 100);
@@ -1327,8 +1361,9 @@ function renderShop() {
       b.disabled = themeLeft > 0;
       return;
     }
-    const poor = cash < themePrice;
-    b.textContent = poor ? `现金不足（差 ${money0(themePrice - cash)}）` : '购买';
+    const myPrice = priceOfTheme(code);
+    const poor = cash < myPrice;
+    b.textContent = poor ? `现金不足（差 ${money0(myPrice - cash)}）` : '购买';
     b.disabled = poor;
   });
   document.querySelectorAll('.theme-owned').forEach((el) => {
@@ -2017,6 +2052,7 @@ function selectStock(code) {
   renderStBanner(st);
   renderChartSub(st);
   renderReport();
+  renderMind();
   $('#chartCode').textContent = st.code;
   $('#chartIcon').src = st.icon || '';
   $('#chartPrice').textContent = st.price.toFixed(2);
@@ -2600,6 +2636,8 @@ function onTick(d) {
     if (s.preview !== undefined) m.stocks[code].preview = s.preview;
     // 每股股息含现价封顶，所以每轮都会变
     if (s.dps !== undefined) m.stocks[code].dps = s.dps;
+    // 情绪读心：只有这个主题的 payload 里才有 sent
+    if (s.sent !== undefined) m.stocks[code].sent = s.sent;
   }
   if (d.me) {
     m.me = { ...m.me, ...d.me };
@@ -2637,6 +2675,7 @@ function onTick(d) {
   if (curSt && curSt.st !== undefined) renderStBanner(curSt);
   if (curSt) renderChartSub(curSt);
   renderReport();
+  renderMind();
 
   if ($('#view-work').classList.contains('active')) renderWork();
   if ($('#view-shop').classList.contains('active')) renderShop();
@@ -3818,6 +3857,7 @@ async function loadAdmin() {
         ['sentimentEnabled', '开关(1=开 0=关)'],
         ['sentimentStrength', '基准偏移(0.004=0.4%)'],
         ['sentimentTicks', '每多少轮施加一次'],
+        ['sentimentDrift', '方向分量(0=纯随机 1=纯方向)'],
         ['sentimentRollMin', '重掷周期下限(轮)'],
         ['sentimentRollMax', '重掷周期上限(轮)']
       ]
@@ -3860,6 +3900,7 @@ async function loadAdmin() {
         ['shopBodyguardPrice', '保镖售价'],
         ['shopBodyguardTicks', '保镖时长(轮)'],
         ['shopThemePrice', '主题售价'],
+        ['mindThemePrice', '情绪读心售价'],
         ['shopChannelBasePrice', '通道首价'],
         ['shopChannelRatio', '通道涨价倍率'],
         ['shopChannelStep', '通道每级加成'],
@@ -3970,11 +4011,12 @@ const TRAIT_LABELS = {
   sentStrength: ['散户情绪强度', '情绪 1.0 时的基准偏移，0.004=0.4%'],
   sentTicks: ['情绪作用间隔(轮)', '每多少轮施加一次偏移，12=1分钟'],
   sentRollMin: ['情绪重掷周期下限(轮)', '每次重掷从「下限~上限」里随机抽一个周期，480=40分钟'],
-  sentRollMax: ['情绪重掷周期上限(轮)', '和下限一起决定随机区间，960=80分钟']
+  sentRollMax: ['情绪重掷周期上限(轮)', '和下限一起决定随机区间，960=80分钟'],
+  sentDrift: ['情绪方向分量', '0=纯随机（只决定抖多大），1=纯方向（情绪直接决定涨跌），留空跟随全局']
 };
 
 /** 这些个股参数是「可选覆盖」：留空就跟随全局参数 */
-const OPTIONAL_TRAITS = ['sentStrength', 'sentTicks', 'sentRollMin', 'sentRollMax'];
+const OPTIONAL_TRAITS = ['sentStrength', 'sentTicks', 'sentRollMin', 'sentRollMax', 'sentDrift'];
 
 function renderTraitForm(stocks) {
   const box = $('#traitForm');
@@ -3996,7 +4038,8 @@ function renderTraitForm(stocks) {
       sentStrength: cfg.sentimentStrength,
       sentTicks: cfg.sentimentTicks,
       sentRollMin: cfg.sentimentRollMin,
-      sentRollMax: cfg.sentimentRollMax
+      sentRollMax: cfg.sentimentRollMax,
+      sentDrift: cfg.sentimentDrift
     };
     const fields = keys.map((k) => {
       const [label, hint] = TRAIT_LABELS[k];
