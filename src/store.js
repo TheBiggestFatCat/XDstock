@@ -245,7 +245,9 @@ export function migrate(d) {
     // 合理价跟着财报走
     st.fair = Number(fairFromReport(st).toFixed(4));
 
-    // 老存档没有财报历史，按当前这一期的数字往前倒推几期，图表才有东西看
+    // 老存档没有财报历史，按当前这一期的数字往前倒推几期，图表才有东西看。
+    // 新上市的票（period 还没几期）不补：否则会编出一串「第 1 期」在前面、真的一期在最后，
+    // 图上看起来像期号倒着走（MCD 刚上架构时就踩过这个）
     if (!Array.isArray(st.reportHistory) || !st.reportHistory.length) {
       const f = st.fundamentals || {};
       const g = Number(f.growth) || 0;
@@ -254,17 +256,19 @@ export function migrate(d) {
       const eps = Number(f.eps) || 0;
       const period = Number(f.period) || 0;
       const hist = [];
-      for (let k = 5; k >= 1; k--) {
-        const back = Math.pow(1 + g, -k);
-        hist.push({
-          period: Math.max(1, period - k),
-          revenue: rev * back * (1 + (Math.random() - 0.5) * 0.04),
-          netProfit: np * back * (1 + (Math.random() - 0.5) * 0.06),
-          eps: eps * back,
-          growth: g * (1 + (Math.random() - 0.5) * 0.3),
-          margin: Number(f.margin) || 0,
-          backfill: true
-        });
+      if (period >= 6) {
+        for (let k = 5; k >= 1; k--) {
+          const back = Math.pow(1 + g, -k);
+          hist.push({
+            period: period - k,
+            revenue: rev * back * (1 + (Math.random() - 0.5) * 0.04),
+            netProfit: np * back * (1 + (Math.random() - 0.5) * 0.06),
+            eps: eps * back,
+            growth: g * (1 + (Math.random() - 0.5) * 0.3),
+            margin: Number(f.margin) || 0,
+            backfill: true
+          });
+        }
       }
       hist.push({
         period,
@@ -275,6 +279,9 @@ export function migrate(d) {
         margin: Number(f.margin) || 0
       });
       st.reportHistory = hist;
+    } else if ((Number(st.fundamentals?.period) || 0) < 6) {
+      // 新票如果存着一堆「倒推」出来的历史，清掉（真实期数还不够，编数据只会更乱）
+      st.reportHistory = st.reportHistory.filter((h) => !h.backfill);
     }
     if (typeof st.nextReportTick !== 'number') st.nextReportTick = 0;
   }

@@ -39,6 +39,12 @@ const BPS_RETAIN = [0.15, 0.3];
 const BOOK_SHRINK = 0.003;
 /** 营收天花板：最多长到基准营收的多少倍（会无限接近但不超过） */
 const DEFAULT_GROWTH_CEILING = 8;
+/**
+ * 体质向「行业性格」回归的速度：每期把偏离收掉 15%。
+ * 0.15 → 半衰期约 4.3 期，一次衰退大概 15 期就散尽，
+ * 不会让公司一路缩到营收地板后还年复一年报「同比 -35%」（营收其实没动）。
+ */
+const BIAS_REVERT = 0.15;
 
 /**
  * 掷一次天气（-1 ~ 1），农业股共用。
@@ -150,12 +156,25 @@ export function genNextReport(st, ctx = {}) {
   const trait = st.trait?.id;
 
   // 天生体质：决定这家公司长期是扩张还是萎缩
+  // 注意：体质每期会向「行业性格」回归一点，不然一次衰退会让公司永久 -30%/期螺旋下跌，
+  // 一路砸到营收地板后财报就变成「营收不动、同比却 -35%」的假数字
+  const baseBias = Number(TRAIT_BIAS[trait] ?? 0);
   let bias = Number.isFinite(Number(f.bias))
     ? Number(f.bias)
-    : ((TRAIT_BIAS[trait] ?? 0) + (Math.random() - 0.5) * 0.04);
+    : (baseBias + (Math.random() - 0.5) * 0.04);
+  bias = baseBias + (bias - baseBias) * (1 - BIAS_REVERT);
   // 12% 概率遇到景气/衰退周期，体质发生偏移
   if (Math.random() < 0.12) {
     bias = clamp(bias + rand(-0.05, 0.05), -0.16, 0.16);
+  }
+
+  // 低基数修复：营收跌破基准的一半，公司会自己去找新的增长点（越惨修得越猛）。
+  // 没有这一条，先天偏负的票（老钱/梗股）会一路缩到营收地板后就永远躺着，
+  // 全市场最后全趴在地板上 —— 有了它才有「衰退 → 触底 → 复苏」的周期。
+  const baseRevRef = Number(f.baseRevenue) || Number(f.revenue) || 1;
+  const multNow = Math.max(0, (Number(f.revenue) || baseRevRef) / baseRevRef);
+  if (multNow < 0.5) {
+    bias += 0.08 * ((0.5 - multNow) / 0.5);
   }
 
   // 增速：向行业中枢回归（50% 上期 + 50% 中枢）+ 天生体质
@@ -241,20 +260,34 @@ export function genNextReport(st, ctx = {}) {
   // 营收 = 存量业务（70%）+ 与业务量挂钩的部分（30%）
   // 券商看全市场成交量，外汇看汇率波动幅度：
   // 这样数字本身就体现"最近行情怎么样"，而不只是影响增速
-  let revenue = (Number(f.revenue) || 1) * (1 + growth) * 0.7;
-  if (trait === 'broker') {
-    const vf = clamp(Number(ctx.volumeFactor) || 1, 0.15, 5);
-    revenue += baseRev * 0.3 * vf;
-  } else if (trait === 'fx') {
-    const ff = clamp(Number(ctx.fxFactor) || 1, 0.15, 5);
-    revenue += baseRev * 0.3 * ff;
-  } else {
-    // 其他行业没有业务量联动，按原比例补回来
-    revenue += (Number(f.revenue) || 1) * (1 + growth) * 0.3;
-  }
+  const prevRev = Math.max(1, Number(f.revenue) || baseRev);
+  const hasVolumeLink = trait === 'broker' || trait === 'fx';
+  const volumeFactor = trait === 'broker'
+    ? clamp(Number(ctx.volumeFactor) || 1, 0.15, 5)
+    : trait === 'fx'
+      ? clamp(Number(ctx.fxFactor) || 1, 0.15, 5)
+      : 1;
+  // 业务量按中性 1 算时该有多少营收 → 用来定义「市场预期」
+  const revenueAt = (g, volume) => (hasVolumeLink
+    ? prevRev * (1 + g) * 0.7 + baseRev * 0.3 * volume
+    : prevRev * (1 + g));
+
+  let revenue = revenueAt(growth, volumeFactor);
 
   // 跌到基准的 25% 就不再往下掉，避免公司直接归零；涨到天花板也上不去
-  revenue = Math.min(Math.max(revenue, baseRev * 0.25), revCeil);
+  const revFloor = baseRev * 0.25;
+  const clampedRev = Math.min(Math.max(revenue, revFloor), revCeil);
+  const bounded = Math.abs(clampedRev - revenue) > 1e-9;
+  revenue = clampedRev;
+
+  // 财报上那个「同比增速」必须是营收真实变化：
+  // 以前被地板/天花板夹住时还沿用夹之前的数，于是出现「营收一动不动、同比 -35%」的假财报
+  const realizedGrowth = revenue / prevRev - 1;
+  growth = clamp(realizedGrowth, -0.99, 2);
+  // 被夹住的时候不制造「假超预期」，否则每期都会白送一次财报冲击
+  const finalExpected = bounded
+    ? clamp(realizedGrowth, -0.35, 0.9)
+    : expectedGrowth;
 
   let netProfit = revenue * margin;
   let tradePnl = 0;
@@ -299,7 +332,7 @@ export function genNextReport(st, ctx = {}) {
     dividendRate: clamp((Number(f.dividendRate) || 0.25) + rand(-0.05, 0.05), 0, 0.6),
     reportAt: Date.now(),
     bias,
-    expectedGrowth
+    expectedGrowth: finalExpected
   };
 }
 
