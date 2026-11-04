@@ -4015,6 +4015,7 @@ async function loadAdmin() {
         ['shopBodyguardTicks', '保镖时长(轮)'],
         ['shopThemePrice', '主题售价'],
         ['mindThemePrice', '情绪读心售价'],
+        ['mindFakeChance', '读心假值概率(0~1)'],
         ['shopChannelBasePrice', '通道首价'],
         ['shopChannelRatio', '通道涨价倍率'],
         ['shopChannelStep', '通道每级加成'],

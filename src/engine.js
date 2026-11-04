@@ -123,7 +123,8 @@ export function sentimentView(st, db) {
   const cfg = (db && db.config) || {};
   const t = (st && st.trait) || {};
   return {
-    v: Number(s.v) || 0,
+    // 看到的可能是假值（「情绪读心」的限制），没记录过就退回真值
+    v: Number(Number.isFinite(Number(s.viewV)) ? s.viewV : s.v) || 0,
     rollIn: Math.max(0, (Number(s.nextRoll) || 0) - tick),
     applyIn: Math.max(0, (Number(s.nextApply) || 0) - tick),
     every: Math.max(1, Math.floor(Number(t.sentTicks ?? cfg.sentimentTicks ?? 12))),
@@ -158,6 +159,8 @@ export function liveIndexWeights(db, indexKey = 'index') {
 
 /** 情绪值「顶端难度」的默认值（0 = 均匀分布） */
 const DEFAULT_SENT_EDGE = 3;
+/** 「情绪读心」看到假值的概率（默认 50%） */
+const DEFAULT_MIND_FAKE = 0.5;
 
 /**
  * 掷一个情绪值 v ∈ [-1, 1]。
@@ -177,6 +180,19 @@ export function rollSentimentV(hard = DEFAULT_SENT_EDGE) {
   const t = 1 - Math.abs(r);
   const mapped = 1 - Math.log(1 + k * t) / Math.log(1 + k);
   return (r < 0 ? -1 : 1) * Math.max(0, Math.min(1, mapped));
+}
+
+/**
+ * 「情绪读心」看到的值：有 `chance` 概率给一个**假的**（按同一套公式重抽一个），
+ * 否则给真值。假值一旦定了就撑到下一次重掷，不会每轮跳来跳去。
+ *
+ * 返回 { viewV, fake }，真正的价格推力永远用的是真的 `st.sentiment.v`。
+ */
+export function rollMindView(realV, edge, chance) {
+  const p = Math.max(0, Math.min(1, Number(chance)));
+  if (!(p > 0)) return { viewV: realV, fake: false };
+  if (Math.random() >= p) return { viewV: realV, fake: false };
+  return { viewV: rollSentimentV(edge), fake: true };
 }
 
 /** 单只股票走一步 */
@@ -273,8 +289,13 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
     if (!(Number(st.sentiment.nextRoll) > 0) || db.tick >= Number(st.sentiment.nextRoll)) {
       // 每次重掷都重新抽一个周期，不再固定
       const rollEvery = sentimentRollInterval(db, st);
+      const realV = rollSentimentV(edge);
+      // 「情绪读心」有概率看到假值：换一个同分布的值，撑到下一次重掷
+      const mind = rollMindView(realV, edge, Number(cfg.mindFakeChance ?? DEFAULT_MIND_FAKE));
       st.sentiment = {
-        v: rollSentimentV(edge),
+        v: realV,
+        viewV: mind.viewV,
+        viewFake: mind.fake,
         nextRoll: db.tick + rollEvery,
         nextApply: db.tick,
         rollEvery,

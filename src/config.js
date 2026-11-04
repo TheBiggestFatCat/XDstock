@@ -81,6 +81,8 @@ export const DEFAULT_CONFIG = {
   shopBodyguardTicks: 720,     // 保护时长（720 轮 = 1 小时）
   shopThemePrice: 2000000,     // 主题配色售价
   mindThemePrice: 5000000,     // 「情绪读心」主题售价（Lv.2 商店）
+  // 「情绪读心」看到假值的概率：0 = 永远准，0.5 = 一半是假的，1 = 全假
+  mindFakeChance: 0.5,
   shopBgPrice: 5000000,        // 自定义背景（一次买断）
   shopRenamePrice: 1000000,    // 改名卡
   shopRenameCooldown: 2000,    // 改名冷却（轮）
