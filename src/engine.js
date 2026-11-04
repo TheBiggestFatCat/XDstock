@@ -325,6 +325,18 @@ function publishEvent(e) {
 }
 
 /** 推进一轮 */
+/**
+ * 彩票倍数：涨则 ×(1+p)，跌则 ×1/(1+p) —— 两者互为倒数。
+ *
+ * 以前是「涨 ×(1+p) / 跌 ×(1-p)」，看着 50/50，但百分比对称会让对数收益期望
+ * 恒为负（½ln(1-p²)），于是这只票不管财报多好都会长期阴跌（-1.5%/小时）。
+ * 改成互为倒数后，一次涨 +p 再跌 -p 正好回到原点，期望零漂移。
+ */
+export function lotteryFactor(up, pct) {
+  const p = Math.max(0, Math.min(1, Number(pct) || 0));
+  return up ? 1 + p : 1 / (1 + p);
+}
+
 export function stepMarket(db) {
   const cfg = db.config;
 
@@ -396,13 +408,16 @@ export function stepMarket(db) {
     const hi = Math.max(lo, Number(cfg.weatherLotteryHi ?? st.trait.lotteryHi) || 0.40);
     const pct = lo + Math.random() * (hi - lo);
     const up = Math.random() < 0.5;
-    st.price = Number((st.price * (1 + (up ? pct : -pct))).toFixed(4));
+    const before = st.price;
+    st.price = Number((st.price * lotteryFactor(up, pct)).toFixed(4));
+    // 实际涨跌幅：涨是 +p，跌是 -p/(1+p)（因为下跌用的是倒数）
+    const movePct = before > 0 ? st.price / before - 1 : 0;
     st.lotteryAt = db.tick;
-    st.lastLottery = { pct, up, tick: db.tick };
+    st.lastLottery = { pct: Math.abs(movePct), up, tick: db.tick };
     // 哈基蜂业的异动公告固定显示 30 轮，过期自动消失
     pushNotice(
       db,
-      `${st.name}盘面异动，${up ? '直线拉升' : '闪崩下杀'} ${(pct * 100).toFixed(0)}%，全场哗然`,
+      `${st.name}盘面异动，${up ? '直线拉升' : '闪崩下杀'} ${(Math.abs(movePct) * 100).toFixed(0)}%，全场哗然`,
       HJF_NOTICE_TICKS,
       { kind: up ? 'up' : 'down' }
     );

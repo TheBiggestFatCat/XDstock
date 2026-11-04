@@ -127,7 +127,6 @@ export function backDerive(st, targetFair) {
     debt: rand(0.25, 0.6),
     dividendRate: rand(0.1, 0.4),
     reportAt: Date.now(),
-    reportTick: 0,
     bias: (TRAIT_BIAS[st.trait?.id] ?? 0) + (Math.random() - 0.5) * 0.04
   };
 }
@@ -254,7 +253,6 @@ export function genNextReport(st, ctx = {}) {
     debt: clamp((Number(f.debt) || 0.4) + rand(-0.05, 0.05), 0.05, 0.9),
     dividendRate: clamp((Number(f.dividendRate) || 0.25) + rand(-0.05, 0.05), 0, 0.6),
     reportAt: Date.now(),
-    reportTick: 0,
     bias,
     expectedGrowth
   };
