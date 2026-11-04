@@ -3938,7 +3938,9 @@ async function loadAdmin() {
       desc: '给每家公司一条「无限接近但不超过」的线',
       fields: [
         ['growthCeiling', '营收天花板(基准的几倍)'],
-        ['maxPremium', '股价上限(合理价的几倍)']
+        ['maxPremium', '股价上限(合理价的几倍)'],
+        ['rallyMin', '整点拉升下限(0.05=5%)'],
+        ['rallyMax', '整点拉升上限(0.2=20%)']
       ]
     },
     {

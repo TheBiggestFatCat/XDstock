@@ -196,6 +196,30 @@ export function rollMindView(realV, edge, chance) {
   return { viewV: rollSentimentV(edge), fake: true };
 }
 
+/** 整点拉升的触发窗口（分钟）：只在整点后这么多分钟内触发，错过就跳过 */
+const RALLY_WINDOW_MIN = 10;
+/** 有市值天花板的票，合理价最多顶到天花板的多少（剩下留给整点拉升） */
+const FAIR_CAP_RATIO = 0.95;
+
+/**
+ * 整点拉升：这只票今天这一档还没拉过、而且现在就在整点窗口里 → 返回槽位标记。
+ *
+ * 槽位按「年-月-日-小时」记，所以同一天同一档只会拉一次；
+ * 服务器如果在整点那头挂了，10 分钟窗口之外不会补拉。
+ */
+export function rallySlotFor(st, nowMs = Date.now()) {
+  const hours = Array.isArray(st?.rallyHours) ? st.rallyHours : [];
+  if (!hours.length) return null;
+  const d = new Date(Number.isFinite(Number(nowMs)) ? Number(nowMs) : Date.now());
+  const h = d.getHours();
+  if (!hours.includes(h)) return null;
+  if (d.getMinutes() >= RALLY_WINDOW_MIN) return null;
+  const p2 = (n) => String(n).padStart(2, '0');
+  const slot = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}-${p2(h)}`;
+  if (st.lastRallySlot === slot) return null;
+  return slot;
+}
+
 /** 单只股票走一步 */
 function stepStock(st, cfg, events, brokerDrift, fxData, db) {
   const t = st.trait || {};
@@ -342,6 +366,26 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
   if (fairNow > 0) {
     const ceilP = fairNow * maxPrem;
     if (p > ceilP) p = ceilP;
+  }
+
+  // 整点拉升（麦当劳专属）：每天 12:00 / 18:00 各来一次，一次 +5%~+20%
+  const rallySlot = rallySlotFor(st, Date.now());
+  if (rallySlot) {
+    st.lastRallySlot = rallySlot;
+    const lo = Math.max(0, Number(cfg.rallyMin ?? 0.05));
+    const hi = Math.max(lo, Number(cfg.rallyMax ?? 0.2));
+    const boost = lo + Math.random() * (hi - lo);
+    p *= 1 + boost;
+    pushNotice(db, `🍔 ${st.name} 整点拉升 +${(boost * 100).toFixed(1)}%（每天 ${st.rallyHours.join(' / ')} 点各一次）`,
+      30, { kind: 'up' });
+  }
+
+  // 市值天花板：price × 总股本 不允许超过 capCeiling（如麦当劳 10000 亿）
+  const capCeiling = Number(st.capCeiling) || 0;
+  const sharesForCap = Number(st.shares) || 0;
+  if (capCeiling > 0 && sharesForCap > 0) {
+    const capPrice = capCeiling / sharesForCap;
+    if (p > capPrice) p = capPrice;
   }
 
   // 连击计数
@@ -883,6 +927,15 @@ export function runReports(db) {
     const computed = fairFromReport(st);
     const smoothed = before > 0 ? computed * 0.7 + before * 0.3 : computed;
     st.fair = Number(smoothed.toFixed(4));
+
+    // 市值天花板（麦当劳 10000 亿）：合理价也只允许无限靠近，不许越过。
+    // 留 5% 头给整点拉升，价格天花板在 stepStock 里另有一道硬夹
+    const capCeilFair = Number(st.capCeiling) || 0;
+    const sharesFair = Number(st.shares) || 0;
+    if (capCeilFair > 0 && sharesFair > 0) {
+      const maxFair = (capCeilFair / sharesFair) * FAIR_CAP_RATIO;
+      if (st.fair > maxFair) st.fair = Number(maxFair.toFixed(4));
+    }
 
     // 超预期 = 实际增速 − 市场预期（这家公司按规模应有的增速）
     const expectRaw = Number(st.fundamentals.expectedGrowth);

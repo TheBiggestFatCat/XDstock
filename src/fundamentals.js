@@ -168,6 +168,18 @@ export function genNextReport(st, ctx = {}) {
   const decay = 1 / (1 + Math.max(0, multiple - 1) * 1.5);
   growth *= decay;
 
+  // 「稳步增长」型（麦当劳）：增速只由「离市值天花板还有多远」决定，
+  // 越接近天花板长得越慢 —— 无限接近但永远到不了
+  if (trait === 'steady') {
+    const capTarget = Math.max(0, Number(st.capCeiling) || Number(ctx.capCeiling) || 0);
+    const capNow = Math.max(1, (Number(st.fair) || Number(st.price) || 1) * shares);
+    const room = capTarget > 0 ? clamp(1 - capNow / capTarget, 0, 1) : 0.5;
+    const g0 = Math.max(0, Number(st.trait?.steadyGrowth ?? 0.035));
+    // 离得远 ≈ g0，贴到天花板 → 0
+    growth = g0 * Math.sqrt(room);
+    bias = 0;
+  }
+
   // 业务联动也属于「可预期」的一部分
   if (trait === 'broker') {
     const vf = clamp(Number(ctx.volumeFactor) || 1, 0.2, 4);
@@ -185,7 +197,8 @@ export function genNextReport(st, ctx = {}) {
 
   const expectedGrowth = clamp(growth, -0.35, 0.9);
 
-  growth += rand(-0.08, 0.08);
+  // 稳步增长的公司财报不抖（几乎没人会用财报去赌它）
+  growth += trait === 'steady' ? rand(-0.0025, 0.0025) : rand(-0.08, 0.08);
 
   // ----- 业务联动 -----
   // 券商：全市场成交越活跃，佣金收入越高，增速越快
@@ -203,8 +216,9 @@ export function genNextReport(st, ctx = {}) {
 
   // 规模天花板：营收只能「无限接近」baseRev × growthCeiling，永远不超过。
   // 越接近天花板，正向增速被压得越低（负增长不受影响，该萎缩还是会萎缩）。
+  // 个股自己的天花板优先（麦当劳 4.5 倍），其次全局配置
   const ceilMult = Math.max(1.2,
-    Number(ctx.growthCeiling) || Number(st.growthCeiling) || DEFAULT_GROWTH_CEILING);
+    Number(st.growthCeiling) || Number(ctx.growthCeiling) || DEFAULT_GROWTH_CEILING);
   const revCeil = baseRev * ceilMult;
   if (growth > 0) {
     const room = Math.max(0, 1 - (Number(f.revenue) || baseRev) / revCeil);
@@ -212,6 +226,11 @@ export function genNextReport(st, ctx = {}) {
   }
 
   let margin = (Number(f.margin) || (ind.margin[0] + ind.margin[1]) / 2) + rand(-0.02, 0.02);
+  // 稳步增长的公司净利率也稳（不然 ±2pp 的抖动会让 EPS 上下乱跳，PE 看着像过山车）
+  if (trait === 'steady') {
+    const midMargin = (ind.margin[0] + ind.margin[1]) / 2;
+    margin = (Number(f.margin) || midMargin) * 0.88 + midMargin * 0.12 + rand(-0.001, 0.001);
+  }
   // 券商成交火爆时净利率也会抬一点
   if (trait === 'broker') {
     const vf = clamp(Number(ctx.volumeFactor) || 1, 0.2, 4);
@@ -257,7 +276,11 @@ export function genNextReport(st, ctx = {}) {
   const bps = nextBps(f.bps, eps, {
     pe: ind.pe,
     growth,
-    retain: rand(BPS_RETAIN[0], BPS_RETAIN[1])
+    // 稳定增长型：快到市值天花板时几乎不留存，否则 BPS 会一路把 fair 顶穿天花板
+    retain: (trait === 'steady' && Number(st.capCeiling) > 0
+      && (Number(st.fair) || 0) * shares >= Number(st.capCeiling) * 0.9)
+      ? 0.02
+      : rand(BPS_RETAIN[0], BPS_RETAIN[1])
   });
   const roe = bps > 0 ? eps / bps : 0;
 

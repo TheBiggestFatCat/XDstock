@@ -26,6 +26,10 @@ function freshStock(code) {
     desc: seed.desc,
     initialPrice: seed.initialPrice,
     trait: seed.trait,
+    // 市值天花板（如麦当劳 10000 亿）与整点拉升时间，都是个股专属设定
+    capCeiling: Number(seed.capCeiling) || 0,
+    growthCeiling: Number(seed.growthCeiling) || 0,
+    rallyHours: Array.isArray(seed.rallyHours) ? [...seed.rallyHours] : [],
     price: seed.initialPrice,
     fair: seed.initialPrice,
     flow: 0,          // 玩家资金冲击累积（正=净买入，负=净卖出）
