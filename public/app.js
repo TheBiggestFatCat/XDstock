@@ -1548,12 +1548,16 @@ function renderBanList() {
         ${rankAvatar(p)}
         <b>${escapeHtml(p.nickname)}</b>
         ${p.banned ? '<span class="ban-tag">已封禁</span>' : ''}
+        ${p.hidden ? '<span class="ban-tag hide">榜上隐身</span>' : ''}
         ${p.banReason ? `<span class="ban-reason">${escapeHtml(p.banReason)}</span>` : ''}
         ${p.bank > 0 ? `<span class="ban-bank">🏦 ${money0(p.bank)}</span>` : ''}
         <span class="ban-money">${money0(p.equity)}</span>
       </div>
       <div class="ban-actions">
         <button class="ban-btn bank" data-bank-id="${p.id}" data-bank-name="${escapeHtml(p.nickname)}">打钱</button>
+        <button class="ban-btn hide" data-hide-id="${p.id}" data-hide-name="${escapeHtml(p.nickname)}" data-hide-action="${p.hidden ? 'show' : 'hide'}">
+          ${p.hidden ? '上榜' : '隐身'}
+        </button>
         <button class="ban-btn ${p.banned ? 'unban' : ''}" data-ban-id="${p.id}" data-ban-action="${p.banned ? 'unban' : 'ban'}">
           ${p.banned ? '解封' : '封禁'}
         </button>
@@ -1575,6 +1579,26 @@ function renderBanList() {
   box.querySelectorAll('[data-del-id]').forEach((b) => {
     b.addEventListener('click', () => deletePlayer(b.dataset.delId, b.dataset.delName));
   });
+  box.querySelectorAll('[data-hide-id]').forEach((b) => {
+    b.addEventListener('click', () => toggleRankHide(b.dataset.hideId, b.dataset.hideName, b.dataset.hideAction));
+  });
+}
+
+/** 管理端：让某个号在排行榜上隐身 / 恢复上榜（账号本身不动） */
+async function toggleRankHide(id, name, action) {
+  const hide = action !== 'show';
+  const tip = hide
+    ? `让「${name}」从排行榜上消失？\n\n账号不会被删、也不会被封：他照样能登录、能交易，只是别人在榜上找不到他，也没法偷他。`
+    : `让「${name}」重新出现在排行榜上？`;
+  if (!confirm(tip)) return;
+  try {
+    const r = await adminApi('/api/admin/player', { id, action: hide ? 'hide' : 'show' });
+    toast(hide ? `「${name}」已从排行榜隐身` : `「${name}」已恢复上榜`, 'ok');
+    void r;
+    loadAdminPlayers();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
 }
 
 /** 管理端：给指定玩家的银行账户打钱（负数 = 扣钱） */

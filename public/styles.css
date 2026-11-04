@@ -2438,6 +2438,9 @@ body[data-theme="dark"] .fee-bonus { color: var(--down); }
   font-size: 10.5px; padding: 2px 7px; border-radius: 6px;
   background: var(--up); color: #fff;
 }
+/* 排行榜隐身标记 + 按钮 */
+.ban-tag.hide { background: var(--ink-3); }
+.ban-btn.hide { color: var(--ink-2); border-color: var(--line); }
 .ban-reason { font-size: 11px; color: var(--ink-3); }
 .ban-money {
   font-size: 11.5px; color: var(--ink-2);

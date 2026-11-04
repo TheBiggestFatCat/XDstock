@@ -131,6 +131,37 @@ function publicPlayer(p, db) {
 }
 
 /**
+ * 排行榜数据（按总资产降序）。
+ * `hiddenRank` 的号直接跳过：账号还在、能登录能交易，只是不出现在榜上，
+ * 也就不会被别人在榜里点到「偷钱 / 调查」。
+ */
+export function leaderboardRows(db) {
+  const rows = Object.values(db.players || {})
+    .filter((p) => p && !p.hiddenRank)
+    .map((p) => {
+      const equity = playerEquity(db, p);
+      const bank = Math.max(0, Number(p.bank) || 0);
+      return {
+        id: p.id,
+        nickname: p.nickname,
+        avatar: p.avatar || null,
+        cash: p.cash,
+        // equity = 交易资产（现金 + 持仓 + 冻结），偷钱上限仍按这个算
+        equity,
+        bank,
+        // total = 排名用的总资产（含银行存款）
+        total: Math.round((equity + bank) * 100) / 100,
+        guardUntil: p.guardUntil || 0,
+        theme: p.theme || 'default',
+        level: Math.max(1, Math.floor(Number(p.level) || 1)),
+        positions: []
+      };
+    });
+  rows.sort((a, b) => b.total - a.total || b.equity - a.equity);
+  return rows;
+}
+
+/**
  * 自定义背景的不透明度：夹到 0~100 的整数。
  * 非数字返回 null（调用方据此报错）。
  */
@@ -155,7 +186,8 @@ export function investigatePlayer(db, me, targetId) {
     return { ok: false, status: 429, error: `调查冷却中，还要等 ${left} 轮`, leftTicks: left };
   }
   const victim = db.players[String(targetId || '')];
-  if (!victim) return { ok: false, status: 404, error: '没这个人' };
+  // 隐身的号同样不能被调查
+  if (!victim || victim.hiddenRank) return { ok: false, status: 404, error: '没这个人' };
   if (victim.id === me.id) return { ok: false, status: 400, error: '调查自己没意义' };
 
   const list = Object.entries(victim.positions || {}).filter(([code]) => db.stocks[code]);
@@ -587,27 +619,8 @@ export async function handleApi(ctx) {
 
   if (pathname === '/api/leaderboard' && method === 'GET') {
     // 排行榜只公开资产，不再公开任何人的持仓
-    const rows = Object.values(db.players).map((p) => {
-      const equity = playerEquity(db, p);
-      const bank = Math.max(0, Number(p.bank) || 0);
-      return {
-        id: p.id,
-        nickname: p.nickname,
-        avatar: p.avatar || null,
-        cash: p.cash,
-        // equity = 交易资产（现金 + 持仓 + 冻结），偷钱上限仍按这个算
-        equity,
-        bank,
-        // total = 排名用的总资产（含银行存款）
-        total: Math.round((equity + bank) * 100) / 100,
-        guardUntil: p.guardUntil || 0,
-        theme: p.theme || 'default',
-        level: Math.max(1, Math.floor(Number(p.level) || 1)),
-        positions: []
-      };
-    });
-    rows.sort((a, b) => b.total - a.total || b.equity - a.equity);
-    return json(res, 200, { rows });
+    // 被管理员设成「隐身」的号不出现在榜上（账号照常能登录、能交易，只是别人看不到）
+    return json(res, 200, { rows: leaderboardRows(db) });
   }
 
   // ---------- 管理 ----------
@@ -680,6 +693,12 @@ export async function handleApi(ctx) {
       saveDb();
       return json(res, 200, { ok: true, banned: false });
     }
+    // 排行榜隐身：账号不动，只是不出现在榜上（也不当别人的偷钱目标）
+    if (action === 'hide' || action === 'show') {
+      p.hiddenRank = action === 'hide';
+      saveDb();
+      return json(res, 200, { ok: true, hidden: p.hiddenRank, nickname: p.nickname });
+    }
     if (action === 'logout') {
       // 只踢下线，不封号：清掉这个玩家的所有会话
       let killed = 0;
@@ -737,6 +756,7 @@ export async function handleApi(ctx) {
         bank: Math.round((Number(p.bank) || 0) * 100) / 100,
         banned: !!p.banned,
         banReason: p.banReason || '',
+        hidden: !!p.hiddenRank,
         online: !!p.online
       }))
       .sort((a, b) => b.equity - a.equity);
@@ -1003,7 +1023,8 @@ export async function handleApi(ctx) {
   if (pathname === '/api/steal' && method === 'POST') {
     const targetId = String(body.targetId || '');
     const victim = db.players[targetId];
-    if (!victim) return json(res, 404, { error: '没这个人' });
+    // 隐身的号在榜上找不到，也不接受偷钱（否则能从「被偷」提示里把他扒出来）
+    if (!victim || victim.hiddenRank) return json(res, 404, { error: '没这个人' });
     if (victim.id === me.id) return json(res, 400, { error: '偷自己不算本事' });
 
     const guardLeft = Number(victim.guardUntil || 0) - db.tick;
