@@ -217,7 +217,9 @@ export function genNextReport(st, ctx = {}) {
   if (capTargetNow > 0) {
     const tgtPrice = capTargetNow / shares;
     const tgtEps = tgtPrice / Math.max(1, ind.pe);
-    tgtMarginRef = Number(f.margin) || (ind.margin[0] + ind.margin[1]) / 2;
+    // 用「行业中枢净利率」反推营收，而不是上期净利率 —— 否则净利率漂一点，
+    // EPS 目标就跟着漂，终点会落在 5000 亿上下好几个百分点
+    tgtMarginRef = (ind.margin[0] + ind.margin[1]) / 2;
     const tgtRev = Math.max(1, (tgtEps * shares) / Math.max(0.02, tgtMarginRef));
     const rate = clamp(Number(st.capTargetRate ?? ctx.capTargetRate ?? 0.06), 0.005, 0.5);
     // 每期只走「差距的 rate」，所以越接近目标越慢

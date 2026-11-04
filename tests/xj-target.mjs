@@ -17,6 +17,30 @@ function check(label, cond, detail = '') {
 
 const TARGET = 5000; // 亿
 
+/** 造一个确定性的起点：fair≈price≈740（市值 ~14800 亿），避免随机起点把断言跑飞 */
+function seedState(st, price) {
+  const ind = { pe: 18, margin: [0.06, 0.16] };          // 消费行业
+  const shares = st.shares;
+  const eps = price / ind.pe;
+  const revenue = (eps * shares) / 0.11;                 // 净利率 11%
+  st.fundamentals = {
+    period: 50,
+    revenue,
+    baseRevenue: revenue,
+    netProfit: revenue * 0.11,
+    eps,
+    bps: 912,
+    margin: 0.11,
+    growth: 0.01,
+    expectedGrowth: 0.01,
+    roe: 0.042
+  };
+  st.fair = price;
+  st.price = price;
+  return st;
+}
+
+
 // ---------------------------------------------------------------- 1
 log('=== 1 配置：XJ 有市值目标，别的票没有 ===');
 {
@@ -51,9 +75,7 @@ log('=== 3 从 14800 亿一路缩到 5000 亿，中间不反弹 ===');
   const db = migrate({});
   const xj = db.stocks.XJ;
   // 造一个和线上接近的起点：合理价 ~740（市值 ~14800 亿）
-  xj.fundamentals = backDerive(xj, 740);
-  xj.fair = 740;
-  xj.price = 740;
+  seedState(xj, 740);
   for (const s of Object.values(db.stocks)) {
     if (!s.isIndex) s.nextReportTick = s.code === 'XJ' ? 0 : 1e12;
   }
@@ -96,9 +118,7 @@ log('=== 4 基本面一起缩，PE 不会失真 ===');
 {
   const db = migrate({});
   const xj = db.stocks.XJ;
-  xj.fundamentals = backDerive(xj, 740);
-  xj.fair = 740;
-  xj.price = 740;
+  seedState(xj, 740);
   for (const s of Object.values(db.stocks)) {
     if (!s.isIndex) s.nextReportTick = s.code === 'XJ' ? 0 : 1e12;
   }
