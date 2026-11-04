@@ -471,6 +471,22 @@ tbody tr:hover { background: var(--soft); }
 tbody td { border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
 .empty-row td { text-align: center; color: var(--ink-3); padding: 26px 0; }
 
+/* 持仓表底部的「现金」行 */
+.cash-row td {
+  background: var(--soft);
+  border-top: 1px solid var(--line);
+  text-align: left;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.cash-row b {
+  margin: 0 2px;
+  font-size: 13.5px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.cash-row .cash-sub { margin-left: 8px; font-size: 11px; color: var(--ink-3); }
+
 .pill {
   display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 7px; font-weight: 600;
 }
@@ -1608,6 +1624,16 @@ input.tpsl-input {
   color: var(--ink-3);
   padding: 34px 0;
 }
+/* 侧边「我的持仓」底部的现金行 */
+.side-cash {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-top: 6px; padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  font-size: 12px; color: var(--ink-2);
+}
+.side-cash b { font-size: 13.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
 
 /* 顶栏指数可点 */
 .index-box {

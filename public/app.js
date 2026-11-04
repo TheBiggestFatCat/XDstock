@@ -697,6 +697,12 @@ function switchListTab(name) {
   if (name === 'positions') renderSidePositions();
 }
 
+/** 持仓列表底部「现金」行用：可用 + 冻结 */
+function cashTotal() {
+  const me = state.market?.me;
+  return (Number(me?.cash) || 0) + (Number(me?.frozen) || 0);
+}
+
 function renderSidePositions() {
   const wrap = $('#sidePositions');
   if (!wrap) return;
@@ -705,7 +711,8 @@ function renderSidePositions() {
   if (cnt) cnt.textContent = pos.length ? String(pos.length) : '';
 
   if (!pos.length) {
-    wrap.innerHTML = '<div class="side-empty">还没有持仓<br />在右边下单试试</div>';
+    wrap.innerHTML = '<div class="side-empty">还没有持仓<br />在右边下单试试</div>'
+      + `<div class="side-cash">💵 现金 <b>${money(cashTotal())}</b></div>`;
     return;
   }
 
@@ -727,7 +734,7 @@ function renderSidePositions() {
         <div class="stock-chg ${cls(p.pnl)}">${pct(p.margin > 0 ? (p.pnl / p.margin) * 100 : 0)}</div>
       </div>
     </div>`;
-  }).join('');
+  }).join('') + `<div class="side-cash">💵 现金 <b>${money(cashTotal())}</b></div>`;
 
   wrap.querySelectorAll('[data-pos]').forEach((el) => {
     el.addEventListener('click', () => selectStock(el.dataset.pos));
@@ -3016,6 +3023,24 @@ function updatePositionCells(pos) {
     set('qty', String(p.qty));
     set('margin', money(p.margin));
   });
+  // 现金那一行也要跟着刷新（成交、派息、打工都会改现金）
+  updateCashRow(wrap);
+}
+
+/** 持仓表底部的「现金」行内容 */
+function cashRowHtml(me) {
+  const cash = Number(me?.cash) || 0;
+  const frozen = Number(me?.frozen) || 0;
+  const total = cash + frozen;
+  return `💵 现金 <b>${money(total)}</b>`
+    + (frozen > 0
+      ? `<span class="cash-sub">可用 ${money(cash)} · 冻结 ${money(frozen)}</span>`
+      : '<span class="cash-sub">可随时用于开仓</span>');
+}
+
+function updateCashRow(wrap) {
+  const row = (wrap || $('#positionsTable'))?.querySelector('tr[data-cash] td');
+  if (row) row.innerHTML = cashRowHtml(state.market?.me);
 }
 
 function renderPositions(force = false) {
@@ -3025,7 +3050,10 @@ function renderPositions(force = false) {
   const pos = me ? Object.values(me.positions || {}) : [];
 
   if (!pos.length) {
-    wrap.innerHTML = '<table><tbody><tr class="empty-row"><td>还没有持仓，挑一只票试试手气</td></tr></tbody></table>';
+    wrap.innerHTML = `<table><tbody>
+      <tr class="empty-row"><td>还没有持仓，挑一只票试试手气</td></tr>
+      <tr class="cash-row" data-cash><td>${cashRowHtml(me)}</td></tr>
+    </tbody></table>`;
     state.posSig = '';
     return;
   }
@@ -3065,6 +3093,7 @@ function renderPositions(force = false) {
             <td class="op-hint">用右上「平仓」挂单</td>
           </tr>`;
         }).join('')}
+        <tr class="cash-row" data-cash><td colspan="10">${cashRowHtml(me)}</td></tr>
       </tbody>
     </table>`;
 
