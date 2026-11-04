@@ -205,6 +205,26 @@ export function genNextReport(st, ctx = {}) {
     // 已经在上面加过，这里不再重复
   }
 
+  /**
+   * 市值目标（弦卷财团：逐步萎缩到 5000 亿）。
+   *
+   * 由目标市值反推「配得上这个市值的营收」，再让营收朝它收敛 ——
+   * 这样 EPS / 合理价 / 净资产会一起往下走，PE 也不会失真，
+   * 而不是硬把 fair 按住（那样 PE 会看着像 7 倍，自相矛盾）。
+   */
+  const capTargetNow = Math.max(0, Number(st.capTarget) || Number(ctx.capTarget) || 0);
+  let tgtMarginRef = 0;
+  if (capTargetNow > 0) {
+    const tgtPrice = capTargetNow / shares;
+    const tgtEps = tgtPrice / Math.max(1, ind.pe);
+    tgtMarginRef = Number(f.margin) || (ind.margin[0] + ind.margin[1]) / 2;
+    const tgtRev = Math.max(1, (tgtEps * shares) / Math.max(0.02, tgtMarginRef));
+    const rate = clamp(Number(st.capTargetRate ?? ctx.capTargetRate ?? 0.06), 0.005, 0.5);
+    // 每期只走「差距的 rate」，所以越接近目标越慢
+    growth = clamp((tgtRev / Math.max(1, Number(f.revenue) || baseRev) - 1) * rate, -0.5, 0.5);
+    bias = 0;
+  }
+
   // 市场预期 = 这家公司按当前规模本该有的增速（不含随机噪声）
   // 种业：营收完全由天气决定（天气全程公开，大家都知道）
   if (trait === 'weather') {
@@ -216,8 +236,9 @@ export function genNextReport(st, ctx = {}) {
 
   const expectedGrowth = clamp(growth, -0.35, 0.9);
 
-  // 稳步增长的公司财报不抖（几乎没人会用财报去赌它）
-  growth += trait === 'steady' ? rand(-0.0025, 0.0025) : rand(-0.08, 0.08);
+  // 稳步增长 / 有市值目标的票：财报不抖（它们的走势是「慢慢走」，不该被随机噪声带跑）
+  const smoothReport = trait === 'steady' || capTargetNow > 0;
+  growth += smoothReport ? rand(-0.0025, 0.0025) : rand(-0.08, 0.08);
 
   // ----- 业务联动 -----
   // 券商：全市场成交越活跃，佣金收入越高，增速越快
@@ -245,8 +266,8 @@ export function genNextReport(st, ctx = {}) {
   }
 
   let margin = (Number(f.margin) || (ind.margin[0] + ind.margin[1]) / 2) + rand(-0.02, 0.02);
-  // 稳步增长的公司净利率也稳（不然 ±2pp 的抖动会让 EPS 上下乱跳，PE 看着像过山车）
-  if (trait === 'steady') {
+  // 稳步增长 / 有市值目标的公司净利率也稳（不然 ±2pp 的抖动会让 EPS 上下乱跳，PE 看着像过山车）
+  if (smoothReport) {
     const midMargin = (ind.margin[0] + ind.margin[1]) / 2;
     margin = (Number(f.margin) || midMargin) * 0.88 + midMargin * 0.12 + rand(-0.001, 0.001);
   }
@@ -306,15 +327,24 @@ export function genNextReport(st, ctx = {}) {
 
   const eps = netProfit / shares;
   // 净资产：只留存一部分利润（其余视作分红/回购），账面虚高时缓慢回落
-  const bps = nextBps(f.bps, eps, {
+  let bps = nextBps(f.bps, eps, {
     pe: ind.pe,
     growth,
-    // 稳定增长型：快到市值天花板时几乎不留存，否则 BPS 会一路把 fair 顶穿天花板
-    retain: (trait === 'steady' && Number(st.capCeiling) > 0
-      && (Number(st.fair) || 0) * shares >= Number(st.capCeiling) * 0.9)
+    // 稳定增长型：快到市值天花板时几乎不留存，否则 BPS 会一路把 fair 顶穿天花板；
+    // 有市值目标的票同理（在缩表，不该再攒净资产）
+    retain: ((trait === 'steady' && Number(st.capCeiling) > 0
+      && (Number(st.fair) || 0) * shares >= Number(st.capCeiling) * 0.9) || capTargetNow > 0)
       ? 0.02
       : rand(BPS_RETAIN[0], BPS_RETAIN[1])
   });
+  // 有市值目标的票（弦卷财团）：净资产也会一路减值到「配得上目标市值」的水平，
+  // 否则 BPS×0.8 那条地板会把 fair 拖住，市值永远掉不到 5000 亿
+  if (capTargetNow > 0) {
+    const tgtPrice = capTargetNow / shares;
+    const tgtBps = Math.max(1, (tgtPrice / 0.8) * 0.95);
+    const rate = clamp(Number(st.capTargetRate ?? ctx.capTargetRate ?? 0.06), 0.005, 0.5);
+    bps = bps + (tgtBps - bps) * rate;
+  }
   const roe = bps > 0 ? eps / bps : 0;
 
   return {

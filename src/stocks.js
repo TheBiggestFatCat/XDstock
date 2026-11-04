@@ -106,6 +106,10 @@ export const STOCK_SEED = {
     freeFloat: 0.45,          // 流通比例
     desc: '财团、偶像企划、游乐园',
     initialPrice: 180,
+    // 长期路线：市值逐步萎缩到 5000 亿（5e11）。
+    // 营收、净资产、合理价都按 capTargetRate 这个速度往目标靠，越靠越慢。
+    capTarget: 500000000000,
+    capTargetRate: 0.06,
     trait: {
       id: 'backstop',
       name: '护盘',

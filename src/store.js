@@ -28,6 +28,9 @@ function freshStock(code) {
     trait: seed.trait,
     // 市值天花板（如麦当劳 10000 亿）与整点拉升时间，都是个股专属设定
     capCeiling: Number(seed.capCeiling) || 0,
+    // 市值目标（如弦卷财团逐步萎缩到 5000 亿）+ 每期靠近目标的速度
+    capTarget: Number(seed.capTarget) || 0,
+    capTargetRate: Number(seed.capTargetRate) || 0,
     growthCeiling: Number(seed.growthCeiling) || 0,
     rallyHours: Array.isArray(seed.rallyHours) ? [...seed.rallyHours] : [],
     price: seed.initialPrice,
@@ -239,6 +242,14 @@ export function migrate(d) {
     if (!(Number(st.shares) > 0)) st.shares = Number(seed?.shares) || 500000000;
     if (!(Number(st.freeFloat) > 0)) st.freeFloat = Number(seed?.freeFloat) || 0.45;
     if (st.industry === undefined && seed) st.industry = seed.industry;
+    // 个股专属设定一律以代码里的种子为准（老存档里没有这些字段，改种子也要能生效）
+    if (seed) {
+      st.capCeiling = Number(seed.capCeiling) || 0;
+      st.capTarget = Number(seed.capTarget) || 0;
+      st.capTargetRate = Number(seed.capTargetRate) || 0;
+      st.growthCeiling = Number(seed.growthCeiling) || 0;
+      st.rallyHours = Array.isArray(seed.rallyHours) ? [...seed.rallyHours] : [];
+    }
     if (!st.fundamentals) {
       st.fundamentals = backDerive(st, Math.max(0.01, Number(st.price) || Number(st.initialPrice) || 1));
     }

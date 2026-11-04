@@ -937,6 +937,18 @@ export function runReports(db) {
       if (st.fair > maxFair) st.fair = Number(maxFair.toFixed(4));
     }
 
+    // 市值目标（弦卷财团：逐步萎缩到 5000 亿）：合理价也按同一节奏往目标靠，
+    // 营收/净资产在 fundamentals 里已经朝目标收敛，这里再兜一道，保证终点不跑偏
+    const capTgtFair = Number(st.capTarget) || 0;
+    if (capTgtFair > 0 && sharesFair > 0) {
+      const tgtPrice = capTgtFair / sharesFair;
+      const rate = Math.max(0.005, Math.min(0.5, Number(st.capTargetRate) || 0.06));
+      // 直接朝目标价收；基本面残差（EPS/净资产的取整误差）会把终点顶在目标上下一点点
+      st.fair = Number((st.fair + (tgtPrice - st.fair) * rate).toFixed(4));
+      // 还在目标上方时只许跌不许涨 —— 才不会出现「萎了一半又弹回去」
+      if (st.fair > tgtPrice && st.fair > before) st.fair = before;
+    }
+
     // 超预期 = 实际增速 − 市场预期（这家公司按规模应有的增速）
     const expectRaw = Number(st.fundamentals.expectedGrowth);
     const expected = Number.isFinite(expectRaw) ? expectRaw : industryMidGrowth(st);
