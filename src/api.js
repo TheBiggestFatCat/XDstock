@@ -7,7 +7,7 @@ import { getBuild } from './build.js';
 import { playerEquity, positionPnl } from './trading.js';
 import { levelUpPlayer, withdrawFromBank, bankStatus } from './bank.js';
 import { placeLimitOrder, cancelOrder, orderLimitBlocked, consumeOrderSlot, fillCapFor } from './orders.js';
-import { reportPayload } from './fundamentals.js';
+import { reportPayload, dividendPerShare } from './fundamentals.js';
 
 const TOKEN_TTL = 30 * 24 * 3600 * 1000;
 
@@ -83,6 +83,7 @@ function publicPlayer(p, db) {
     channelLevel: p.channelLevel || 0,
     redBonusEarned: p.redBonusEarned || 0,
     bearBonusEarned: p.bearBonusEarned || 0,
+    dividendEarned: p.dividendEarned || 0,
     theme: p.theme || 'default',
     level: Math.max(1, Math.floor(Number(p.level) || 1)),
     bgUnlocked: !!p.bgUnlocked,
@@ -229,6 +230,8 @@ function marketPayload(db, me) {
       freeCap: report ? report.freeCap : 0,
       fair: Number(st.fair) || 0,
       nextReportTick: Number(st.nextReportTick) || 0,
+      // 本期每股股息（含现价封顶，所以每轮都会变）
+      dps: dividendPerShare(st, { rate: db.config.dividendRate, cap: db.config.dividendCap }),
       // 天气（st.weather / st.weatherTarget）只给引擎和财报用，不下发给前端
       report,
       // 金融大鳄：提前看到金融板块的下一期财报
@@ -413,6 +416,8 @@ function marketPayload(db, me) {
       workOnlineMultiplier: db.config.workOnlineMultiplier ?? 2,
       workBankTicks: db.config.workBankTicks ?? 1440,
       stealMin: db.config.stealMin ?? 100,
+      dividendRate: db.config.dividendRate ?? 0.35,
+      dividendCap: db.config.dividendCap ?? 0.005,
       stealMax: db.config.stealMax ?? 10000,
       stealCapRatio: db.config.stealCapRatio ?? 0.001,
       stealCooldownTicks: db.config.stealCooldownTicks ?? 60,
@@ -854,6 +859,7 @@ export async function handleApi(ctx) {
     const allowed = [
       'tickMs', 'baseVolatility', 'meanReversion', 'eventImpactScale',
       'feeRate', 'stampDuty', 'minLeverage', 'maxLeverage',
+      'dividendRate', 'dividendCap',
       'eventChance', 'localEventChance', 'eventDurationMin', 'eventDurationMax', 'globalEventScale',
       'workRatePerTick', 'workOnlineMultiplier', 'workBankTicks', 'stealMin', 'stealMax', 'stealCapRatio', 'stealCooldownTicks',
       'equitySampleTicks', 'equityMaxPoints',

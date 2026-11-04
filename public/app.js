@@ -341,6 +341,27 @@ function liveValuation(st) {
   };
 }
 
+/** 财报面板里的派息行：每股派多少、股息率、有没有撞到封顶（每轮随股价变） */
+function renderDividendLine(st) {
+  const cfg = state.market?.config || {};
+  const dps = Math.max(0, Number(st && st.dps) || 0);
+  const price = Number(st && st.price) || 0;
+  const eps = Math.max(0, Number(st && st.report && st.report.eps) || 0);
+  const cap = Number(cfg.dividendCap ?? 0);
+  const rate = Number(cfg.dividendRate ?? 0);
+  if (!(dps > 0)) {
+    return `<span class="rp-div-none">${rate > 0 ? '本期不分红（EPS ≤ 0）' : '分红已关闭'}</span>`;
+  }
+  const yld = price > 0 ? (dps / price) * 100 : 0;
+  // 和「没封顶时该发多少」比，避免用四舍五入后的现价判断出现误差
+  const natural = eps * rate;
+  const capped = cap > 0 && natural > 0 && dps < natural - 1e-9;
+  return `每 1 股派 <b>$${dps.toFixed(3)}</b>`
+    + `<span class="rp-div-sub">派息率 ${(rate * 100).toFixed(0)}% · 股息率 ${yld.toFixed(3)}%`
+    + (capped ? ` · 已到 ${(cap * 100).toFixed(2)}% 封顶` : '')
+    + '</span>';
+}
+
 function renderReport() {
   const st = state.market?.stocks?.[state.code];
   const panel = $('#reportPanel');
@@ -435,6 +456,7 @@ function renderReport() {
       <div><span>ROE</span><b>${((r.roe || 0) * 100).toFixed(1)}%</b></div>
       <div><span>资产负债率</span><b>${((r.debt || 0) * 100).toFixed(0)}%</b></div>
     </div>
+    <div class="rp-div" id="reportDiv">${renderDividendLine(st)}</div>
     ${renderReportChart(r.history)}
     ${(st.preview && state.market?.me?.theme === 'tycoon') ? `
       <div class="preview-box">
@@ -2573,6 +2595,8 @@ function onTick(d) {
     if (s.fxTarget !== undefined) m.stocks[code].fxTarget = s.fxTarget;
     // 金融大鳄的预览状态每轮同步
     if (s.preview !== undefined) m.stocks[code].preview = s.preview;
+    // 每股股息含现价封顶，所以每轮都会变
+    if (s.dps !== undefined) m.stocks[code].dps = s.dps;
   }
   if (d.me) {
     m.me = { ...m.me, ...d.me };
@@ -2627,8 +2651,20 @@ function onTick(d) {
     updateMarkers();
   }
   if (d.closes && d.closes.length) handleCloses(d.closes);
+  if (d.dividends && d.dividends.length) handleDividends(d.dividends);
   if (d.alerts && d.alerts.length) handleAlerts(d.alerts);
   if (d.orderEvents && d.orderEvents.length) handleOrderEvents(d.orderEvents);
+}
+
+/** 收到派息：吐司提示一下，让玩家知道钱是哪来的 */
+function handleDividends(list) {
+  for (const e of list) {
+    const amt = Number(e.amount) || 0;
+    const sign = amt >= 0 ? '+' : '−';
+    const label = e.side === 'short' ? '补股息' : '股息';
+    toast(`💰 ${e.name} ${label} ${sign}${money(Math.abs(amt))}（${Number(e.dps).toFixed(3)} 元/股）`,
+      amt >= 0 ? 'ok' : 'err');
+  }
 }
 
 function updatePriceCells() {
@@ -2968,7 +3004,8 @@ function renderPortfolio() {
     <div class="stat-card"><div class="stat-label">银行存款</div><div class="stat-value">${money(Number(me.bank) || 0)}</div><div class="stat-sub">不计入上面的总资产，但计入排行榜</div></div>
     <div class="stat-card"><div class="stat-label">可用现金</div><div class="stat-value">${money(me.cash)}</div><div class="stat-sub">${frozenCash > 0 ? `另有 ${money(frozenCash)} 冻结在挂单里` : '可用于开新仓'}</div></div>
     <div class="stat-card"><div class="stat-label">占用保证金</div><div class="stat-value">${money(marginTotal)}</div><div class="stat-sub">${pos.length} 个持仓</div></div>
-    <div class="stat-card"><div class="stat-label">浮动盈亏</div><div class="stat-value ${cls(pnlTotal)}">${money(pnlTotal)}</div><div class="stat-sub">实时结算</div></div>`;
+    <div class="stat-card"><div class="stat-label">浮动盈亏</div><div class="stat-value ${cls(pnlTotal)}">${money(pnlTotal)}</div><div class="stat-sub">实时结算</div></div>
+    <div class="stat-card"><div class="stat-label">累计股息</div><div class="stat-value ${cls(Number(me.dividendEarned) || 0)}">${money(Number(me.dividendEarned) || 0)}</div><div class="stat-sub">持满一期才派息，做空要补息</div></div>`;
 
   const wrap = $('#portfolioTable');
   if (!pos.length) {
@@ -3720,6 +3757,14 @@ async function loadAdmin() {
         ['maxLeverage', '最大杠杆'],
         ['maxOrdersPerTick', '每轮最多下单'],
         ['maxFillNotionalPerTick', '每轮最多成交(金额)']
+      ]
+    },
+    {
+      title: '分红派息',
+      desc: '每期财报按 EPS 派息，持满一期的多头收钱、空头补息',
+      fields: [
+        ['dividendRate', '派息率(0=停发)'],
+        ['dividendCap', '单期股息率封顶(0=不限)']
       ]
     },
     {

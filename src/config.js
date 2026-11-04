@@ -57,6 +57,10 @@ export const DEFAULT_CONFIG = {
   // ---- ST 与退市 ----
   stPrice: 3,          // 股价跌破这个值进入 ST
 
+  // ---- 分红派息 ----
+  dividendRate: 0.35,  // 派息率：每股派 EPS × 这个比例（0 = 停止分红）
+  dividendCap: 0.005,  // 单期股息率封顶（0.005 = 最多发现价的 0.5%；0 = 不封顶）
+
   // ---- 实时汇率（留美外汇的驱动）----
   fxEnabled: 1,        // 1=开启 0=纯随机
   fxRefreshMs: 60000,  // 多久抓一次汇率

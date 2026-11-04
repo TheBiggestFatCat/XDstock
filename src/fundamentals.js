@@ -33,6 +33,11 @@ const TRAIT_BIAS = {
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
+/** 每期把多少比例的利润并进净资产（剩下的视作分红/回购，发给场外股东） */
+const BPS_RETAIN = [0.15, 0.3];
+/** 账面价值过高时，每期向「盈利估值×2」收敛的比例（半衰期约 230 期） */
+const BOOK_SHRINK = 0.003;
+
 /**
  * 掷一次天气（-1 ~ 1），农业股共用。
  *
@@ -236,7 +241,12 @@ export function genNextReport(st, ctx = {}) {
   netProfit = Math.max(netProfit, -baseRev * 0.6);
 
   const eps = netProfit / shares;
-  const bps = (Number(f.bps) || 1) + eps * rand(0.4, 0.9);
+  // 净资产：只留存一部分利润（其余视作分红/回购），账面虚高时缓慢回落
+  const bps = nextBps(f.bps, eps, {
+    pe: ind.pe,
+    growth,
+    retain: rand(BPS_RETAIN[0], BPS_RETAIN[1])
+  });
   const roe = bps > 0 ? eps / bps : 0;
 
   return {
@@ -256,6 +266,53 @@ export function genNextReport(st, ctx = {}) {
     bias,
     expectedGrowth
   };
+}
+
+/**
+ * 下一期的每股净资产（BPS）。
+ *
+ * 只把 retain 比例的利润并进账面（其余视作分红/回购，发给场外股东）。
+ * 以前是 eps × rand(0.4, 0.9) 全额留存，账面只涨不跌，
+ * 「净资产底线」越垫越高，业务萎缩的公司反而越来越值钱。
+ *
+ * 另外，当 0.8×BPS 超过「盈利估值 × 2」时，每期以 shrink 向目标收敛，
+ * 让虚高的账面慢慢回落（半衰期约 230 期），而不是一刀砍断。
+ */
+export function nextBps(prevBps, eps, { pe = 18, growth = 0, retain = 0.225, shrink = BOOK_SHRINK } = {}) {
+  const prev = Number(prevBps) || 1;
+  const e = Number(eps) || 0;
+  const rate = Math.max(0, Math.min(1, shrink));
+  let bps = prev + e * retain;
+  const byEps = e * Number(pe) * (1 + clamp(Math.max(0, Number(growth) || 0) * 1.5, 0, 0.5));
+  if (byEps > 0) {
+    const capBps = (byEps * 2) / 0.8;
+    if (bps > capBps) {
+      // 已经超过上限：这一期不再留存（视作全部分红），只做缓慢收敛；
+      // 本来在上限以下的，就直接封顶，不允许一次冲上去
+      bps = prev > capBps ? prev + (capBps - prev) * rate : capBps;
+    }
+  }
+  return Math.max(1, bps);
+}
+
+/**
+ * 本期每股股息。
+ *
+ * = max(0, EPS) × 派息率，再按「现价 × 封顶比例」截断。
+ * 因为封顶跟着现价走，所以这个数每轮都在变（前端显示的就是它）。
+ * 亏损公司（EPS ≤ 0）不分红；派息率或封顶填 0 都能关掉分红。
+ */
+export function dividendPerShare(st, { rate, cap } = {}) {
+  const f = (st && st.fundamentals) || {};
+  const eps = Math.max(0, Number(f.eps) || 0);
+  const payout = clamp(Number(rate ?? f.dividendRate) || 0, 0, 1);
+  const price = Math.max(0, Number(st && st.price) || 0);
+  const capRate = clamp(Number(cap) || 0, 0, 0.5);
+  const raw = eps * payout;
+  if (!(raw > 0)) return 0;
+  if (!(capRate > 0)) return raw;          // 封顶填 0 = 不封顶
+  const top = price * capRate;
+  return Math.min(raw, top);
 }
 
 /** 资金影响能力：流通盘越小越容易被推动 */

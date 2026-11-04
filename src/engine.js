@@ -1,5 +1,5 @@
 import { INDEX_BASE, SMALL_INDEX_STOCK } from './stocks.js';
-import { genNextReport, fairFromReport, impactFactor, industryMidGrowth, rollWeather } from './fundamentals.js';
+import { genNextReport, fairFromReport, impactFactor, industryMidGrowth, rollWeather, dividendPerShare } from './fundamentals.js';
 import { genMarketTrades } from './marketTrades.js';
 import { now } from './store.js';
 
@@ -729,6 +729,8 @@ export function runReports(db) {
   const cfg = db.config;
   const interval = Math.max(60, Number(cfg.reportIntervalTicks ?? 720));
   const list = Object.values(db.stocks).filter((s) => !s.isIndex);
+  // 本轮的派息事件（前端按人下发，不落盘）
+  db.dividendEvents = [];
   if (!list.length) return;
 
   const gap = Math.max(1, Math.floor(interval / list.length));
@@ -826,6 +828,45 @@ export function runReports(db) {
       st.reportHistory.splice(0, st.reportHistory.length - 24);
     }
     st.nextReportTick = db.tick + interval;
+
+    // 派息：本期 EPS × 派息率，再按现价封顶。
+    // 只发给「持满一期」的仓位（本期才开的仓不参与），免得财报前买入、发完就卖白拿；
+    // 空头补息（现实规则），现金不够就扣到 0，不追缴。
+    const dps = dividendPerShare(st, { rate: cfg.dividendRate, cap: cfg.dividendCap });
+    if (dps > 0) {
+      const since = db.tick - interval;
+      let paidTotal = 0;
+      for (const p of Object.values(db.players || {})) {
+        const pos = p.positions ? p.positions[st.code] : null;
+        if (!pos || !(Number(pos.qty) > 0)) continue;
+        if (Number(pos.openedTick) > since) continue;
+        const amt = Number(pos.qty) * dps;
+        if (!(amt > 0)) continue;
+        if (pos.side === 'long') {
+          p.cash = (Number(p.cash) || 0) + amt;
+          p.dividendEarned = (Number(p.dividendEarned) || 0) + amt;
+          paidTotal += amt;
+          db.dividendEvents.push({
+            playerId: p.id, code: st.code, name: st.name, dps, side: 'long', amount: amt, tick: db.tick
+          });
+        } else {
+          const pay = Math.min(amt, Math.max(0, Number(p.cash) || 0));
+          if (pay > 0) {
+            p.cash = Number(p.cash) - pay;
+            p.dividendEarned = (Number(p.dividendEarned) || 0) - pay;
+            db.dividendEvents.push({
+              playerId: p.id, code: st.code, name: st.name, dps, side: 'short', amount: -pay, tick: db.tick
+            });
+          }
+        }
+      }
+      if (paidTotal > 0) {
+        const shown = paidTotal >= 1e8 ? (paidTotal / 1e8).toFixed(2) + ' 亿'
+          : paidTotal >= 1e4 ? (paidTotal / 1e4).toFixed(1) + ' 万'
+            : Math.round(paidTotal) + ' 元';
+        pushNotice(db, `${st.name}派息 ${dps.toFixed(3)} 元/股，合计派发 ${shown}`, 30, { kind: 'up' });
+      }
+    }
 
     // 财报当期的价格冲击：超预期就上冲/下杀
     const surprise = st.lastSurprise;
