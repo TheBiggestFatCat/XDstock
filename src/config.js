@@ -51,7 +51,7 @@ export const DEFAULT_CONFIG = {
 
   // ---- 挂单 ----
   limitOrderEnabled: 1,     // 1=允许限价挂单
-  orderTtlTicks: 720,       // 挂单多久没成交自动撤（720 轮 = 1 小时）
+  orderTtlTicks: 2000,      // 挂单多久没成交自动撤（2000 轮 ≈ 2.8 小时）
   maxPendingOrders: 5,      // 每人最多同时挂几笔
 
   // ---- ST 与退市 ----

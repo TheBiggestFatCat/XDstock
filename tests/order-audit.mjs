@@ -6,6 +6,7 @@
 // 每个场景对应过去踩过的一个坑，改了下单逻辑后跑一遍，全绿再发版。
 
 import { createDb } from '../src/store.js';
+import { DEFAULT_CONFIG } from '../src/config.js';
 import {
   placeLimitOrder, processOrders, cancelOrder, estimateReserve,
   orderLimitBlocked, consumeOrderSlot, fillCapFor
@@ -30,7 +31,7 @@ function newDb(patch = {}) {
     playerImpactEnabled: 0,
     impactCostCoef: 0,
     maxFillNotionalPerTick: 1000000,
-    orderTtlTicks: 720,
+    orderTtlTicks: DEFAULT_CONFIG.orderTtlTicks,
     maxPendingOrders: 5,
     maxOrdersPerTick: 5,
     liquidationBuffer: 0,
@@ -350,6 +351,19 @@ log('=== 16 账号等级提供额外的单笔成交上限 ===');
   check('关掉加成：一轮只吃 1,000,000（10000 股）', mk('no-bonus', 1, { levelFillBonus: 0 }) === 10000);
   check('Lv.1：一轮吃 2,000,000（20000 股）', mk('lv1', 1, { levelFillBonus: 1000000 }) === 20000);
   check('Lv.3：一轮吃满 4,000,000（30000 股）', mk('lv3', 3, { levelFillBonus: 1000000 }) === 30000);
+}
+
+// ---------------------------------------------------------------- 挂单有效期
+log('');
+log('=== 挂单有效期 ===');
+{
+  check('出厂默认 = 2000 轮', DEFAULT_CONFIG.orderTtlTicks === 2000, String(DEFAULT_CONFIG.orderTtlTicks));
+  const db = newDb();
+  const p = mkPlayer(db, 'ttl', 1000000);
+  const r = placeLimitOrder(db, p, { code: 'TGW', action: 'open', side: 'long', qty: 10, leverage: 1, limit: 90 });
+  check('普通挂单 expireTick = tick + 2000',
+    r.ok && r.order.expireTick === db.tick + 2000,
+    r.ok ? `expireTick=${r.order.expireTick}` : r.error);
 }
 
 console.log(out.join('\n'));

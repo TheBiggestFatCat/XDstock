@@ -532,7 +532,7 @@ function marketPayload(db, me) {
     bearBonusRate: db.config.bearBonusRate ?? 0.01,
     bearBonusMinTicks: db.config.bearBonusMinTicks ?? 12,
       limitOrderEnabled: db.config.limitOrderEnabled ?? 1,
-      orderTtlTicks: db.config.orderTtlTicks ?? 720,
+      orderTtlTicks: db.config.orderTtlTicks ?? 2000,
       maxPendingOrders: db.config.maxPendingOrders ?? 5,
       playerImpactEnabled: db.config.playerImpactEnabled ?? 1,
       playerImpactRef: db.config.playerImpactRef ?? 1000000,

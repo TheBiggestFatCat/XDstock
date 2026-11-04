@@ -418,7 +418,7 @@ export function checkPositions(db) {
       ));
 
       if (!Array.isArray(player.orders)) player.orders = [];
-      const ttl = Math.max(1, Number(db.config.orderTtlTicks ?? 720));
+      const ttl = Math.max(1, Number(db.config.orderTtlTicks ?? 2000));
       const slip = 0.004;
       const buy = pos.side === 'short';           // 平空 = 买回
       const limit = Math.round((buy ? price * (1 + slip) : price * (1 - slip)) * 100) / 100;

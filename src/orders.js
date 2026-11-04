@@ -110,7 +110,7 @@ export function placeLimitOrder(db, player, body) {
     return { ok: false, error: `最多同时挂 ${maxPending} 笔单，先撤掉一些` };
   }
 
-  const ttl = Math.max(1, num(cfg.orderTtlTicks, 720));
+  const ttl = Math.max(1, num(cfg.orderTtlTicks, 2000));
   const expireTick = db.tick + ttl;
 
   if (action === 'close') {
