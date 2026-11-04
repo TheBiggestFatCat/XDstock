@@ -1161,6 +1161,10 @@ const THEME_CHART = {
     text: '#7a4a76', grid: 'rgba(246,224,244,.8)', border: 'rgba(246,224,244,.95)',
     cross: 'rgba(192,38,211,.4)', crossLabel: '#c026d3'
   },
+  night: {
+    text: '#8fa3c8', grid: 'rgba(30,40,60,.9)', border: 'rgba(38,50,74,.95)',
+    cross: 'rgba(96,165,250,.38)', crossLabel: '#60a5fa'
+  },
 };
 
 /** 把主题套到 body 上，并同步图表配色 */
@@ -1451,6 +1455,31 @@ function renderShop() {
   document.querySelectorAll('.theme-owned').forEach((el) => {
     el.classList.toggle('hidden', !ownedThemes.includes(el.dataset.owned));
   });
+
+  // 夜行者：现在是不是夜里 + 距离下一次开关还有多久
+  const nightEl = $('#nightStatus');
+  if (nightEl) {
+    const n = state.market?.me?.night || {};
+    const start = Number(cfg.nightStartHour ?? 18);
+    const end = Number(cfg.nightEndHour ?? 4);
+    const hh = (v) => String(v).padStart(2, '0') + ':00';
+    // 卡片上的数字全部按后台配置显示，别写死
+    const winEl = $('#nightWindowText');
+    if (winEl) winEl.textContent = `${hh(start)} ~ ${hh(end)}`;
+    const baseEl = $('#nightCdBase');
+    if (baseEl) baseEl.textContent = String(Number(cfg.stealCooldownTicks ?? 60));
+    const nightCdEl = $('#nightCdNight');
+    if (nightCdEl) nightCdEl.textContent = String(Number(cfg.nightStealCooldown ?? 5));
+    const left = Math.max(0, Number(n.msLeft) || 0);
+    const mins = Math.ceil(left / 60000);
+    if (n.active) {
+      nightEl.className = 'night-status on';
+      nightEl.textContent = `🌙 现在是夜里，偷钱 CD ${Number(n.stealCd ?? 5)} 轮（还有约 ${mins} 分钟天亮）`;
+    } else {
+      nightEl.className = 'night-status';
+      nightEl.textContent = `☀️ 现在不是夜里（${hh(start)}~${hh(end)} 才生效），约 ${mins} 分钟后入夜`;
+    }
+  }
 
   $$('.dir-btn').forEach((b) => {
     b.classList.toggle('active', Number(b.dataset.dir) === state.shopDir);
@@ -4016,6 +4045,9 @@ async function loadAdmin() {
         ['shopThemePrice', '主题售价'],
         ['mindThemePrice', '情绪读心售价'],
         ['mindFakeChance', '读心假值概率(0~1)'],
+        ['nightStartHour', '夜行者开始(点)'],
+        ['nightEndHour', '夜行者结束(点)'],
+        ['nightStealCooldown', '夜里偷钱CD(轮)'],
         ['shopChannelBasePrice', '通道首价'],
         ['shopChannelRatio', '通道涨价倍率'],
         ['shopChannelStep', '通道每级加成'],

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { getDb, saveDb, now, backupDb } from './src/store.js';
 import { getBuild } from './src/build.js';
 import { stepMarket, seedHistory, changesFor, noticeAlive, sentimentView, liveIndexWeights } from './src/engine.js';
+import { stealCooldownFor, nightInfoFor } from './src/theme.js';
 import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, positionPnl, logTrade } from './src/trading.js';
 import { processOrders, fillCapFor } from './src/orders.js';
@@ -272,6 +273,8 @@ function tickPayload(forPlayerId) {
       stealQueued: p.stealQueued || null,
       stealEarned: p.stealEarned || 0,
       stealReadyAt: p.stealReadyAt || 0,
+      // 夜行者：此刻的偷钱 CD 和夜里状态
+      night: nightInfoFor(d, p),
       investigateReadyAt: Number(p.investigateReadyAt) || 0,
       guardUntil: p.guardUntil || 0,
       fakeNewsReadyAt: p.fakeNewsReadyAt || 0,
@@ -547,7 +550,9 @@ function loop() {
     p.cash = (Number(p.cash) || 0) + amount;
     p.stealEarned = (p.stealEarned || 0) + amount;
     // 得手才进冷却，空手不罚
-    if (stealCd > 0) p.stealReadyAt = d.tick + stealCd;
+    // 冷却按人算：夜行者主题在夜里只有 5 轮，其余 60 轮
+    const cd = stealCooldownFor(d, p);
+    if (cd > 0) p.stealReadyAt = d.tick + cd;
 
     // 双方都记一笔流水
     logTrade(d, {
@@ -583,7 +588,7 @@ function loop() {
       reason: 'stolen'
     });
 
-    pushAlert(p.id, { type: 'steal', ok: true, mine: true, target: victim.nickname, amount, cd: stealCd });
+    pushAlert(p.id, { type: 'steal', ok: true, mine: true, target: victim.nickname, amount, cd });
     pushAlert(victim.id, { type: 'steal', ok: true, mine: false, from: p.nickname, amount });
   }
 

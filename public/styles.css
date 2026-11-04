@@ -2765,6 +2765,102 @@ body[data-theme="mind"] .brand-logo {
 .tp-mind-2 { background: #c026d3; color: #fff; }
 .tp-mind-3 { background: #fefaff; color: #7a4a76; border: 1px solid #f0dcf0; }
 
+/* ---- 夜行者（深蓝近黑） ---- */
+body[data-theme="night"] {
+  --soft: #0e1626;
+  --soft-2: #101a2c;
+  --soft-3: #122036;
+  --soft-blue: #0f1c33;
+  --soft-gray: #0f1725;
+  --tabs-1: rgba(5, 9, 17, .98);
+  --tabs-2: rgba(5, 9, 17, .84);
+  --hl-1: rgba(120, 170, 255, .05);
+  --hl-2: rgba(120, 170, 255, .06);
+  --hl-3: rgba(120, 170, 255, .09);
+  --hl-4: rgba(96, 165, 250, .08);
+  --hl-warm: rgba(96, 165, 250, .12);
+  --hl-warm-soft: rgba(96, 165, 250, .07);
+  --hl-cool: rgba(96, 165, 250, .12);
+  --hl-orange: rgba(249, 115, 22, .12);
+  --hl-orange-2: rgba(249, 115, 22, .18);
+  --hl-up: rgba(255, 95, 122, .18);
+  --hl-up-2: rgba(255, 95, 122, .13);
+  --hl-up-3: rgba(255, 95, 122, .09);
+  --hl-up-4: rgba(255, 95, 122, .15);
+  --hl-down: rgba(53, 214, 164, .18);
+  --hl-tp: rgba(53, 214, 164, .15);
+  --hl-sl: rgba(255, 95, 122, .15);
+  --hl-bar: rgba(120, 170, 255, .1);
+  --hl-gray: rgba(120, 170, 255, .07);
+  --hl-info: rgba(96, 165, 250, .16);
+  --bd-up: rgba(255, 95, 122, .4);
+  --bd-down: rgba(53, 214, 164, .4);
+  --bd-warn: rgba(250, 204, 21, .38);
+  --bd-info: rgba(96, 165, 250, .4);
+  --bd-accent: rgba(96, 165, 250, .36);
+  --bd-gray: rgba(120, 170, 255, .18);
+  --bg: #05080f;
+  --bg-2: #0b1424;
+  --card: #0c1526;
+  --surface: #12203a;
+  --ink: #dfe9fb;
+  --ink-2: #93a6c9;
+  --ink-3: #5f7191;
+  --line: #1b2942;
+  --accent: #60a5fa;
+  --accent-2: #3b82f6;
+  --accent-soft: #12233d;
+  --up: #ff5f7a;
+  --down: #35d6a4;
+  --shadow: 0 8px 30px rgba(0, 0, 0, .7);
+  --shadow-lg: 0 18px 52px rgba(0, 0, 0, .8);
+  --glass: rgba(6, 11, 21, .88);
+  --glass-line: rgba(60, 90, 140, .55);
+  --glass-hover: rgba(24, 40, 68, .72);
+  --blob-a: #10275c;
+  --blob-b: #2a1060;
+  --blob-c: #0b2f4a;
+}
+body[data-theme="night"] .blob { opacity: .4; }
+body[data-theme="night"] .tab.active {
+  background: linear-gradient(135deg, #2f5fb0, #16233c);
+  color: #cfe3ff;
+  box-shadow: inset 0 0 0 1px rgba(96, 165, 250, .35), 0 6px 20px rgba(0, 0, 0, .6);
+}
+body[data-theme="night"] .brand-logo {
+  background: linear-gradient(140deg, #1c3a6b, #070d18);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .7), inset 0 0 0 1px rgba(96, 165, 250, .3);
+}
+body[data-theme="night"] .btn-primary {
+  color: #06101f;
+  background: linear-gradient(135deg, #7fb6ff, #3b82f6);
+}
+body[data-theme="night"] .stock-item.active,
+body[data-theme="night"] .stock-item:hover {
+  background: var(--surface);
+}
+body[data-theme="night"] input,
+body[data-theme="night"] textarea,
+body[data-theme="night"] select {
+  color: var(--ink);
+}
+body[data-theme="night"] .toast { background: rgba(12, 21, 38, .97); color: var(--ink); }
+body[data-theme="night"] ::-webkit-scrollbar { width: 10px; height: 10px; }
+body[data-theme="night"] ::-webkit-scrollbar-track { background: #05080f; }
+body[data-theme="night"] ::-webkit-scrollbar-thumb { background: #1c2b45; border-radius: 6px; }
+body[data-theme="night"] .perk { color: #7fb6ff; }
+body[data-theme="night"] .fee-bonus { color: var(--down); }
+.tp-night-1, .tp-night-2, .tp-night-3 {
+  border-radius: 8px; padding: 5px 10px; font-size: 11px; text-align: center;
+}
+.tp-night-1 { background: #05080f; color: #93a6c9; }
+.tp-night-2 { background: #3b82f6; color: #fff; }
+.tp-night-3 { background: #0c1526; color: #93a6c9; border: 1px solid #1b2942; }
+
+/* 夜行者卡片上的「现在是不是夜里」提示 */
+.night-status { font-size: 11px; color: var(--ink-3); }
+.night-status.on { color: #60a5fa; font-weight: 700; }
+
 /* 情绪读心：一条双向情绪条（中线 0，左绿右红），不显示文字 */
 .mind-bar {
   margin: 4px 0 10px;

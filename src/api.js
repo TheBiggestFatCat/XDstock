@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
 import { candlesFromSeries, changesFor, timeFromAxis, tickTimeAxis, pushNotice, noticeAlive, sentimentView, liveIndexWeights } from './engine.js';
+import { nightInfoFor } from './theme.js';
 import { TIMEFRAMES } from './config.js';
 import { getBuild } from './build.js';
 import { playerEquity, positionPnl } from './trading.js';
@@ -12,9 +13,9 @@ import { reportPayload, dividendPerShare, dividendPayout } from './fundamentals.
 const TOKEN_TTL = 30 * 24 * 3600 * 1000;
 
 /** 所有可购买的主题 */
-const THEMES = ['red', 'bear', 'dark', 'tycoon', 'hermit', 'probe', 'mind'];
+const THEMES = ['red', 'bear', 'dark', 'tycoon', 'hermit', 'probe', 'mind', 'night'];
 /** 需要账号等级的主题（其余 Lv.1 就能买） */
-const THEME_NEED_LEVEL = { probe: 2, mind: 2 };
+const THEME_NEED_LEVEL = { probe: 2, mind: 2, night: 2 };
 
 // 登录失败计数：同一 IP + 昵称 连错 5 次，锁 60 秒
 const loginFailures = new Map();
@@ -82,6 +83,8 @@ function publicPlayer(p, db) {
     stealQueued: p.stealQueued || null,
     stealEarned: p.stealEarned || 0,
     stealReadyAt: p.stealReadyAt || 0,
+    // 夜行者主题：此刻的偷钱 CD 和夜里状态（前端显示用）
+    night: nightInfoFor(db, p),
     investigateReadyAt: Number(p.investigateReadyAt) || 0,
     guardUntil: p.guardUntil || 0,
     fakeNewsReadyAt: p.fakeNewsReadyAt || 0,
@@ -410,6 +413,9 @@ function marketPayload(db, me) {
       shopThemePrice: db.config.shopThemePrice ?? 2000000,
       mindThemePrice: db.config.mindThemePrice ?? 5000000,
       mindFakeChance: db.config.mindFakeChance ?? 0.5,
+      nightStartHour: db.config.nightStartHour ?? 18,
+      nightEndHour: db.config.nightEndHour ?? 4,
+      nightStealCooldown: db.config.nightStealCooldown ?? 5,
       themeNeedLevel: THEME_NEED_LEVEL,
       shopBgPrice: db.config.shopBgPrice ?? 5000000,
       shopRenamePrice: db.config.shopRenamePrice ?? 1000000,
@@ -898,6 +904,7 @@ export async function handleApi(ctx) {
       'equitySampleTicks', 'equityMaxPoints',
       'shopFakeNewsPrice', 'shopFakeNewsChance', 'shopFakeNewsCooldown',
       'shopBodyguardPrice', 'shopBodyguardTicks', 'shopThemePrice', 'mindThemePrice', 'mindFakeChance',
+      'nightStartHour', 'nightEndHour', 'nightStealCooldown',
       'shopChannelBasePrice', 'shopChannelRatio', 'shopChannelStep',
       'shopAutoDcaPrice', 'shopAutoDcaPremium',
       'bankPoorThreshold', 'bankWithdrawRateMin', 'bankWithdrawRateMax', 'bankWithdrawFloor',

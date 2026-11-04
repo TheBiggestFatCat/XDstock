@@ -83,6 +83,11 @@ export const DEFAULT_CONFIG = {
   mindThemePrice: 5000000,     // 「情绪读心」主题售价（Lv.2 商店）
   // 「情绪读心」看到假值的概率：0 = 永远准，0.5 = 一半是假的，1 = 全假
   mindFakeChance: 0.5,
+
+  // ---- 夜行者主题（Lv.2）----
+  nightStartHour: 18,      // 现实时间几点开始算夜里（服务器本地时间）
+  nightEndHour: 4,         // 几点结束（支持跨零点）
+  nightStealCooldown: 5,   // 夜行者夜里偷钱的冷却（轮），其他情况用 stealCooldownTicks
   shopBgPrice: 5000000,        // 自定义背景（一次买断）
   shopRenamePrice: 1000000,    // 改名卡
   shopRenameCooldown: 2000,    // 改名冷却（轮）
