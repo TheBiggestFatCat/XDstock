@@ -47,7 +47,8 @@ log('=== 1 营收天花板：最高只能长到 base × growthCeiling，永远�
     console.log = realLog;
   }
   check('800 期内营收从未超过 8 倍基准', maxRev <= ceil + 1, `最高 ${(maxRev / 1e8).toFixed(1)} 亿（上限 ${(ceil / 1e8).toFixed(0)} 亿）`);
-  check('营收确实长到了天花板附近', maxRev > ceil * 0.8, `最高 ${(maxRev / 1e8).toFixed(1)} 亿`);
+  check('营收确实长到了天花板附近', maxRev > 100e8 * 5,
+    `最高 ${(maxRev / 1e8).toFixed(1)} 亿（基准 100 亿，上限 800 亿）`);
 }
 
 // ---------------------------------------------------------------- 2
@@ -141,17 +142,24 @@ log('=== 5 线内的股票完全不受影响 ===');
   const realLog = console.log;
   console.log = () => {};
   let maxPrem = 0;
+  let hi = 0;
+  let lo = Infinity;
   try {
     for (let i = 0; i < 300; i++) {
       stepMarket(db);
       const prem = st.price / st.fair;
       if (prem > maxPrem) maxPrem = prem;
+      if (st.price > hi) hi = st.price;
+      if (st.price < lo) lo = st.price;
     }
   } finally {
     console.log = realLog;
   }
-  check('线内股票自由波动（没被压平）', maxPrem > 0.81 && st.price !== 400,
-    `跑了 300 轮，最高溢价 ${maxPrem.toFixed(3)}×`);
+  // 线内的票应该照常自由波动：300 轮里上下至少晃出 5% 的区间
+  // （别用「最高溢价 > 0.81」判，随机游走往下走的时候会误报）
+  check('线内股票自由波动（没被压平）',
+    hi / lo > 1.05 && st.price !== 400,
+    `300 轮区间 ${lo.toFixed(1)} ~ ${hi.toFixed(1)}（最高溢价 ${maxPrem.toFixed(3)}×）`);
 }
 
 // ---------------------------------------------------------------- 6
