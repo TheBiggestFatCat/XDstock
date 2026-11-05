@@ -284,12 +284,17 @@ export function grantAchv(db, player, id) {
   return got ? [got] : [];
 }
 
-/** 已解锁的主题成就 emoji 列表（排行榜用） */
+/**
+ * 排行榜名字旁边显示的成就 emoji。
+ * **一个主题的两条成就都达成才显示**（只解一条不算；进化后带 ✦）。
+ */
 export function themeEmojiList(player) {
   const out = [];
   for (const t of THEMES) {
-    const got = THEME_ACHIEVEMENTS.some((a) => a.theme === t && player?.achv?.[a.id]);
-    if (!got) continue;
+    const defs = THEME_ACHIEVEMENTS.filter((a) => a.theme === t);
+    if (!defs.length) continue;
+    const allDone = defs.every((a) => player?.achv?.[a.id]);
+    if (!allDone) continue;
     out.push(isEvolved(player, t) ? `${THEME_EMOJI[t]}✦` : THEME_EMOJI[t]);
   }
   return out;

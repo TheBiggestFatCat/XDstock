@@ -391,14 +391,21 @@ log('=== 16 排行榜徽章 + 隐世 Ⅱ 阶模糊 ===');
   const db = newDb();
   const p = mkPlayer(db, 'h', 1e9, 'hermit');
   grantAchv(db, p, 'hermit_lone');
-  check('徽章里出现 🧙', themeEmojiList(p).includes('🧙'), JSON.stringify(themeEmojiList(p)));
+  check('只解一条 → 排行榜不显示徽章', themeEmojiList(p).length === 0, JSON.stringify(themeEmojiList(p)));
   grantAchv(db, p, 'hermit_follow');
+  check('两条都解 → 出现 🧙', themeEmojiList(p).includes('🧙'), JSON.stringify(themeEmojiList(p)));
   evolveTheme(db, p, 'hermit');
   check('进化后徽章带 ✦', themeEmojiList(p).includes('🧙✦'), JSON.stringify(themeEmojiList(p)));
+
   const multi = mkPlayer(db, 'm', 1e9, 'red');
   grantAchv(db, multi, 'red_trend');
-  grantAchv(db, multi, 'tycoon_info');
-  check('多条成就 → 多个 emoji', themeEmojiList(multi).length === 2, JSON.stringify(themeEmojiList(multi)));
+  grantAchv(db, multi, 'red_bonus');          // 红牛两条都达成
+  grantAchv(db, multi, 'tycoon_info');        // 大鳄只解了一条
+  check('只有整组达成才亮（大鳄只解一条不亮）',
+    themeEmojiList(multi).join(',') === '🐂', JSON.stringify(themeEmojiList(multi)));
+  grantAchv(db, multi, 'tycoon_prophet');
+  check('补齐后两个主题都亮',
+    themeEmojiList(multi).length === 2, JSON.stringify(themeEmojiList(multi)));
 }
 
 // ---------------------------------------------------------------- 17
@@ -416,7 +423,10 @@ log('=== 17 payload 结构（前端要用）===');
     JSON.stringify({ tier: red.tier, shards: red.shards, got: red.got, total: red.total }));
   check('每条成就带进度和目标', red.list.every((x) => 'progress' in x && 'target' in x && 'got' in x));
   check('canEvolve 为 false（还差一条）', red.canEvolve === false);
-  check('emojis 有 🐂', payload.emojis.includes('🐂'));
+  // 只解了一条：payload 的 emojis 里也不该出现
+  check('只解一条 → payload.emojis 为空', payload.emojis.length === 0, JSON.stringify(payload.emojis));
+  grantAchv(db, p, 'red_bonus');
+  check('补齐两条后 payload.emojis 有 🐂', achvPayload(db, p).emojis.includes('🐂'));
 }
 
 console.log(out.join('\n'));
