@@ -52,10 +52,45 @@ const state = {
 };
 
 // ---------------- 工具 ----------------
+
+/**
+ * 大额金额缩写：百万起用 M，再往上 B（十亿）、T（万亿）。
+ * 只缩「≥ 100 万」的数，小额（$12,345.67）照旧带千分位 ——
+ * 下单、看盈亏都是小数目，缩了反而看不清。
+ * 保留 3 位有效数字：1.23M / 12.3M / 123M
+ */
+const MONEY_UNITS = [
+  [1e12, 'T'],
+  [1e9, 'B'],
+  [1e6, 'M']
+];
+
+function abbrMoney(abs) {
+  const digitsFor = (n) => (n >= 100 ? 0 : n >= 10 ? 1 : 2);
+  for (let i = 0; i < MONEY_UNITS.length; i++) {
+    const [base, suffix] = MONEY_UNITS[i];
+    if (abs < base) continue;
+    let v = abs / base;
+    let d = digitsFor(v);
+    // 999.6M 会四舍五入成 1000M，不好看 —— 进位到上一档
+    if (Number(v.toFixed(d)) >= 1000 && i > 0) {
+      const [base2, suffix2] = MONEY_UNITS[i - 1];
+      v = abs / base2;
+      d = digitsFor(v);
+      return v.toFixed(d) + suffix2;
+    }
+    return v.toFixed(d) + suffix;
+  }
+  return null;
+}
+
 function money(v) {
   if (!Number.isFinite(v)) return '$0';
   const neg = v < 0;
-  const s = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const abs = Math.abs(v);
+  const big = abbrMoney(abs);
+  if (big) return (neg ? '-$' : '$') + big;
+  const s = abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return (neg ? '-$' : '$') + s;
 }
 
@@ -63,7 +98,18 @@ function money(v) {
 function money0(v) {
   if (!Number.isFinite(v)) return '$0';
   const neg = v < 0;
+  const abs = Math.abs(v);
+  const big = abbrMoney(abs);
+  if (big) return (neg ? '-$' : '$') + big;
   const s = Math.abs(Math.round(v)).toLocaleString('en-US');
+  return (neg ? '-$' : '$') + s;
+}
+
+/** 完整金额（千分位、不缩写），给 title 看全用 */
+function moneyExact(v) {
+  if (!Number.isFinite(v)) return '$0';
+  const neg = v < 0;
+  const s = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return (neg ? '-$' : '$') + s;
 }
 function moneyShort(v) {
@@ -268,6 +314,7 @@ function renderTopbar() {
   const me = m.me;
   if (me) {
     $('#equityValue').textContent = money(me.equity);
+    $('#equityValue').title = moneyExact(me.equity);   // 数字缩写后，悬停能看全
     $('#equityValue').className = 'cash-value';
     $('#nickDisplay').textContent = me.nickname;
     applyAvatar(me.avatar);
