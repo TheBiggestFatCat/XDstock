@@ -26,11 +26,6 @@ const r2 = (v) => Math.round(Number(v) * 100) / 100;
 
 /** 风控单的穿价幅度：挂单价在现价基础上让 0.4%，保证方向正确 */
 const AUTO_SLIP = 0.004;
-
-// 买单挂价最多能高于现价多少（1 = 100%）。
-// 限价撮合里「挂 300 买、现价 100」会立刻按 100 成交 —— 玩家其实是想等涨到 300，
-// 但这个游戏没有到价单，所以这种离谱挂价直接拒掉，别让它悄悄成交。
-const MAX_BUY_PREMIUM = 1;
 /** 同一张单连续失败几次就撤掉（避免每轮刷失败提示） */
 const MAX_ORDER_FAILS = 3;
 
@@ -203,20 +198,6 @@ export function placeLimitOrder(db, player, body) {
   const exist = player.positions[code];
   if (exist && exist.side !== side) {
     return { ok: false, error: '这只票你还有反向持仓，先平掉再挂' };
-  }
-
-  // 只拦「开多」的离谱挂价：
-  //   现价 100 挂 300 买入，在限价撮合里等于市价单，会按 100 立刻成交，
-  //   而玩家的意思其实是「等涨到 300 再说」。游戏没有到价单，直接拒绝最清楚。
-  //   卖单、平空不动 —— 挂高卖本来就是等到价，买回便宜了也不吃亏。
-  if (side === 'long' && st.price > 0) {
-    const capPrice = st.price * (1 + MAX_BUY_PREMIUM);
-    if (limit > capPrice + 1e-9) {
-      return {
-        ok: false,
-        error: `买单挂价不能高于现价 ${MAX_BUY_PREMIUM * 100}%（现价 ${st.price.toFixed(2)}，最高 ${capPrice.toFixed(2)}）`
-      };
-    }
   }
 
   // 押金按「最坏情况成交价」冻结：
