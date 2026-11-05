@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { DEFAULT_CONFIG } from './config.js';
 import { STOCK_SEED, STOCK_CODES, INDEX_BASE, INDEX_STOCK, SMALL_INDEX_STOCK } from './stocks.js';
 import { backDerive, fairFromReport } from './fundamentals.js';
-import { seedBars15, BAR15_MAX } from './bars15.js';
+import { seedBars15, seedVolFromConfig, BAR15_MAX, BAR15_SEED_VER } from './bars15.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(__dirname, '..');
@@ -242,10 +242,13 @@ export function migrate(d) {
   // 指数标的（DENG / DENGS）也要 15 分钟 K 线，但上面那段按 isIndex 跳过了，这里补
   for (const st of Object.values(merged.stocks)) {
     if (!st.isIndex) continue;
-    if (!Array.isArray(st.bars15) || st.bars15.length < 8) {
+    if (!Array.isArray(st.bars15) || st.bars15.length < 8
+      || Number(st.bars15Ver) !== BAR15_SEED_VER) {
       const price = Math.max(0.01, Number(st.price) || INDEX_BASE);
-      st.bars15 = seedBars15(st.bars15, price, Number(merged.tick) || 0, 0.006);
+      st.bars15 = seedBars15(st.bars15, price, Number(merged.tick) || 0,
+        seedVolFromConfig(merged.config) * 0.8);   // 指数波动比个股小一点
       st.bars15Seeded = true;
+      st.bars15Ver = BAR15_SEED_VER;
     }
     if (st.bars15.length > BAR15_MAX) {
       st.bars15.splice(0, st.bars15.length - BAR15_MAX);
@@ -270,12 +273,16 @@ export function migrate(d) {
     if (!st.fundamentals) {
       st.fundamentals = backDerive(st, Math.max(0.01, Number(st.price) || Number(st.initialPrice) || 1));
     }
-    // 15 分钟 K 线：老档没有就铺满 48 小时（尾部接上现价，图上不会断）
-    if (!Array.isArray(st.bars15) || st.bars15.length < 8) {
+    // 15 分钟 K 线：老档没有就铺满 48 小时（尾部接上现价，图上不会断）。
+    // 单根波动直接由 baseVolatility 推（每 tick σ × √180），第一次铺得太安静
+    // 会让「最后一根真 K 线」显得像一根大阳线 —— 所以按版本号决定要不要重铺。
+    if (!Array.isArray(st.bars15) || st.bars15.length < 8
+      || Number(st.bars15Ver) !== BAR15_SEED_VER) {
       const price = Math.max(0.01, Number(st.price) || Number(st.initialPrice) || 1);
-      const vol = Math.max(0.004, Number(merged.config?.baseVolatility ?? 0.01) * 2.4);
-      st.bars15 = seedBars15(st.bars15, price, Number(merged.tick) || 0, vol);
+      st.bars15 = seedBars15(st.bars15, price, Number(merged.tick) || 0,
+        seedVolFromConfig(merged.config));
       st.bars15Seeded = true;
+      st.bars15Ver = BAR15_SEED_VER;
     }
     if (st.bars15.length > BAR15_MAX) {
       st.bars15.splice(0, st.bars15.length - BAR15_MAX);

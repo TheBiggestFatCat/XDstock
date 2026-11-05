@@ -10,6 +10,8 @@
 
 export const BAR15_TICKS = 180;     // 15 分钟 = 180 tick
 export const BAR15_MAX = 192;       // 192 根 = 48 小时
+/** 冷启动数据的版本：算法改了就让老存档重铺一遍 */
+export const BAR15_SEED_VER = 2;
 
 /**
  * 往 15 分钟 K 线里塞一个价格。
@@ -40,18 +42,27 @@ export function pushBar15(list, bucket, price) {
  * 冷启动 / 老存档升级时把 15 分钟 K 线铺满 192 根（从当前价往回随机走）。
  * 尾部必须接上当前价，否则图上最后一根会离现价很远。
  */
-export function seedBars15(list, price, tickNow, vol = 0.02) {
+export function seedBars15(list, price, tickNow, vol = 0.08) {
   const out = [];
-  const sigma = Math.max(0.002, Math.min(0.15, Number(vol) || 0.02));
+  const sigma = Math.max(0.002, Math.min(0.25, Number(vol) || 0.08));
   const bucketNow = Math.floor((Number(tickNow) || 0) / BAR15_TICKS);
-  let cur = Number(price) > 0 ? Number(price) : 1;
+  const anchor = Number(price) > 0 ? Number(price) : 1;
+  // 每根往回走完再往现价拉一点点：单根波动够大（跟真实盘面一个量级），
+  // 但 48 小时不至于跑飞成 10 倍
+  const kappa = 0.12;
+  let cur = anchor;
 
   for (let i = 0; i < BAR15_MAX; i++) {
     const bucket = bucketNow - i;
-    const r = (Math.random() - 0.5) * 2 * sigma;
-    const open = Math.max(0.01, cur / (1 + r));
-    const hi = Math.max(open, cur) * (1 + Math.random() * sigma * 0.6);
-    const lo = Math.min(open, cur) * (1 - Math.random() * sigma * 0.6);
+    // 两段均匀分布相加 ≈ 正态，比纯 uniform 更像真行情
+    const g = (Math.random() + Math.random() - 1) * sigma * 1.4;
+    let next = Math.max(0.01, cur / (1 + g));
+    next = next * (1 - kappa) + anchor * kappa;
+    const open = next;
+    const body = Math.max(open, cur);
+    const bodyLow = Math.min(open, cur);
+    const hi = body * (1 + Math.random() * sigma * 0.8);
+    const lo = bodyLow * (1 - Math.random() * sigma * 0.8);
     out.push([
       bucket,
       Number(open.toFixed(4)),
@@ -59,11 +70,18 @@ export function seedBars15(list, price, tickNow, vol = 0.02) {
       Number(lo.toFixed(4)),
       Number(cur.toFixed(4))
     ]);
-    cur = open;
+    cur = next;
   }
   out.reverse();                      // 变成时间正序
   if (Array.isArray(list)) list.length = 0;
   return out;
+}
+
+/** 冷启动该用多大的单根波动：直接由 baseVolatility 推（每 tick σ × √180） */
+export function seedVolFromConfig(cfg) {
+  const tickVol = Math.max(0.0005, Number(cfg?.baseVolatility ?? 0.01));
+  // 理论上 √180 × 1% ≈ 13%，均值回归会削掉一部分，取 0.6 的系数
+  return Math.max(0.01, Math.min(0.2, tickVol * Math.sqrt(BAR15_TICKS) * 0.75));
 }
 
 /**

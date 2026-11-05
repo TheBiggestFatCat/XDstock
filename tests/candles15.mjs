@@ -1,7 +1,7 @@
 // 15 分钟 K 线：收集、封顶、冷启动铺满、转成 K 线对象
 //   node tests/candles15.mjs
 
-import { pushBar15, seedBars15, bars15Candles, BAR15_TICKS, BAR15_MAX } from '../src/bars15.js';
+import { pushBar15, seedBars15, seedVolFromConfig, bars15Candles, BAR15_TICKS, BAR15_MAX } from '../src/bars15.js';
 
 let fails = 0;
 let passes = 0;
@@ -75,7 +75,7 @@ log('=== 4 脏数据不炸 ===');
 log('');
 log('=== 5 冷启动铺满 48 小时，且尾部接上现价 ===');
 {
-  const list = seedBars15([], 3284.54, 12000, 0.02);
+  const list = seedBars15([], 3284.54, 12000, seedVolFromConfig({ baseVolatility: 0.01 }));
   check('铺满 192 根', list.length === BAR15_MAX, String(list.length));
   check('时间递增', list.every((b, i) => i === 0 || b[0] > list[i - 1][0]));
   check('桶号连续（每根差 1）', list.every((b, i) => i === 0 || b[0] - list[i - 1][0] === 1));
@@ -85,9 +85,28 @@ log('=== 5 冷启动铺满 48 小时，且尾部接上现价 ===');
   check('每根 low ≤ min(open,close)', list.every((b) => b[3] <= Math.min(b[1], b[4]) + 1e-9));
   check('价格全为正', list.every((b) => b[1] > 0 && b[2] > 0 && b[3] > 0 && b[4] > 0));
   const tickNow = 12000;
+  // 冷启动数据的波动要跟真盘面一个量级，否则最后一根真 K 线会像一根大阳线
+  const bodies = list.map((b) => Math.abs(b[4] / b[1] - 1) * 100);
+  const avgBody = bodies.reduce((a, b) => a + b, 0) / bodies.length;
+  check('单根实体不是「一条直线」（均值 > 1.5%）', avgBody > 1.5, avgBody.toFixed(2) + '%');
+  check('单根实体也没夸张到离谱（均值 < 15%）', avgBody < 15, avgBody.toFixed(2) + '%');
+  const rangePct = (Math.max(...list.map((b) => b[2])) / Math.min(...list.map((b) => b[3])) - 1) * 100;
+  check('48 小时振幅在 30%~250% 之间', rangePct > 30 && rangePct < 250, rangePct.toFixed(0) + '%');
   check('最后一根桶号 = floor(tick/180)',
     list[list.length - 1][0] === Math.floor(tickNow / BAR15_TICKS),
     `${list[list.length - 1][0]} vs ${Math.floor(tickNow / BAR15_TICKS)}`);
+}
+
+// ---------------------------------------------------------------- 5.5
+log('');
+log('=== 5.5 冷启动波动由 baseVolatility 推出来 ===');
+{
+  const v1 = seedVolFromConfig({ baseVolatility: 0.01 });
+  const v2 = seedVolFromConfig({ baseVolatility: 0.02 });
+  check('1%/tick → 单根 σ 约 10%', Math.abs(v1 - 0.101) < 0.02, (v1 * 100).toFixed(1) + '%');
+  check('波动翻倍，种子也翻倍', v2 > v1 * 1.8, (v2 * 100).toFixed(1) + '%');
+  check('空配置用默认值不炸', seedVolFromConfig(null) > 0.01);
+  check('极端配置被夹住', seedVolFromConfig({ baseVolatility: 1 }) <= 0.2);
 }
 
 // ---------------------------------------------------------------- 6
