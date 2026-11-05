@@ -12,6 +12,11 @@ import { playerEquity, positionPnl } from './trading.js';
 import { levelUpPlayer, withdrawFromBank, bankStatus } from './bank.js';
 import { placeLimitOrder, cancelOrder, orderLimitBlocked, consumeOrderSlot, fillCapFor } from './orders.js';
 import { reportPayload, dividendPerShare, dividendPayout, tycoonPreviewPayload, previewInTicks, isTycoonSector } from './fundamentals.js';
+import {
+  THEMES as ACHV_THEMES, THEME_EMOJI, THEME_ACHIEVEMENTS, achvPayload, ensureAchvState,
+  themeEmojiList, themeTier, isEvolved, evolveTheme, canEvolve, bumpAchv,
+  tycoonLeadTicks
+} from './achievements.js';
 
 const TOKEN_TTL = 30 * 24 * 3600 * 1000;
 
@@ -162,6 +167,8 @@ function publicPlayer(p, db) {
     // -1 = 从没换过技能
     skillChangedTick: Number.isFinite(Number(p.skillChangedTick)) ? Number(p.skillChangedTick) : -1,
     themes: Array.isArray(p.themes) ? p.themes : [],
+    // 主题成就 / 进化（进度、结晶、阶数都在这）
+    achv: achvPayload(db, p),
     frozen: Math.round((p.orders || []).reduce((a, o) => a + (Number(o.reserve) || 0), 0) * 100) / 100,
     // 这个玩家本轮的「单笔成交上限」（基础 + 商城通道 + 账号等级）
     fillCap: fillCapFor(db, p),
@@ -267,16 +274,27 @@ export function leaderboardRows(db) {
     .map((p) => {
       const equity = playerEquity(db, p);
       const bank = Math.max(0, Number(p.bank) || 0);
+      // 🧙 隐世仙人进化：排行榜上自己的资产模糊成「≈X」（不暴露精确身家）
+      const blur = p.skill === 'hermit' && isEvolved(p, 'hermit');
+      const fuzz = (v) => {
+        const n = Math.max(0, Number(v) || 0);
+        if (n <= 0) return 0;
+        const mag = Math.pow(10, Math.max(0, Math.floor(Math.log10(n)) - 1));
+        return Math.round(n / mag) * mag;      // 保留 2 位有效数字
+      };
       return {
         id: p.id,
         nickname: p.nickname,
         avatar: p.avatar || null,
         cash: p.cash,
+        // 名字旁边显示的成就徽章（🐂 / 🐊✦ …）
+        achvEmojis: themeEmojiList(p),
+        fuzzed: !!blur,
         // equity = 交易资产（现金 + 持仓 + 冻结），偷钱上限仍按这个算
-        equity,
+        equity: blur ? fuzz(equity) : equity,
         bank,
         // total = 排名用的总资产（含银行存款）
-        total: Math.round((equity + bank) * 100) / 100,
+        total: Math.round(((blur ? fuzz(equity) : equity) + bank) * 100) / 100,
         guardUntil: p.guardUntil || 0,
         theme: p.theme || 'default',
         skill: p.skill || p.theme || 'default',
@@ -306,7 +324,10 @@ export function investigatePlayer(db, me, targetId) {
   if (me.skill !== 'probe') {
     return { ok: false, status: 403, error: '需要装备「暗中调查」主题才能调查' };
   }
-  const cd = Math.max(0, Math.round(Number(db.config.investigateCooldownTicks ?? 30)));
+  const evolved = isEvolved(me, 'probe');
+  const cdBase = Math.max(0, Math.round(Number(db.config.investigateCooldownTicks ?? 30)));
+  const cdEvo = Math.max(0, Math.round(Number(db.config.investigateCooldownEvolved ?? 20)));
+  const cd = evolved ? Math.min(cdBase, cdEvo) : cdBase;
   const readyAt = Number(me.investigateReadyAt) || 0;
   if (db.tick < readyAt) {
     const left = readyAt - db.tick;
@@ -322,7 +343,31 @@ export function investigatePlayer(db, me, targetId) {
     return { ok: false, status: 400, error: `${victim.nickname} 现在空仓，什么也查不到` };
   }
 
-  const [code, pos] = list[Math.floor(Math.random() * list.length)];
+  // 未进化：随机看一个持仓；进化后（Ⅱ 阶）：直接看全部持仓 + 对方的成本价
+  const picked = evolved
+    ? list
+    : [list[Math.floor(Math.random() * list.length)]];
+  const pickOne = ([code, pos]) => {
+    const st = db.stocks[code];
+    const price = Number(st.price) || 0;
+    const pnl = positionPnl(pos, price);
+    const margin = Number(pos.margin) || 0;
+    return {
+      code,
+      name: st.name || code,
+      side: pos.side === 'short' ? 'short' : 'long',
+      qty: Number(pos.qty) || 0,
+      entry: Number(pos.entry) || 0,
+      price,
+      leverage: Number(pos.leverage) || 1,
+      margin,
+      pnl,
+      pnlPct: margin > 0 ? (pnl / margin) * 100 : 0,
+      heldTicks: Math.max(0, db.tick - (Number(pos.openedTick) || db.tick))
+    };
+  };
+  const positions = picked.map(pickOne);
+  const [code, pos] = picked[0];
   const st = db.stocks[code];
   const price = Number(st.price) || 0;
   const pnl = positionPnl(pos, price);
@@ -330,8 +375,15 @@ export function investigatePlayer(db, me, targetId) {
 
   // 查到了才进冷却，空手而归不罚
   me.investigateReadyAt = db.tick + cd;
+  // 🕵️ 情报网：累计调查成功次数
+  ensureAchvState(me);
+  bumpAchv(db, me, 'probeCount', 1);
 
   return {
+    // 进化后前端用这个列表渲染全部持仓；未进化只给单个 position（不下发列表）
+    evolved,
+    ...(evolved ? { positions } : {}),
+    cooldownTicks: cd,
     ok: true,
     target: { id: victim.id, nickname: victim.nickname, avatar: victim.avatar || null },
     position: {
@@ -347,7 +399,6 @@ export function investigatePlayer(db, me, targetId) {
       pnlPct: margin > 0 ? (pnl / margin) * 100 : 0,
       heldTicks: Math.max(0, db.tick - (Number(pos.openedTick) || db.tick))
     },
-    cooldownTicks: cd,
     readyAt: me.investigateReadyAt
   };
 }
@@ -415,10 +466,14 @@ function marketPayload(db, me) {
       // 天气（st.weather / st.weatherTarget）只给引擎和财报用，不下发给前端
       report,
       // 「金融大鳄」倒计时：只有金融板块才有（> 0 还要等，<= 0 已在窗口内）
-      previewIn: (st.isIndex || !isTycoonSector(st)) ? null : previewInTicks(st, db.tick),
+      // 进化后提前量 20 → 30 轮，所以倒计时要按这个玩家的阶数算
+      previewIn: (st.isIndex || !isTycoonSector(st))
+        ? null
+        : previewInTicks(st, db.tick, tycoonLeadTicks(db, me)),
       // 金融大鳄：任意个股的下一期财报，提前 TYCOON_LEAD_TICKS 轮就能看到
-      preview: (me && me.skill === 'tycoon' && st.pendingReport)
-        ? tycoonPreviewPayload(st, db.tick)
+      preview: (me && me.skill === 'tycoon' && st.pendingReport
+        && (Number(st.nextReportTick) - db.tick) <= tycoonLeadTicks(db, me))
+        ? tycoonPreviewPayload(st, db.tick, tycoonLeadTicks(db, me))
         : null,
       // 情绪读心：只有这个主题能看到每只票当前的情绪（v / 剩余轮数 / 方向分量）
       sent: (me && me.skill === 'mind') ? sentimentView(st, db) : null,
@@ -566,7 +621,42 @@ function marketPayload(db, me) {
       nightStartHour: db.config.nightStartHour ?? 18,
       nightEndHour: db.config.nightEndHour ?? 4,
       nightStealCooldown: db.config.nightStealCooldown ?? 5,
+      nightStealCooldownEvolved: db.config.nightStealCooldownEvolved ?? 3,
       themeNeedLevel: THEME_NEED_LEVEL,
+      // ---- 主题成就 / 进化 ----
+      achvShardPerEvolve: db.config.achvShardPerEvolve ?? 2,
+      achvRedTrendTarget: db.config.achvRedTrendTarget ?? 20,
+      achvRedBonusTarget: db.config.achvRedBonusTarget ?? 5000000,
+      achvBearTrendTarget: db.config.achvBearTrendTarget ?? 20,
+      achvBearBonusTarget: db.config.achvBearBonusTarget ?? 5000000,
+      achvDarkHandTarget: db.config.achvDarkHandTarget ?? 10000000,
+      achvDarkHandCount: db.config.achvDarkHandCount ?? 1,
+      achvDarkPushTarget: db.config.achvDarkPushTarget ?? 1,
+      achvDarkPushWindowTicks: db.config.achvDarkPushWindowTicks ?? 200,
+      achvTycoonProphetTarget: db.config.achvTycoonProphetTarget ?? 1,
+      achvTycoonProphetLeverage: db.config.achvTycoonProphetLeverage ?? 10,
+      achvTycoonProfitTarget: db.config.achvTycoonProfitTarget ?? 5000000,
+      achvHermitFollowTarget: db.config.achvHermitFollowTarget ?? 1,
+      achvHermitPosTarget: db.config.achvHermitPosTarget ?? 10000000,
+      achvHermitFollowWindowTicks: db.config.achvHermitFollowWindowTicks ?? 100,
+      achvProbeWeakTarget: db.config.achvProbeWeakTarget ?? 1,
+      achvProbeWindowTicks: db.config.achvProbeWindowTicks ?? 100,
+      achvProbeTarget: db.config.achvProbeTarget ?? 20,
+      achvMindReadTarget: db.config.achvMindReadTarget ?? 1,
+      achvMindExtreme: db.config.achvMindExtreme ?? 0.8,
+      achvMindProfitTarget: db.config.achvMindProfitTarget ?? 10000000,
+      achvNightBigSteal: db.config.achvNightBigSteal ?? 9500,
+      achvNightStealTarget: db.config.achvNightStealTarget ?? 200,
+      themeEvolveSkillMult: db.config.themeEvolveSkillMult ?? 1.5,
+      themeEvolveImpact: db.config.themeEvolveImpact ?? 1.08,
+      themeEvolveImpactRefund: db.config.themeEvolveImpactRefund ?? 0.2,
+      tycoonLeadTicks: db.config.tycoonLeadTicks ?? 20,
+      tycoonLeadTicksEvolved: db.config.tycoonLeadTicksEvolved ?? 30,
+      hermitHideChance: db.config.hermitHideChance ?? 0.5,
+      hermitHideChanceEvolved: db.config.hermitHideChanceEvolved ?? 0.75,
+      investigateCooldownEvolved: db.config.investigateCooldownEvolved ?? 20,
+      themeEvolveBearMarginCut: db.config.themeEvolveBearMarginCut ?? 0.2,
+      themeEvolveFeeFreeRed: db.config.themeEvolveFeeFreeRed ?? 1,
       // 表情互动的目录（前端拼 /assets/<dir>/<file>）
       emojiDirs: { 1: 'emo_lv1' },
       // 道具/其他的等级门槛：前端照这个渲染「Lv.N 解锁」，服务端照这个拦
@@ -1111,7 +1201,22 @@ export async function handleApi(ctx) {
       'playerImpactEnabled', 'playerImpactRef', 'playerImpactStrength', 'impactRefFreeCap',
       'playerImpactDecay', 'playerImpactMax', 'playerImpactFlowMax',
       'brokerMidpoint', 'brokerMidFloor', 'brokerSensitivity', 'brokerCap', 'brokerAlpha',
-      'startingCash', 'adminPin', 'allowRegister', 'marketOpen', 'pinLength'
+      'startingCash', 'adminPin', 'allowRegister', 'marketOpen', 'pinLength',
+      // ---- 主题成就 / 进化 ----
+      'achvShardPerEvolve',
+      'achvRedTrendTarget', 'achvRedBonusTarget',
+      'achvBearTrendTarget', 'achvBearBonusTarget',
+      'achvDarkHandTarget', 'achvDarkHandCount', 'achvDarkPushTarget', 'achvDarkPushWindowTicks',
+      'achvTycoonProphetTarget', 'achvTycoonProphetLeverage', 'achvTycoonProfitTarget',
+      'achvHermitFollowTarget', 'achvHermitPosTarget', 'achvHermitFollowWindowTicks',
+      'achvProbeWeakTarget', 'achvProbeWindowTicks', 'achvProbeTarget',
+      'achvMindReadTarget', 'achvMindExtreme', 'achvMindProfitTarget',
+      'achvNightBigSteal', 'achvNightStealTarget',
+      'themeEvolveSkillMult', 'themeEvolveImpact', 'themeEvolveImpactRefund',
+      'tycoonLeadTicks', 'tycoonLeadTicksEvolved',
+      'hermitHideChance', 'hermitHideChanceEvolved',
+      'investigateCooldownEvolved', 'themeEvolveBearMarginCut', 'themeEvolveFeeFreeRed',
+      'nightStealCooldownEvolved'
     ];
     for (const [k, v] of Object.entries(patch)) {
       if (!allowed.includes(k)) continue;
@@ -1259,7 +1364,12 @@ export async function handleApi(ctx) {
     if (!db.stocks[code]) return json(res, 404, { error: '没有这个标的' });
     const limit = Math.min(120, Math.max(1, Number(query.limit) || 40));
 
-    // 隐世仙人：每笔成交有 50% 概率不出现在别人的成交记录里
+    // 隐世仙人：每笔成交有 50%（进化后 75%）概率不出现在别人的成交记录里
+    const hideRatio = (() => {
+      const base = Number(db.config.hermitHideChance ?? 0.5);
+      const evo = Number(db.config.hermitHideChanceEvolved ?? 0.75);
+      return { base: Number.isFinite(base) ? base : 0.5, evo: Number.isFinite(evo) ? evo : 0.75 };
+    })();
     const hideHalf = (t) => {
       const owner = db.players[t.playerId];
       if (!owner || owner.skill !== 'hermit') return false;
@@ -1268,7 +1378,10 @@ export async function handleApi(ctx) {
       let h = 0;
       const id = String(t.id || '');
       for (let k = 0; k < id.length; k++) h = (h * 31 + id.charCodeAt(k)) | 0;
-      return (Math.abs(h) % 2) === 0;
+      // 用 0~999 的稳定哈希去比概率，同一笔单每次请求结果一致
+      const roll = Math.abs(h) % 1000;
+      const chance = isEvolved(owner, 'hermit') ? hideRatio.evo : hideRatio.base;
+      return roll < Math.round(Math.max(0, Math.min(1, chance)) * 1000);
     };
     const all = (db.trades || []).filter(
       (t) => t.code === code && (t.action === 'open' || t.action === 'close')
@@ -1552,6 +1665,22 @@ export async function handleApi(ctx) {
       step,
       nextPrice: Math.round(basePrice * Math.pow(ratio, me.channelLevel)),
       cash: me.cash
+    });
+  }
+
+  // ---------- 主题进化（成就 → 结晶 → Ⅱ 阶） ----------
+  if (pathname === '/api/theme/evolve' && method === 'POST') {
+    const theme = String(body.theme || '').trim();
+    ensureAchvState(me);
+    const r = evolveTheme(db, me, theme);
+    if (!r.ok) return json(res, 400, { error: r.error });
+    saveDb();
+    return json(res, 200, {
+      ok: true,
+      theme,
+      tier: r.tier,
+      shards: Number(me.shards?.[theme]) || 0,
+      achv: achvPayload(db, me)
     });
   }
 

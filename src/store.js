@@ -5,6 +5,7 @@ import { DEFAULT_CONFIG } from './config.js';
 import { STOCK_SEED, STOCK_CODES, INDEX_BASE, INDEX_STOCK, SMALL_INDEX_STOCK } from './stocks.js';
 import { backDerive, fairFromReport } from './fundamentals.js';
 import { seedBars15, seedVolFromConfig, BAR15_MAX, BAR15_SEED_VER } from './bars15.js';
+import { ensureAchvState } from './achievements.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(__dirname, '..');
@@ -408,6 +409,8 @@ export function migrate(d) {
       const oldTick = Number(p.themeChangedTick);
       p.skillChangedTick = Number.isFinite(oldTick) && oldTick > 0 ? oldTick : -1;
     }
+    // 主题成就 / 进化字段（老存档补 0，新存档原样保留）
+    ensureAchvState(p);
   }
   delete merged.book;
   for (const k of Object.keys(merged.config)) {

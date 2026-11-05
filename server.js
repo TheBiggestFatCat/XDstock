@@ -19,6 +19,9 @@ import { pushNotify, notifyList, unreadCount } from './src/notify.js';
 import { visibleEmotes } from './src/emoji.js';
 import { latestVersionPost } from './src/version.js';
 import { stealAmount } from './src/steal.js';
+import {
+  achvPayload, ensureAchvState, bumpAchv, tycoonLeadTicks, isEvolved
+} from './src/achievements.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -218,9 +221,13 @@ function tickPayload(forPlayerId) {
       payout: st.isIndex ? 0 : dividendPayout(st, d.config.dividendRate)
     };
     // 金融大鳄：只有金融板块有预览/倒计时，每轮下发否则开着页面不刷新就看不到
+    // 进化后提前量 20 → 30，所以按这个玩家的阶数算
+    const lead = tycoonLeadTicks(d, tp);
     if (!st.isIndex && isTycoonSector(st)) {
-      stocks[code].previewIn = previewInTicks(st, d.tick);
-      if (isTycoon) stocks[code].preview = tycoonPreviewPayload(st, d.tick);
+      stocks[code].previewIn = previewInTicks(st, d.tick, lead);
+      if (isTycoon && (Number(st.nextReportTick) - d.tick) <= lead) {
+        stocks[code].preview = tycoonPreviewPayload(st, d.tick, lead);
+      }
     }
     // 情绪读心：只有这个主题能看到当前情绪
     if (isMind && !st.isIndex) {
@@ -293,7 +300,9 @@ function tickPayload(forPlayerId) {
         auto: o.auto || null,
         autoDca: !!o.autoDca
       })),
-      // 站内通知：每轮都带最新一份，前端据此亮铃铛、对新的弹提示
+      // 主题成就 / 进化（进度、结晶、阶数）
+      achv: achvPayload(d, p),
+      // 站内通知：每轮都带最新一份，前端据此铃铛亮起、对新的弹提示
       notices: notifyList(p, 20),
       notifyUnread: unreadCount(p)
     };
@@ -615,8 +624,19 @@ function loop() {
       reason: 'stolen'
     });
 
+    // 🌙 夜行者成就：很会偷（单次金额）+ 趁人不备（夜里得手次数）
+    ensureAchvState(p);
+    if (p.skill === 'night') {
+      bumpAchv(d, p, 'nightBigSteal', amount, 'max');
+      if (isNightWindow(d)) bumpAchv(d, p, 'nightStealCount', 1);
+    }
+
     pushAlert(p.id, { type: 'steal', ok: true, mine: true, target: victim.nickname, amount, cd });
-    pushAlert(victim.id, { type: 'steal', ok: true, mine: false, from: p.nickname, amount });
+    // 🌙 进化后夜里偷东西不再通知受害者（「趁人不备」）
+    const silentNight = p.skill === 'night' && isNightWindow(d) && isEvolved(p, 'night');
+    if (!silentNight) {
+      pushAlert(victim.id, { type: 'steal', ok: true, mine: false, from: p.nickname, amount });
+    }
   }
 
   // 通知到个人

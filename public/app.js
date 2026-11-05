@@ -566,6 +566,106 @@ function renderDividendLine(st) {
     + '</span>';
 }
 
+const ACHV_THEME_META = {
+  red:    { emoji: '🐂', name: '红红的牛' },
+  bear:   { emoji: '🐻', name: '绿绿的熊' },
+  dark:   { emoji: '🕶️', name: '暗黑大手' },
+  tycoon: { emoji: '🐊', name: '金融大鳄' },
+  hermit: { emoji: '🧙', name: '隐世仙人' },
+  probe:  { emoji: '🕵️', name: '暗中调查' },
+  mind:   { emoji: '🧠', name: '情绪读心' },
+  night:  { emoji: '🌙', name: '夜行者' }
+};
+
+/** 成就进度显示：按单位格式化（$ 用 money0，其余用数字） */
+function achvProgressText(item) {
+  const target = Math.max(1, Number(item.target) || 1);
+  const cur = Math.max(0, Number(item.progress) || 0);
+  const fmt = (v) => (String(item.target) === String(1) && v >= 1 ? '1' : money0(v));
+  const unit = item.desc && item.desc.includes('累计') ? '' : '';
+  if (target >= 10000) return `${money0(Math.min(cur, target))} / ${money0(target)}`;
+  return `${Math.min(cur, target).toFixed(0)} / ${target}${unit}`;
+}
+
+/**
+ * 主题卡片里的「成就 + 进化」块：
+ *   🐂 成就 1/2 · 结晶 1/2   [进化 →]
+ *   ✅ 顺势收割   🔒 牛气冲天 3/20
+ */
+function renderThemeAchvCards() {
+  const achv = state.market?.me?.achv;
+  if (!achv || !achv.themes) return;
+  const need = Math.max(1, Number(state.market?.config?.achvShardPerEvolve ?? 2));
+  document.querySelectorAll('.theme-card').forEach((card) => {
+    const code = card.dataset.themeCode;
+    const t = achv.themes[code];
+    const meta = ACHV_THEME_META[code];
+    if (!t || !meta) return;
+
+    // 右上角 Ⅰ / Ⅱ 徽章
+    let badge = card.querySelector('.theme-tier');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'theme-tier';
+      card.querySelector('.shop-card-head')?.appendChild(badge);
+    }
+    badge.textContent = t.tier >= 2 ? 'Ⅱ' : 'Ⅰ';
+    badge.classList.toggle('tier-2', t.tier >= 2);
+    badge.title = t.tier >= 2 ? '已进化：技能效果更强' : '未进化';
+
+    // 成就块
+    let box = card.querySelector('.theme-achv');
+    if (!box) {
+      box = document.createElement('div');
+      box.className = 'theme-achv';
+      const anchor = card.querySelector('.theme-btn-row');
+      if (anchor) card.insertBefore(box, anchor);
+      else card.appendChild(box);
+    }
+    const items = (t.list || []).map((it) => {
+      const done = it.got;
+      const txt = achvProgressText(it);
+      return `<div class="ta-item ${done ? 'got' : ''}" title="${escapeHtml(it.desc || '')}">
+        <span class="ta-mark">${done ? '✅' : '🔒'}</span>
+        <span class="ta-name">${escapeHtml(it.name)}</span>
+        <span class="ta-num">${done ? '已达成' : txt}</span>
+      </div>`;
+    }).join('');
+    const canEvo = !!t.canEvolve;
+    const evolved = Number(t.tier) >= 2;
+    const btn = evolved
+      ? '<span class="ta-evolved">已进化 Ⅱ 阶</span>'
+      : `<button class="btn btn-primary ta-evolve" data-evolve="${code}" ${canEvo ? '' : 'disabled'}>${canEvo ? '进化 ✦' : `结晶 ${t.shards}/${need}`}</button>`;
+    box.innerHTML = `
+      <div class="ta-head">
+        <span class="ta-count">成就 <b>${t.got}/${t.total}</b></span>
+        ${evolved ? '' : `<span class="ta-shard">结晶 <b>${t.shards}/${need}</b></span>`}
+        ${btn}
+      </div>
+      <div class="ta-list">${items}</div>`;
+
+    const evoBtn = box.querySelector('[data-evolve]');
+    if (evoBtn) evoBtn.addEventListener('click', () => evolveTheme(code, evoBtn));
+  });
+}
+
+/** 点「进化」：调服务端，成功后刷新 */
+async function evolveTheme(code, btn) {
+  if (!btn || btn.disabled) return;
+  const meta = ACHV_THEME_META[code] || { name: code, emoji: '✦' };
+  btn.disabled = true;
+  btn.textContent = '进化中…';
+  try {
+    await api('/api/theme/evolve', { method: 'POST', body: JSON.stringify({ theme: code }) });
+    toast(`${meta.emoji} ${meta.name} 进化成功！技能效果已增强`, 'ok');
+    await refreshMarket();
+    renderShop();
+  } catch (e) {
+    toast(e.message, 'err');
+    btn.disabled = false;
+  }
+}
+
 /** 情绪读心：一条双向情绪条（中线 0，左绿=看空，右红=看多），不显示任何文字 */
 function renderMind() {
   const el = $('#mindBar');
@@ -585,6 +685,15 @@ function renderMind() {
     + `<i class="mind-fill ${side}" style="${v >= 0 ? 'left:50%' : 'right:50%'};width:${width}%"></i>`
     + '<span class="mind-mid"></span>'
     + '</div>';
+  // 进化到 Ⅱ 阶：额外给「重掷倒计时 + 方向分量」（信息优势）
+  const tier = Number(state.market?.me?.achv?.themes?.mind?.tier) || 1;
+  if (tier >= 2) {
+    const rollIn = Math.max(0, Number(st.sent.rollIn) || 0);
+    const applyIn = Math.max(0, Number(st.sent.applyIn) || 0);
+    const drift = Number(st.sent.drift) || 0;
+    el.insertAdjacentHTML('beforeend',
+      `<div class="mind-extra">情绪 ${(v * 100).toFixed(0)}% · 重掷 ${rollIn} 轮 · 生效 ${applyIn} 轮 · 方向分量 ${(drift * 100).toFixed(0)}%</div>`);
+  }
 }
 
 /**
@@ -1832,6 +1941,8 @@ function renderShop() {
   const themeTick = state.market?.tick || 0;
   const themeLeft = (themeCd > 0 && Number.isFinite(themeLast) && themeLast >= 0)
     ? Math.max(0, themeCd - (themeTick - themeLast)) : 0;
+
+  renderThemeAchvCards();
 
   document.querySelectorAll('[data-cd-for]').forEach((el) => {
     if (themeLeft > 0) {
@@ -4146,7 +4257,7 @@ async function loadRank(force = false) {
     const spyLeftNow = Math.max(0, (Number(meNow.investigateReadyAt) || 0) - tickNow);
     // 冷却秒数也算进签名，不然按钮上的倒计时不会刷新
     const sig = d.rows
-      .map((r) => `${r.id}:${Math.round(r.total ?? r.equity)}:${Math.round(r.bank || 0)}:${r.cash.toFixed(0)}:${r.level || 1}:${r.nickname}`)
+      .map((r) => `${r.id}:${Math.round(r.total ?? r.equity)}:${Math.round(r.bank || 0)}:${r.cash.toFixed(0)}:${r.level || 1}:${r.nickname}:${(r.achvEmojis || []).join('')}`)
       .join('|') + `|${meNow.theme || 'default'}|${stealLeftNow}|${spyLeftNow}|${meNow.stealQueued ? 1 : 0}`;
     if (!force && sig === state.rankSig && wrap.querySelector('table')) {
       const t = $('#rankTime');
@@ -4196,9 +4307,12 @@ async function loadRank(force = false) {
             }
             return `<tr class="${mine}">
               <td><span class="rank-medal">${medal || i + 1}</span></td>
-              <td><span class="rank-user">${rankAvatar(r)}<span class="rank-name">${escapeHtml(r.nickname)}</span></span></td>
+              <td><span class="rank-user">${rankAvatar(r)}<span class="rank-name">${escapeHtml(r.nickname)}</span>${(() => {
+                const emo = Array.isArray(r.achvEmojis) ? r.achvEmojis : [];
+                return emo.length ? `<span class="rank-achv" title="主题成就">${emo.join('')}</span>` : '';
+              })()}</span></td>
               <td>${lvCell}</td>
-              <td class="${cls(total - 100000)}">${money(total)}${bank > 0
+              <td class="${cls(total - 100000)}">${r.fuzzed ? `<span title="隐世仙人 Ⅱ 阶：身家模糊">≈${money0(total)}</span>` : money(total)}${bank > 0
                 ? `<span class="rank-bank" title="银行存款 ${money(bank)}">🏦 ${money0(bank)}</span>`
                 : ''}</td>
               <td>${money(r.cash)}</td>
@@ -4260,11 +4374,11 @@ async function investigatePlayer(targetId, name) {
 }
 
 function showSpyResult(r) {
-  const p = r.position;
   const box = $('#spyBody');
   if (!box) return;
-  box.innerHTML = `
-    <p class="spy-line">对象：<b>${escapeHtml(r.target.nickname)}</b></p>
+  // 进化到 Ⅱ 阶：一次看穿对方的**全部**持仓
+  const list = Array.isArray(r.positions) && r.positions.length ? r.positions : [r.position];
+  const one = (p) => `
     <div class="spy-pos">
       <div class="spy-code">${escapeHtml(p.name)} <span class="stock-code">${p.code}</span></div>
       <div class="spy-row"><span>方向</span><b class="${p.side === 'long' ? 'up' : 'down'}">${p.side === 'long' ? '做多' : '做空'}</b></div>
@@ -4274,7 +4388,10 @@ function showSpyResult(r) {
       <div class="spy-row"><span>现价</span><b>${p.price.toFixed(2)}</b></div>
       <div class="spy-row"><span>浮动盈亏</span><b class="${cls(p.pnl)}">${money(p.pnl)}（${pct(p.pnlPct)}）</b></div>
       <div class="spy-row"><span>已持有</span><b>${p.heldTicks} 轮</b></div>
-    </div>
+    </div>`;
+  box.innerHTML = `
+    <p class="spy-line">对象：<b>${escapeHtml(r.target.nickname)}</b>${r.evolved ? ' · <span class="spy-evo">Ⅱ 阶：全部持仓</span>' : ''}</p>
+    ${list.map(one).join('')}
     <p class="spy-hint">冷却 ${r.cooldownTicks} 轮 · 第 ${r.readyAt} 轮后可以再查</p>`;
   const m = $('#spyModal');
   if (m) {
@@ -4713,6 +4830,97 @@ async function loadAdmin() {
             ['globalEventScale', '全市场新闻折扣(0.2=20%)'],
             ['marketTradesEnabled', '随机成交开关(1=开)'],
             ['marketTradesRate', '随机成交倍率(3=三倍)']
+          ]
+        }
+      ]
+    },
+    {
+      key: 'achv',
+      name: '主题成就 / 进化',
+      desc: '每个主题两条成就，集齐后消耗结晶进化到 Ⅱ 阶',
+      groups: [
+        {
+          title: '通用',
+          desc: '进化要花多少结晶',
+          fields: [
+            ['achvShardPerEvolve', '进化消耗结晶数']
+          ]
+        },
+        {
+          title: '🐂 红红的牛 / 🐻 绿绿的熊',
+          desc: '趋势里平仓的次数 + 返现累计',
+          fields: [
+            ['achvRedTrendTarget', '红牛：多头排列平仓次数'],
+            ['achvRedBonusTarget', '红牛：返现累计金额'],
+            ['achvBearTrendTarget', '绿熊：空头排列平仓次数'],
+            ['achvBearBonusTarget', '绿熊：返现累计金额']
+          ]
+        },
+        {
+          title: '🕶️ 暗黑大手',
+          desc: '同股同方向累计开仓 → 换技能平仓；反方向推价',
+          fields: [
+            ['achvDarkHandTarget', '黑手：同股同方向累计开仓额'],
+            ['achvDarkHandCount', '黑手：需要成功的次数'],
+            ['achvDarkPushTarget', '推土机：成功次数'],
+            ['achvDarkPushWindowTicks', '判定「别人刚开仓」的窗口(轮)']
+          ]
+        },
+        {
+          title: '🐊 金融大鳄',
+          desc: '财报前后的一进一出 + 金融板块累计盈利',
+          fields: [
+            ['achvTycoonProphetTarget', '先知：命中次数'],
+            ['achvTycoonProphetLeverage', '先知：要求的最低杠杆'],
+            ['achvTycoonProfitTarget', '信息差：金融板块累计盈利']
+          ]
+        },
+        {
+          title: '🧙 隐世仙人',
+          desc: '跟随别人成交 + 单票持仓市值',
+          fields: [
+            ['achvHermitFollowTarget', '来去无踪：跟随次数'],
+            ['achvHermitFollowWindowTicks', '跟随判定窗口(轮)'],
+            ['achvHermitPosTarget', '孤狼：单票持仓市值']
+          ]
+        },
+        {
+          title: '🕵️ 暗中调查 / 🧠 情绪读心',
+          desc: '调查与情绪相关的门槛',
+          fields: [
+            ['achvProbeWeakTarget', '软柿子：次数'],
+            ['achvProbeWindowTicks', '软柿子判定窗口(轮)'],
+            ['achvProbeTarget', '情报网：累计调查次数'],
+            ['achvMindReadTarget', '读心：命中次数'],
+            ['achvMindExtreme', '读心：情绪门槛(0.8=±80%)'],
+            ['achvMindProfitTarget', '情绪交易员：累计盈利']
+          ]
+        },
+        {
+          title: '🌙 夜行者',
+          desc: '偷钱金额与次数',
+          fields: [
+            ['achvNightBigSteal', '很会偷：单次金额门槛'],
+            ['achvNightStealTarget', '趁人不备：夜里得手次数']
+          ]
+        },
+        {
+          title: '进化后的数值（Ⅱ 阶）',
+          desc: '只影响技能手感，不动本金和成交上限',
+          fields: [
+            ['themeEvolveSkillMult', '红牛/绿熊返现倍率(1.5)'],
+            ['themeEvolveFeeFreeRed', '红牛：多头排列免手续费(1=开)'],
+            ['themeEvolveBearMarginCut', '绿熊：做空保证金减免(0.2=20%)'],
+            ['themeEvolveImpact', '暗黑：冲击倍率(1.08)'],
+            ['themeEvolveImpactRefund', '暗黑：冲击成本返还(0.2=20%)'],
+            ['tycoonLeadTicks', '大鳄：提前量(轮)'],
+            ['tycoonLeadTicksEvolved', '大鳄：进化后提前量(轮)'],
+            ['hermitHideChance', '隐世：隐身概率(0.5)'],
+            ['hermitHideChanceEvolved', '隐世：进化后隐身概率(0.75)'],
+            ['investigateCooldownTicks', '调查冷却(轮)'],
+            ['investigateCooldownEvolved', '调查冷却·进化后(轮)'],
+            ['nightStealCooldown', '夜行：夜里偷钱冷却(轮)'],
+            ['nightStealCooldownEvolved', '夜行：进化后冷却(轮)']
           ]
         }
       ]

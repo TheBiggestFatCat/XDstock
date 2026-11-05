@@ -5,6 +5,8 @@
  * 玩家端只负责展示，判断永远在服务端做。
  */
 
+import { isEvolved } from './achievements.js';
+
 const HOUR_MS = 3600 * 1000;
 
 /** 把一个可能越界的「小时」夹回 0~23 */
@@ -49,7 +51,11 @@ export function stealCooldownFor(db, player, nowMs = Date.now()) {
   if (!player || player.skill !== 'night') return base;
   if (!isNightWindow(db, nowMs)) return base;
   const night = Number(cfg.nightStealCooldown);
-  return Math.max(0, Number.isFinite(night) ? night : 5);
+  const baseNight = Math.max(0, Number.isFinite(night) ? night : 5);
+  // 进化后（Ⅱ 阶）夜行者的夜间冷却再降一档，硬底线 3 轮
+  if (!isEvolved(player, 'night')) return baseNight;
+  const evo = Number(cfg.nightStealCooldownEvolved);
+  return Math.max(3, Math.min(baseNight, Number.isFinite(evo) ? evo : 3));
 }
 
 /** 给前端展示用：这个玩家当前的偷钱 CD 和夜里状态 */

@@ -946,10 +946,15 @@ export function runReports(db) {
       st.nextReportTick = db.tick + gap * (i + 1);
       continue;
     }
-    // 「金融大鳄」技能：**只有金融板块**（券商/外汇）提前 TYCOON_LEAD_TICKS 轮算好下一期，
+    // 「金融大鳄」技能：**只有金融板块**（券商/外汇）提前算好下一期，
     // 有技能的玩家能在 payload 里看到 preview；没技能的看不到（服务端按 skill 过滤）。
+    // 提前量取「未进化 20 / 已进化 30」里的大值，具体每个玩家能看到多少由
+    // achievements.js#tycoonLeadTicks 决定（进化后多 10 轮准备时间）。
     // 发布时直接用这份 pendingReport，所以「看到什么就发什么」。
-    const lead = TYCOON_LEAD_TICKS;
+    const lead = Math.max(
+      Math.max(1, Number(cfg.tycoonLeadTicks) || TYCOON_LEAD_TICKS),
+      Math.max(0, Number(cfg.tycoonLeadTicksEvolved) || 0)
+    );
     if (isTycoonSector(st) && !st.pendingReport && db.tick >= st.nextReportTick - lead) {
       const fxNowP = Number(db.fx?.rate) || 0;
       const fxBaseP = Number(db.fx?.reportBase) || fxNowP;
@@ -1014,6 +1019,8 @@ export function runReports(db) {
     const diff = Number(st.fundamentals.growth) - expected;
     st.lastSurprise = Math.max(-0.3, Math.min(0.3, diff));
     st.expectedGrowth = expected;
+    // 「先知」成就要判断「建仓是否早于这期发报」，所以记下发布轮次
+    st.lastReportTick = db.tick;
 
     // 财报历史（给前端的折线图用）
     // 同一片天下的农业股，财报同时发布

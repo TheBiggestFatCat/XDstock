@@ -100,6 +100,55 @@ export const DEFAULT_CONFIG = {
   nightStartHour: 18,      // 现实时间几点开始算夜里（服务器本地时间）
   nightEndHour: 4,         // 几点结束（支持跨零点）
   nightStealCooldown: 5,   // 夜行者夜里偷钱的冷却（轮），其他情况用 stealCooldownTicks
+  nightStealCooldownEvolved: 3,  // 进化后夜里偷钱冷却（硬底线 3 轮）
+
+  // ================= 主题成就 / 主题进化（Lv1 → Lv2）=================
+  // 见 docs/成就系统设计.md §9。这里只是默认值，线上以 db.config 为准。
+  // 两条成就 = 2 枚结晶；进化消耗 achvShardPerEvolve 枚
+  achvShardPerEvolve: 2,
+  // 🐂 红红的牛
+  achvRedTrendTarget: 20,          // 多头排列平仓次数
+  achvRedBonusTarget: 5000000,     // 技能返现累计
+  // 🐻 绿绿的熊
+  achvBearTrendTarget: 20,         // 空头排列平仓次数
+  achvBearBonusTarget: 5000000,    // 技能返现累计
+  // 🕶️ 暗黑大手
+  achvDarkHandTarget: 10000000,    // 同股同方向累计开仓额
+  achvDarkHandCount: 1,            // 黑手需要成功的次数
+  achvDarkPushTarget: 1,           // 推土机成功次数
+  achvDarkPushWindowTicks: 200,    // 判定「别人刚开仓」的时间窗（轮）
+  // 🐊 金融大鳄
+  achvTycoonProphetTarget: 1,      // 先知命中次数
+  achvTycoonProphetLeverage: 10,   // 先知要求的杠杆
+  achvTycoonProfitTarget: 5000000, // 金融板块累计盈利
+  // 🧙 隐世仙人
+  achvHermitFollowTarget: 1,       // 跟随别人成交次数
+  achvHermitPosTarget: 10000000,   // 单票持仓市值
+  achvHermitFollowWindowTicks: 100,// 判定「别人刚成交」的时间窗（轮）
+  // 🕵️ 暗中调查
+  achvProbeWeakTarget: 1,          // 软柿子次数
+  achvProbeWindowTicks: 100,       // 判定「别人刚建仓」的时间窗（轮）
+  achvProbeTarget: 20,             // 累计调查次数
+  // 🧠 情绪读心
+  achvMindReadTarget: 1,           // 极强情绪顺势盈利次数
+  achvMindExtreme: 0.8,            // 算「极度强烈」的门槛
+  achvMindProfitTarget: 10000000,  // 带技能累计盈利
+  // 🌙 夜行者
+  achvNightBigSteal: 9500,         // 单次偷钱金额
+  achvNightStealTarget: 200,       // 夜里偷钱成功次数
+
+  // ---- 进化后的技能数值（Lv2 才生效）----
+  themeEvolveSkillMult: 1.5,       // 红牛/绿熊返现倍率（1.0 → 1.5）
+  themeEvolveImpact: 1.08,         // 暗黑大手冲击倍率（1.05 → 1.08）
+  themeEvolveImpactRefund: 0.2,    // 暗黑大手返还自己冲击成本的比例
+  tycoonLeadTicks: 20,             // 金融大鳄提前量（未进化）
+  tycoonLeadTicksEvolved: 30,      // 金融大鳄提前量（进化后）
+  hermitHideChance: 0.5,           // 隐世仙人成交隐身概率
+  hermitHideChanceEvolved: 0.75,   // 进化后隐身概率
+  investigateCooldownTicks: 30,    // 暗中调查冷却（未进化）
+  investigateCooldownEvolved: 20,  // 暗中调查冷却（进化后）
+  themeEvolveBearMarginCut: 0.2,   // 绿熊进化：空头排列做空保证金 −20%
+  themeEvolveFeeFreeRed: 1,        // 红牛进化：多头排列挂单免手续费（1=开）
   shopBgPrice: 5000000,        // 自定义背景（一次买断）
   shopRenamePrice: 1000000,    // 改名卡
   shopRenameCooldown: 2000,    // 改名冷却（轮）

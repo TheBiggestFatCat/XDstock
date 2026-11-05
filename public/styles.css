@@ -3670,3 +3670,86 @@ body[data-theme="bear"] .brand-logo {
 @media (max-width: 760px) {
   .tycoon-chip { font-size: 9.5px; margin-left: 4px; }
 }
+
+/* ================= 主题成就 / 进化 ================= */
+.theme-tier {
+  position: absolute;
+  top: 10px; right: 12px;
+  padding: 1px 7px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .5px;
+  color: var(--ink-3);
+  background: var(--soft-3);
+  border: 1px solid var(--line);
+}
+.theme-tier.tier-2 {
+  color: #7a4a00;
+  background: linear-gradient(160deg, #ffe9a8, #ffc247);
+  border-color: #e0a22a;
+  box-shadow: 0 0 0 1px rgba(255, 194, 71, .35);
+}
+.theme-card { position: relative; }
+
+.theme-achv {
+  margin-top: 10px;
+  padding: 9px 11px;
+  border-radius: 11px;
+  background: var(--soft-2);
+  border: 1px solid var(--line);
+}
+.ta-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  font-size: 11.5px; color: var(--ink-3);
+}
+.ta-head b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.ta-count, .ta-shard { white-space: nowrap; }
+.ta-evolve {
+  margin-left: auto;
+  padding: 3px 12px;
+  font-size: 11.5px;
+  min-width: 0;
+  border-radius: 8px;
+}
+.ta-evolve:disabled { opacity: .55; }
+.ta-evolved {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #7a4a00;
+}
+.ta-list { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+.ta-item {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--ink-3);
+}
+.ta-item.got { color: var(--ink-2); }
+.ta-mark { flex: none; width: 14px; text-align: center; }
+.ta-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ta-num { flex: none; font-variant-numeric: tabular-nums; }
+.ta-item.got .ta-num { color: var(--accent-2); font-weight: 700; }
+
+/* 排行榜名字旁的成就徽章 */
+.rank-achv {
+  margin-left: 5px;
+  font-size: 12px;
+  letter-spacing: 1px;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, .08));
+}
+
+/* 情绪读心 Ⅱ 阶的附加信息 */
+.mind-extra {
+  margin-top: 5px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.spy-evo { color: #7a4a00; font-weight: 700; }
+
+@media (max-width: 760px) {
+  .ta-head { font-size: 11px; gap: 7px; }
+  .ta-evolve { padding: 2px 9px; font-size: 11px; }
+  .rank-achv { font-size: 11px; margin-left: 3px; }
+}
