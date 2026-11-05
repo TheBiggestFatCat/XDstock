@@ -3650,3 +3650,23 @@ body[data-theme="bear"] .brand-logo {
 @media (max-width: 760px) {
   .tp-pending { font-size: 11px; gap: 6px; }
 }
+
+/* 股票列表上的「金融大鳄」角标 */
+.tycoon-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: var(--soft-3);
+  color: var(--ink-3);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.7;
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+}
+.tycoon-chip.ready { background: var(--accent); color: #fff; }
+@media (max-width: 760px) {
+  .tycoon-chip { font-size: 9.5px; margin-left: 4px; }
+}

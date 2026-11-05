@@ -14,7 +14,7 @@ import { checkDelist } from './src/delist.js';
 import { fetchAudJpy } from './src/fx.js';
 import { handleApi } from './src/api.js';
 import { NEWS_POOL } from './src/news.js';
-import { dividendPerShare, dividendPayout, tycoonPreviewPayload, previewInTicks } from './src/fundamentals.js';
+import { dividendPerShare, dividendPayout, tycoonPreviewPayload, previewInTicks, isTycoonSector } from './src/fundamentals.js';
 import { pushNotify, notifyList, unreadCount } from './src/notify.js';
 import { visibleEmotes } from './src/emoji.js';
 import { latestVersionPost } from './src/version.js';
@@ -217,8 +217,8 @@ function tickPayload(forPlayerId) {
       dps: st.isIndex ? 0 : dividendPerShare(st, { rate: d.config.dividendRate, cap: d.config.dividendCap }),
       payout: st.isIndex ? 0 : dividendPayout(st, d.config.dividendRate)
     };
-    // 金融大鳄：每轮都下发预览状态和倒计时，否则开着页面不刷新就看不到
-    if (!st.isIndex) {
+    // 金融大鳄：只有金融板块有预览/倒计时，每轮下发否则开着页面不刷新就看不到
+    if (!st.isIndex && isTycoonSector(st)) {
       stocks[code].previewIn = previewInTicks(st, d.tick);
       if (isTycoon) stocks[code].preview = tycoonPreviewPayload(st, d.tick);
     }

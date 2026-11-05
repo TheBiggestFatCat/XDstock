@@ -11,7 +11,7 @@ import { getBuild } from './build.js';
 import { playerEquity, positionPnl } from './trading.js';
 import { levelUpPlayer, withdrawFromBank, bankStatus } from './bank.js';
 import { placeLimitOrder, cancelOrder, orderLimitBlocked, consumeOrderSlot, fillCapFor } from './orders.js';
-import { reportPayload, dividendPerShare, dividendPayout, tycoonPreviewPayload, previewInTicks } from './fundamentals.js';
+import { reportPayload, dividendPerShare, dividendPayout, tycoonPreviewPayload, previewInTicks, isTycoonSector } from './fundamentals.js';
 
 const TOKEN_TTL = 30 * 24 * 3600 * 1000;
 
@@ -414,8 +414,8 @@ function marketPayload(db, me) {
       payout: dividendPayout(st, db.config.dividendRate),
       // 天气（st.weather / st.weatherTarget）只给引擎和财报用，不下发给前端
       report,
-      // 「金融大鳄」倒计时：> 0 表示还要等这么多轮才能预览，<= 0 = 已在窗口内
-      previewIn: st.isIndex ? null : previewInTicks(st, db.tick),
+      // 「金融大鳄」倒计时：只有金融板块才有（> 0 还要等，<= 0 已在窗口内）
+      previewIn: (st.isIndex || !isTycoonSector(st)) ? null : previewInTicks(st, db.tick),
       // 金融大鳄：任意个股的下一期财报，提前 TYCOON_LEAD_TICKS 轮就能看到
       preview: (me && me.skill === 'tycoon' && st.pendingReport)
         ? tycoonPreviewPayload(st, db.tick)

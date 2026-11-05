@@ -1,6 +1,6 @@
 import { INDEX_BASE, SMALL_INDEX_STOCK } from './stocks.js';
 import { pushBar15, BAR15_TICKS } from './bars15.js';
-import { TYCOON_LEAD_TICKS, genNextReport, fairFromReport, impactFactor, industryMidGrowth, rollWeather, dividendPerShare } from './fundamentals.js';
+import { TYCOON_LEAD_TICKS, isTycoonSector, genNextReport, fairFromReport, impactFactor, industryMidGrowth, rollWeather, dividendPerShare } from './fundamentals.js';
 export { TYCOON_LEAD_TICKS };
 import { genMarketTrades } from './marketTrades.js';
 import { logTrade } from './trading.js';
@@ -946,11 +946,11 @@ export function runReports(db) {
       st.nextReportTick = db.tick + gap * (i + 1);
       continue;
     }
-    // 「金融大鳄」技能：**所有个股**都提前 TYCOON_LEAD_TICKS 轮把下一期财报算好，
+    // 「金融大鳄」技能：**只有金融板块**（券商/外汇）提前 TYCOON_LEAD_TICKS 轮算好下一期，
     // 有技能的玩家能在 payload 里看到 preview；没技能的看不到（服务端按 skill 过滤）。
     // 发布时直接用这份 pendingReport，所以「看到什么就发什么」。
     const lead = TYCOON_LEAD_TICKS;
-    if (!st.pendingReport && db.tick >= st.nextReportTick - lead) {
+    if (isTycoonSector(st) && !st.pendingReport && db.tick >= st.nextReportTick - lead) {
       const fxNowP = Number(db.fx?.rate) || 0;
       const fxBaseP = Number(db.fx?.reportBase) || fxNowP;
       const ctxP = {

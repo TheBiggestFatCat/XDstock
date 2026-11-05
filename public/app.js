@@ -598,6 +598,8 @@ function renderTycoonSlot(st) {
   if (st.preview) return renderTycoonPreview(st);
   if (!st || st.isIndex) return '';
 
+  // 非金融票的 previewIn 是 null（null 会被 Number() 当成 0，必须先挡掉）
+  if (st.previewIn === null || st.previewIn === undefined) return '';
   const left = Number(st.previewIn);
   if (!Number.isFinite(left)) return '';
   const secLeft = left * ((state.market?.config?.tickMs || 5000) / 1000);
@@ -951,7 +953,8 @@ function renderStockList() {
     div.innerHTML = `
       <img class="stock-icon" src="${st.icon || ''}" alt="${st.name}" loading="lazy" />
       <div class="stock-main">
-        <div class="stock-name">${stBadge}${st.name}<span class="stock-code">${st.code}${statusTag}</span></div>
+        <div class="stock-name">${stBadge}${st.name}<span class="stock-code">${st.code}${statusTag}</span>
+          <span class="tycoon-chip hidden" data-tycoon="${st.code}"></span></div>
       </div>
       <div class="stock-right">
         <div class="stock-price ${cls(chg)}" data-price="${st.code}">${st.price.toFixed(2)}</div>
@@ -960,6 +963,51 @@ function renderStockList() {
     div.addEventListener('click', () => selectStock(st.code));
     wrap.appendChild(div);
   }
+  updateTycoonChips();
+}
+
+/**
+ * 「金融大鳄」在股票列表上的角标：
+ *   刚好能预览 → 🐊 预览
+ *   还没到窗口 → 🐊 12（还要 12 轮）
+ * 只有带这个技能的玩家才显示，其余人整块隐藏。
+ */
+function updateTycoonChips() {
+  const me = state.market?.me || {};
+  const isTy = (me.skill || me.theme) === 'tycoon';
+  document.querySelectorAll('[data-tycoon]').forEach((el) => {
+    const st = state.market?.stocks?.[el.dataset.tycoon];
+    if (!isTy || !st || st.isIndex) {
+      el.classList.add('hidden');
+      el.textContent = '';
+      return;
+    }
+    // 只有金融板块才有 previewIn；null 必须当作「不适用」（Number(null) === 0 会误判）
+    if (st.previewIn === null || st.previewIn === undefined) {
+      el.classList.add('hidden');
+      el.textContent = '';
+      return;
+    }
+    const left = Number(st.previewIn);
+    if (!Number.isFinite(left)) {
+      el.classList.add('hidden');
+      el.textContent = '';
+      return;
+    }
+    el.classList.remove('hidden');
+    if (st.preview) {
+      el.textContent = '🐊 预览';
+      el.className = 'tycoon-chip ready';
+    } else if (left > 0) {
+      el.textContent = `🐊 ${left}`;
+      el.className = 'tycoon-chip';
+      el.title = `还有 ${left} 轮可以预览下一期财报`;
+    } else {
+      el.textContent = '🐊 生成中';
+      el.className = 'tycoon-chip';
+      el.title = '预览下一轮生成';
+    }
+  });
 }
 
 // ---------------- 左侧卡片：实时行情 / 我的持仓 切换 ----------------
@@ -2831,6 +2879,7 @@ async function loadCandles(opts = {}) {
     const d = await api(url);
     // 防竞态：切股票/切周期时前一个请求可能后到，直接把新数据覆盖成旧股票
     if (code !== state.code || tf !== state.tf) return;
+  updateTycoonChips();
 
     // 清洗：时间必须递增且唯一，否则图表库内部按时间查不到数据会抛
     // 「Value is null」，整块 K 线画不出来
@@ -3185,6 +3234,7 @@ function onTick(d) {
 
   renderTopbar();
   renderVersionBox();
+  updateTycoonChips();
   renderNews();
   if (Array.isArray(state.market?.emotes)) renderEmotes(state.market.emotes);
   updatePriceCells();

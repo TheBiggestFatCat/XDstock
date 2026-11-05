@@ -3,7 +3,7 @@
 
 import { createDb } from '../src/store.js';
 import { runReports, TYCOON_LEAD_TICKS } from '../src/engine.js';
-import { genNextReport, previewInTicks, tycoonPreviewPayload, TYCOON_LEAD_TICKS as LEAD } from '../src/fundamentals.js';
+import { genNextReport, previewInTicks, tycoonPreviewPayload, isTycoonSector, TYCOON_LEAD_TICKS as LEAD } from '../src/fundamentals.js';
 
 let fails = 0;
 let passes = 0;
@@ -43,7 +43,7 @@ function judge(report) {
 }
 
 // ---------------------------------------------------------------- 1
-log('=== 1 所有个股都提前生成 pendingReport（不只是金融）===');
+log('=== 1 只有金融板块（券商/外汇）提前生成 pendingReport ===');
 {
   fixRandom(0.5);
   const db = newDb();
@@ -53,11 +53,19 @@ log('=== 1 所有个股都提前生成 pendingReport（不只是金融）===');
   db.tick += 100 - TYCOON_LEAD_TICKS;                // 进入提前窗口
   runReports(db);
   const withPending = stocks(db).filter((s) => s.pendingReport);
-  check(`提前 ${TYCOON_LEAD_TICKS} 轮全都有 pendingReport`,
-    withPending.length === stocks(db).length, `${withPending.length}/${stocks(db).length}`);
-  check('非金融票也有（丰川 / 麦当劳）',
-    !!db.stocks.TGW.pendingReport && !!db.stocks.MCD.pendingReport);
-  check('金融票也有（小灯证券）', !!db.stocks.XD.pendingReport);
+  const finance = stocks(db).filter(isTycoonSector);
+  check('金融板块的票都有 pendingReport',
+    finance.length >= 2 && finance.every((s) => !!s.pendingReport),
+    `${withPending.length}/${finance.length}`);
+  check('全部 pendingReport 都落在金融板块',
+    withPending.every(isTycoonSector), withPending.map((s) => s.code).join(','));
+  check('非金融票没有 pendingReport',
+    stocks(db).filter((st) => !isTycoonSector(st)).every((st) => !st.pendingReport),
+    stocks(db).filter((st) => !isTycoonSector(st)).map((st) => st.code).join(','));
+  check('判定覆盖小灯证券（broker）与留美外汇（fx）',
+    isTycoonSector(db.stocks.XD) && isTycoonSector(db.stocks.LMFX));
+  check('判定排除消费/科技票',
+    !isTycoonSector(db.stocks.TGW) && !isTycoonSector(db.stocks.MAMA));
 }
 
 // ---------------------------------------------------------------- 2
@@ -69,18 +77,18 @@ log('=== 2 发布时用的就是预览那份（所见即所得）===');
   runReports(db);
   db.tick += 100 - TYCOON_LEAD_TICKS;
   runReports(db);
-  const previewRevenue = db.stocks.TGW.pendingReport.revenue;
-  const previewGrowth = db.stocks.TGW.pendingReport.growth;
+  const previewRevenue = db.stocks.XD.pendingReport.revenue;
+  const previewGrowth = db.stocks.XD.pendingReport.growth;
 
   db.tick += TYCOON_LEAD_TICKS;                       // 到点发报
   runReports(db);
   check('发出来的营收 = 预览的营收',
-    Math.abs(db.stocks.TGW.fundamentals.revenue - previewRevenue) < 1e-6,
-    `${db.stocks.TGW.fundamentals.revenue} vs ${previewRevenue}`);
+    Math.abs(db.stocks.XD.fundamentals.revenue - previewRevenue) < 1e-6,
+    `${db.stocks.XD.fundamentals.revenue} vs ${previewRevenue}`);
   check('发出来的增速 = 预览的增速',
-    Math.abs(db.stocks.TGW.fundamentals.growth - previewGrowth) < 1e-9);
+    Math.abs(db.stocks.XD.fundamentals.growth - previewGrowth) < 1e-9);
   check('发完清掉 pendingReport',
-    db.stocks.TGW.pendingReport === null || db.stocks.TGW.pendingReport === undefined);
+    db.stocks.XD.pendingReport === null || db.stocks.XD.pendingReport === undefined);
 }
 
 // ---------------------------------------------------------------- 3
@@ -94,14 +102,14 @@ log('=== 3 无噪声（均值轨迹）→ 全部「符合预期」===');
   runReports(db);
 
   let n = 0;
-  for (const st of stocks(db)) {
+  for (const st of stocks(db).filter(isTycoonSector)) {
     if (!st.pendingReport) continue;
     const j = judge(st.pendingReport);
     check(`${st.code} 符合预期（差 ${(j.surprise * 100).toFixed(2)}pp）`,
       Math.abs(j.surprise) <= 0.02 && Math.abs(j.shockPct) <= 1.6);
     n++;
   }
-  check('至少覆盖 9 只票', n >= 9, String(n));
+  check('覆盖 2 只金融票', n >= 2, String(n));
 }
 
 // ---------------------------------------------------------------- 4
@@ -114,8 +122,7 @@ log('=== 4 有噪声 → 该超的标超预期、该砸的标不及预期 ===');
     runReports(db);
     db.tick += 100 - TYCOON_LEAD_TICKS;
     runReports(db);
-    const st = stocks(db).find((s) => s.trait?.id !== 'steady'   // 稳态票噪声只有 ±0.25%
-      && s.trait?.id !== 'broker' && s.trait?.id !== 'fx' && s.pendingReport);
+    const st = stocks(db).find((s) => isTycoonSector(s) && s.pendingReport);
     const j = judge(st.pendingReport);
     check(`随机 ${rnd} → ${st.code} 判定 ${want}（实际差 ${(j.surprise * 100).toFixed(1)}pp）`,
       j.verdict === want, j.verdict);
@@ -143,25 +150,27 @@ log('=== 5 判定阈值：±2pp 以内算「符合预期」===');
 
 // ---------------------------------------------------------------- 6
 log('');
-log('=== 6 天气股：兄弟股同轮发报，两只都拿得到 pending ===');
+log('=== 6 非金融票即使兄弟股同轮发报，也不生成 pendingReport ===');
 {
   fixRandom(0.5);
   const db = newDb();
   const list = stocks(db);
-  // 种子里已经没有天气股了，这里临时把两只改成 weather 来验证兄弟股逻辑
-  list[0].trait = { ...list[0].trait, id: 'weather', swing: 0.5 };
-  list[1].trait = { ...list[1].trait, id: 'weather', swing: 0.5 };
+  // 种子里已经没有天气股了，这里临时把两只非金融票改成 weather 来验证
+  const w1 = list.find((s) => !isTycoonSector(s));
+  const w2 = list.filter((s) => !isTycoonSector(s) && s !== w1)[0];
+  w1.trait = { ...w1.trait, id: 'weather', swing: 0.5 };
+  w2.trait = { ...w2.trait, id: 'weather', swing: 0.5 };
   db.weather = { score: 0.3, label: '风调雨顺', rollTick: db.tick };
   runReports(db);
   for (const st of list) st.nextReportTick = db.tick + 100;
   db.tick += 100 - TYCOON_LEAD_TICKS;
   runReports(db);
-  check('两只天气股都有 pendingReport',
-    !!list[0].pendingReport && !!list[1].pendingReport);
+  check('天气股（非金融）不生成 pendingReport',
+    !w1.pendingReport && !w2.pendingReport, `${w1.code}/${w2.code}`);
   db.tick += TYCOON_LEAD_TICKS;
   runReports(db);
-  check('同轮一起发（营收都在）',
-    !!list[0].fundamentals.revenue && !!list[1].fundamentals.revenue);
+  check('照样正常发报（只是没有预览）',
+    !!w1.fundamentals.revenue && !!w2.fundamentals.revenue);
 }
 
 // ---------------------------------------------------------------- 7
@@ -194,7 +203,7 @@ log('=== 9 共用构造器：两处 payload 数字一致 ===');
 {
   fixRandom(0.5);
   const db = newDb();
-  const st = db.stocks.LU;
+  const st = db.stocks.XD;
   st.nextReportTick = db.tick + 12;
   const rep = genNextReport(st, { growthCeiling: 8, weather: 0 });
   st.pendingReport = rep;

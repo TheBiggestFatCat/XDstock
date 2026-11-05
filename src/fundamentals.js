@@ -44,6 +44,17 @@ const DEFAULT_GROWTH_CEILING = 8;
 export const TYCOON_LEAD_TICKS = 20;
 
 /**
+ * 「金融大鳄」能看到哪些票：**只有金融板块**（券商 / 外汇）。
+ * 引擎用它决定给谁生成 pendingReport，api/server 用它决定要不要下发 previewIn，
+ * 三处必须用同一个判断，否则会出现「有倒计时但永远没有预览」。
+ */
+export function isTycoonSector(st) {
+  const id = st?.trait?.id;
+  if (id === 'broker' || id === 'fx') return true;
+  return String(st?.industry || '').includes('金融');
+}
+
+/**
  * 距离「可以预览下一期财报」还有多少轮：
  *   > 0  还要等这么多轮
  *   <= 0 已经在窗口内（有技能的话下一轮就能看到）
