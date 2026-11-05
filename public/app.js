@@ -33,6 +33,8 @@ const state = {
   cslLastId: '',              // 增量拉取的游标
   cslTimer: null,
   cslPaused: false,
+  cslBusy: false,
+  cslLastPoll: 0,
   cslOnlyTrade: true,
   adminSelected: new Set(),
   prevPrices: {},
@@ -2958,6 +2960,10 @@ function onTick(d) {
   // 商城每个 tick 重画一次：现金、还差多少钱、冷却、保镖剩余时间都在这儿算，
   // 所以停在商城页时不刷新也能看到数字跟着变（切页面时 switchView 也会补一次）
   if ($('#view-shop').classList.contains('active')) renderShop();
+  // 管理控制台：跟着 tick 一起刷，行情到哪一单就到哪
+  if (state.adminTab === 'console' && $('#view-admin')?.classList.contains('active')) {
+    pollConsole();
+  }
   if ($('#view-bank').classList.contains('active')) renderBank();
   if (state.tradeTab === 'log' && $('#logPane') && !$('#logPane').classList.contains('hidden')) {
     loadStockTrades();
@@ -4040,7 +4046,9 @@ function startConsole() {
     }
     return;
   }
-  state.cslTimer = setInterval(pollConsole, 3000);
+  // 主通道是 onTick()：每轮 tick（5 秒）拉一次，和行情同步。
+  // 这个定时器只是 SSE 断了时的兜底，拉得慢一点就行。
+  state.cslTimer = setInterval(() => pollConsole(), 15000);
   const live = $('#cslLive');
   if (live) {
     live.textContent = '● 实时';
@@ -4052,6 +4060,11 @@ function startConsole() {
 async function pollConsole(first = false) {
   if (!state.adminToken) return;
   if (state.cslPaused && !first) return;
+  if (state.cslBusy) return;          // 上一轮还没回来，别叠请求
+  // tick 驱动的调用和 15 秒兜底可能撞在一起，3 秒内不重复拉
+  if (!first && Date.now() - (state.cslLastPoll || 0) < 3000) return;
+  state.cslBusy = true;
+  state.cslLastPoll = Date.now();
   const only = state.cslOnlyTrade ? '1' : '0';
   const url = first
     ? `/api/admin/console?limit=60&onlyTrade=${only}`
@@ -4063,6 +4076,8 @@ async function pollConsole(first = false) {
     applyConsole(d, first);
   } catch {
     // 网络抖一下不致命，下一轮再试
+  } finally {
+    state.cslBusy = false;
   }
 }
 
