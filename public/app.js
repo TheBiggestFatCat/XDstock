@@ -1619,30 +1619,58 @@ function renderShop() {
   }
 
   // ---- 交易专属通道 ----
+  // 上限公式（和服务端 orders.js#fillCapFor 一致）：
+  //   基础 maxFillNotionalPerTick + 通道等级 × shopChannelStep + 账号等级 × levelFillBonus
   const chBase = Number(cfg.shopChannelBasePrice ?? 300000);
-  const chRatio = Number(cfg.shopChannelRatio ?? 1.5);
-  const chStep = Number(cfg.shopChannelStep ?? 100000);
-  const baseCap = Number(cfg.maxFillNotionalPerTick ?? 300000);
-  const chLevel = Math.max(0, Number(state.market?.me?.channelLevel || 0));
+  const chRatio = Math.max(1, Number(cfg.shopChannelRatio ?? 1.5));
+  const chStep = Math.max(0, Number(cfg.shopChannelStep ?? 100000));
+  const baseCap = Math.max(1, Number(cfg.maxFillNotionalPerTick ?? 300000));
+  const lvBonus = Math.max(0, Number(cfg.levelFillBonus ?? 1000000));
+  const meNow = state.market?.me || {};
+  const chLevel = Math.max(0, Number(meNow.channelLevel || 0));
+  const myLv = Math.max(1, Math.floor(Number(meNow.level) || 1));
   const chPrice = Math.round(chBase * Math.pow(chRatio, chLevel));
-  // 当前上限已经包含「基础 + 等级加成 + 已买通道」，以服务端下发为准
-  const capNow = Number(state.market?.me?.fillCap ?? (baseCap + chStep * chLevel));
+  // 当前上限以服务端下发的 fillCap 为准；没下发就按公式兜底
+  const capNow = Number(meNow.fillCap ?? (baseCap + chStep * chLevel + lvBonus * myLv));
   const capNext = capNow + chStep;
+  const channelPart = chStep * chLevel;
+  const levelPart = lvBonus * myLv;
 
-  const chPriceEl = $('#channelPrice');
-  if (chPriceEl) chPriceEl.textContent = money0(chPrice);
-  const chCapNow = $('#channelCapNow');
-  if (chCapNow) chCapNow.textContent = money0(capNow);
-  const chLv = $('#channelLevel');
-  if (chLv) chLv.textContent = `${chLevel} 级`;
-  const chCapNext = $('#channelCapNext');
-  if (chCapNext) chCapNext.textContent = money0(capNext);
+  const setText = (sel, text, cls) => {
+    const el = $(sel);
+    if (!el) return;
+    el.textContent = text;
+    if (cls !== undefined) el.className = cls;
+  };
+
+  setText('#channelPrice', chLevel > 0 ? money0(chPrice) : money0(chPrice));
+  setText('#channelCapNow', money0(capNow));
+  setText('#channelPart', chLevel > 0 ? `+${money0(channelPart)}` : '还没买');
+  setText('#channelLevel', `${chLevel} 级`);
+  setText('#channelCapNext', money0(capNext));
+
+  // 拆解：基础 + 等级 + 通道（数字全部来自服务端配置，别写死）
+  const bd = $('#channelBreakdown');
+  if (bd) {
+    bd.innerHTML = `基础 ${money0(baseCap)}`
+      + ` ＋ 等级 Lv.${myLv} × ${money0(lvBonus)}（${money0(levelPart)}）`
+      + ` ＋ 通道 ${chLevel} 级 × ${money0(chStep)}（${money0(channelPart)}）`;
+  }
+
+  // 说明文案也跟着配置走
+  const chWarn = $('#channelWarn');
+  if (chWarn) {
+    chWarn.innerHTML = `每购买一次，<b>单笔成交上限 +${money0(chStep)}</b>，永久有效。<br />`
+      + `价格每级 ×${chRatio} 递增（首级 ${money0(chBase)}），买得越多越贵。`;
+  }
 
   const chBtn = $('#channelBuy');
   if (chBtn) {
     const poor = cash < chPrice;
     chBtn.disabled = poor;
-    chBtn.textContent = poor ? `现金不足（差 ${money0(chPrice - cash)}）` : `购买 · ${money0(chPrice)}`;
+    chBtn.textContent = poor
+      ? `现金不足（差 ${money0(chPrice - cash)}）`
+      : `购买第 ${chLevel + 1} 级 · ${money0(chPrice)}`;
   }
 
   // ---- 红牛的累计返现 ----
@@ -1958,7 +1986,8 @@ async function buyChannel() {
       state.market.me.cash = r.cash;
       state.market.me.channelLevel = r.level;
     }
-    toast(`⚡ 通道升到 ${r.level} 级，单笔上限 ${money0(r.cap)}`, 'ok');
+    const step = Math.max(0, Number(state.market?.config?.shopChannelStep ?? 100000));
+    toast(`⚡ 通道升到 ${r.level} 级（通道加成 +${money0(step * r.level)}），单笔上限 ${money0(r.cap)}`, 'ok');
     refreshMarket();
   } catch (e) {
     toast(e.message, 'err');

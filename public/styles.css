@@ -3559,3 +3559,17 @@ body[data-theme="bear"] .brand-logo {
   .modal-card { max-height: 82vh; padding: 14px 14px 16px; }
   .modal-title { font-size: 15.5px; }
 }
+
+/* 交易专属通道：上限拆解那一行 */
+.channel-note {
+  margin: -4px 0 10px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: var(--soft-2);
+  color: var(--ink-3);
+  font-size: 11.5px;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+  word-break: break-word;
+}
+#channelPart { color: var(--accent-2); }

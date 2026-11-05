@@ -1556,7 +1556,10 @@ export async function handleApi(ctx) {
       ok: true,
       level: me.channelLevel,
       paid: price,
-      cap: baseCap + step * me.channelLevel,
+      // 真实上限 = 基础 + 通道 + 账号等级加成，和撮合用的是同一个函数
+      cap: fillCapFor(db, me),
+      channelCap: baseCap + step * me.channelLevel,
+      step,
       nextPrice: Math.round(basePrice * Math.pow(ratio, me.channelLevel)),
       cash: me.cash
     });
