@@ -46,7 +46,7 @@ export function isNightWindow(db, nowMs = Date.now()) {
 export function stealCooldownFor(db, player, nowMs = Date.now()) {
   const cfg = (db && db.config) || {};
   const base = Math.max(0, Number(cfg.stealCooldownTicks ?? 60));
-  if (!player || player.theme !== 'night') return base;
+  if (!player || player.skill !== 'night') return base;
   if (!isNightWindow(db, nowMs)) return base;
   const night = Number(cfg.nightStealCooldown);
   return Math.max(0, Number.isFinite(night) ? night : 5);
@@ -55,7 +55,7 @@ export function stealCooldownFor(db, player, nowMs = Date.now()) {
 /** 给前端展示用：这个玩家当前的偷钱 CD 和夜里状态 */
 export function nightInfoFor(db, player, nowMs = Date.now()) {
   const win = nightWindow(db, nowMs);
-  const isNight = player && player.theme === 'night';
+  const isNight = player && player.skill === 'night';
   return {
     active: win.active,
     hour: win.hour,

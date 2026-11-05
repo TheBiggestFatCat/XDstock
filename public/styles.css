@@ -3428,3 +3428,12 @@ body[data-theme="bear"] .brand-logo {
   .emo-list { grid-template-columns: repeat(6, 1fr); }
   .emo-float { width: 64px; height: 64px; }
 }
+
+/* ---------- 主题卡片：换外观 / 换技能 两个按钮 ---------- */
+.theme-btn-row { display: flex; gap: 8px; margin-top: 8px; }
+.theme-btn-row .btn { margin: 0; flex: 1 1 0; min-width: 0; padding: 9px 6px; font-size: 13px; }
+.theme-btn-row .theme-look-btn { background: var(--soft-2); color: var(--ink-2); border: 1px solid var(--line); }
+.theme-btn-row .theme-look-btn:hover:not(:disabled) { background: var(--soft-3); }
+@media (max-width: 720px) {
+  .theme-btn-row .btn { padding: 10px 4px; font-size: 12.5px; }
+}

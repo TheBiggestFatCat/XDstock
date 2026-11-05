@@ -572,7 +572,7 @@ function renderMind() {
   if (!el) return;
   const me = state.market?.me;
   const st = state.market?.stocks?.[state.code];
-  if (!me || me.theme !== 'mind' || !st || st.isIndex || !st.sent) {
+  if (!me || (me.skill || me.theme) !== 'mind' || !st || st.isIndex || !st.sent) {
     el.classList.add('hidden');
     el.innerHTML = '';
     return;
@@ -638,7 +638,7 @@ function renderReport() {
 
   const r = st.report || {};
   const left = (Number(st.nextReportTick) || 0) - tick;
-  const isTycoonNow = state.market?.me?.theme === 'tycoon';
+  const isTycoonNow = (state.market?.me?.skill || state.market?.me?.theme) === 'tycoon';
   const isFinance = ['broker', 'fx'].includes(st.trait?.id)
     || String(st.industry || '').includes('金融');
   if (nextEl) {
@@ -683,7 +683,7 @@ function renderReport() {
     </div>
     <div class="rp-div" id="reportDiv">${renderDividendLine(st)}</div>
     ${renderReportChart(r.history)}
-    ${(st.preview && state.market?.me?.theme === 'tycoon') ? `
+    ${(st.preview && (state.market?.me?.skill || state.market?.me?.theme) === 'tycoon') ? `
       <div class="preview-box">
         <div class="preview-head">
           <span>🐊 提前看到的财报</span>
@@ -1455,35 +1455,49 @@ function syncBackgroundFromServer() {
   applyBackground(me.background, me.bgOpacity);
 }
 
-async function chooseTheme(code) {
-  if (code === 'default') {
-    try {
-      await api('/api/shop/theme/select', { method: 'POST', body: JSON.stringify({ theme: 'default' }) });
-      applyTheme('default');
-      toast('已切回经典配色', 'ok');
-    } catch (e) { toast(e.message, 'err'); }
-    return;
-  }
-
-  const owned = (state.market?.me?.themes || []).includes(code);
-  const btn = document.querySelector(`.theme-btn[data-theme-code="${code}"]`);
+/**
+ * 换主题 / 换技能。
+ * @param {string} code 主题代码
+ * @param {'look'|'skill'} part look = 只换外观（无冷却）；skill = 只换技能（有冷却）
+ */
+async function chooseTheme(code, part = 'look') {
+  const btn = document.querySelector(
+    `.theme-${part === 'skill' ? 'skill' : 'look'}-btn[data-theme-code="${code}"]`);
   if (btn) btn.disabled = true;
 
   try {
-    if (owned) {
-      await api('/api/shop/theme/select', { method: 'POST', body: JSON.stringify({ theme: code }) });
-      applyTheme(code);
-      toast('主题已切换', 'ok');
-    } else {
-      const r = await api('/api/shop/theme', { method: 'POST', body: JSON.stringify({ theme: code }) });
-      if (state.market?.me) {
-        state.market.me.cash = r.cash;
-        state.market.me.themes = r.themes;
+    if (code === 'default') {
+      // 经典配色：外观直接切；技能也能切回「无技能」
+      await api('/api/shop/theme/select', { method: 'POST', body: JSON.stringify({ theme: 'default' }) });
+      if (part === 'skill') {
+        const r = await api('/api/shop/theme', { method: 'POST', body: JSON.stringify({ theme: 'default', part: 'skill' }) });
+        if (state.market?.me) state.market.me.skill = r.skill;
+        toast('技能已卸下（回到无技能状态）', 'ok');
+      } else {
+        applyTheme('default');
+        toast('已切回经典配色', 'ok');
       }
-      applyTheme(code);
-      toast(`主题已启用（花费 ${money0(r.price)}）`, 'ok');
       refreshMarket();
+      return;
     }
+
+    const r = await api('/api/shop/theme', { method: 'POST', body: JSON.stringify({ theme: code, part }) });
+    if (state.market?.me) {
+      state.market.me.cash = r.cash;
+      state.market.me.themes = r.themes;
+      state.market.me.theme = r.theme;
+      state.market.me.skill = r.skill;
+      state.market.me.skillChangedTick = r.changedTick;
+    }
+    if (part === 'skill') {
+      toast(r.spent > 0
+        ? `技能已换成「${code}」（花费 ${money0(r.spent)}）`
+        : '技能已换好，冷却期间外观照样能换', 'ok');
+    } else {
+      applyTheme(code);
+      toast(r.spent > 0 ? `主题已启用（花费 ${money0(r.spent)}）` : '外观已切换', 'ok');
+    }
+    refreshMarket();
   } catch (e) {
     toast(e.message, 'err');
   } finally {
@@ -1671,46 +1685,56 @@ function renderShop() {
   });
   // 主题切换冷却
   const themeCd = Number(cfg.shopThemeCooldown ?? 100);
-  const themeLast = Number(state.market?.me?.themeChangedTick || 0);
+  // -1 = 从没换过技能
+  const themeLast = Number(state.market?.me?.skillChangedTick ?? -1);
   const themeTick = state.market?.tick || 0;
-  const themeLeft = (themeCd > 0 && themeLast > 0)
+  const themeLeft = (themeCd > 0 && Number.isFinite(themeLast) && themeLast >= 0)
     ? Math.max(0, themeCd - (themeTick - themeLast)) : 0;
 
   document.querySelectorAll('[data-cd-for]').forEach((el) => {
     if (themeLeft > 0) {
       el.classList.remove('hidden');
       const sec = Math.ceil(themeLeft * ((state.market?.config?.tickMs || 5000) / 1000));
-      el.innerHTML = `换主题冷却中 <b>${themeLeft} 轮</b>（约 ${Math.ceil(sec / 60)} 分钟）`;
+      el.innerHTML = `换技能冷却中 <b>${themeLeft} 轮</b>（约 ${Math.ceil(sec / 60)} 分钟）｜外观随时可换`;
     } else {
       el.classList.add('hidden');
     }
   });
 
-  document.querySelectorAll('.theme-btn').forEach((b) => {
+  // 「换外观」和「换技能」两个按钮各算各的状态：
+  //   外观：随时换，没有冷却
+  //   技能：换过要等 shopThemeCooldown 轮
+  const curSkill = state.market?.me?.skill || curTheme;
+  document.querySelectorAll('.theme-look-btn, .theme-skill-btn').forEach((b) => {
     const code = b.dataset.themeCode;
+    const isSkill = b.classList.contains('theme-skill-btn');
     const has = ownedThemes.includes(code);
-    const isCur = curTheme === code || (code === 'default' && curTheme === 'default');
-    if (code === 'default') {
-      b.textContent = isCur ? '正在使用' : '使用经典配色';
-      b.disabled = isCur;
-      return;
-    }
-    if (isCur) { b.textContent = '正在使用'; b.disabled = true; return; }
-    if (has) {
-      b.textContent = themeLeft > 0 ? `冷却 ${themeLeft} 轮` : '切换到这套';
-      b.disabled = themeLeft > 0;
-      return;
-    }
-    const myPrice = priceOfTheme(code);
+    const isLookCur = (curTheme || 'default') === code;
+    const isSkillCur = (curSkill || 'default') === code;
     const needLv = needLevelOf(code);
-    if (myLevel < needLv) {
+    const myPrice = priceOfTheme(code);
+    const isDefault = code === 'default';
+
+    if (!isDefault && myLevel < needLv) {
       b.textContent = `需要 Lv.${needLv}`;
       b.disabled = true;
       return;
     }
-    const poor = cash < myPrice;
-    b.textContent = poor ? `现金不足（差 ${money0(myPrice - cash)}）` : '购买';
-    b.disabled = poor;
+    if (!isDefault && !has && cash < myPrice) {
+      b.textContent = `现金不足（差 ${money0(myPrice - cash)}）`;
+      b.disabled = true;
+      return;
+    }
+    if (isSkill) {
+      if (isSkillCur) { b.textContent = '技能生效中'; b.disabled = true; return; }
+      if (themeLeft > 0) { b.textContent = `冷却 ${themeLeft} 轮`; b.disabled = true; return; }
+      b.textContent = isDefault ? '卸下技能' : (has ? '换技能' : '购买并换技能');
+      b.disabled = false;
+      return;
+    }
+    if (isLookCur) { b.textContent = '外观使用中'; b.disabled = true; return; }
+    b.textContent = isDefault ? '用经典配色' : (has ? '换外观' : '购买并换外观');
+    b.disabled = false;
   });
   document.querySelectorAll('.theme-owned').forEach((el) => {
     el.classList.toggle('hidden', !ownedThemes.includes(el.dataset.owned));
@@ -3189,7 +3213,7 @@ function handleAlerts(list) {
 function handleCloses(list) {
   for (const c of list) {
     if (c && c.bonus > 0) {
-      const isBear = state.market?.me?.theme === 'bear';
+      const isBear = (state.market?.me?.skill || state.market?.me?.theme) === 'bear';
       toast(`${isBear ? '🐻 熊市加成' : '🐂 牛市加成'} +${money(c.bonus)}`, 'ok');
     }
     if (c && c.autoOrder && !c.qty) {
@@ -3991,7 +4015,7 @@ async function loadRank(force = false) {
             const isMe = r.id === meNow.id;
             const cdLeft = stealLeftNow;
             const spyLeft = spyLeftNow;
-            const probeActive = meNow.theme === 'probe';
+            const probeActive = (meNow.skill || meNow.theme) === 'probe';
             const bank = Math.max(0, Number(r.bank) || 0);
             const total = Number.isFinite(r.total) ? r.total : r.equity + bank;
             let actionCell = '<span class="stock-code">—</span>';
@@ -5144,8 +5168,11 @@ function bind() {
     document.body.classList.remove('m-detail');
     resizeChartNow();
   });
-  document.querySelectorAll('.theme-btn').forEach((b) => {
-    b.addEventListener('click', () => chooseTheme(b.dataset.themeCode));
+  document.querySelectorAll('.theme-look-btn').forEach((b) => {
+    b.addEventListener('click', () => chooseTheme(b.dataset.themeCode, 'look'));
+  });
+  document.querySelectorAll('.theme-skill-btn').forEach((b) => {
+    b.addEventListener('click', () => chooseTheme(b.dataset.themeCode, 'skill'));
   });
   $('#traitSaveBtn')?.addEventListener('click', saveTraits);
   bindAdminConsole();

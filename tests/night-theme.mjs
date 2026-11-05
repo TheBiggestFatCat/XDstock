@@ -56,10 +56,10 @@ log('=== 2 时间窗可以配，且 start === end 视为不生效 ===');
 log('');
 log('=== 3 偷钱 CD：夜行者夜里 5 轮，其余 60 轮 ===');
 {
-  const night = { theme: 'night' };
+  const night = { theme: 'night', skill: 'night' };
   check('夜行者 · 夜里 → 5 轮', stealCooldownFor(db(), night, at(21)) === 5);
   check('夜行者 · 白天 → 60 轮', stealCooldownFor(db(), night, at(12)) === 60);
-  check('别的主题 · 夜里 → 60 轮', stealCooldownFor(db(), { theme: 'dark' }, at(21)) === 60);
+  check('别的主题 · 夜里 → 60 轮', stealCooldownFor(db(), { theme: 'dark', skill: 'dark' }, at(21)) === 60);
   check('没主题（新号）· 夜里 → 60 轮', stealCooldownFor(db(), {}, at(21)) === 60);
   check('玩家对象缺省也不炸', stealCooldownFor(db(), null, at(21)) === 60);
 
@@ -74,23 +74,23 @@ log('=== 3 偷钱 CD：夜行者夜里 5 轮，其余 60 轮 ===');
 log('');
 log('=== 4 给前端的 nightInfo ===');
 {
-  const info = nightInfoFor(db(), { theme: 'night' }, at(21));
+  const info = nightInfoFor(db(), { theme: 'night', skill: 'night' }, at(21));
   check('夜里 active = true', info.active === true);
   check('夜行者夜里 bonus = true', info.bonus === true);
   check('stealCd = 5', info.stealCd === 5);
   check('距离天亮是正数且小于 24 小时', info.msLeft > 0 && info.msLeft <= 86400000,
     Math.round(info.msLeft / 3600000) + ' 小时');
 
-  const dayInfo = nightInfoFor(db(), { theme: 'night' }, at(12));
+  const dayInfo = nightInfoFor(db(), { theme: 'night', skill: 'night' }, at(12));
   check('白天 active = false', dayInfo.active === false);
   check('白天 bonus = false', dayInfo.bonus === false);
   check('白天 stealCd = 60', dayInfo.stealCd === 60);
 
-  const other = nightInfoFor(db(), { theme: 'red' }, at(21));
+  const other = nightInfoFor(db(), { theme: 'red', skill: 'red' }, at(21));
   check('别的主题夜里也没有 bonus', other.bonus === false && other.stealCd === 60);
 
   // 边界：正好 4:00 应该算白天，倒计时要指向今晚 18:00
-  const at4 = nightInfoFor(db(), { theme: 'night' }, at(4, 0));
+  const at4 = nightInfoFor(db(), { theme: 'night', skill: 'night' }, at(4, 0));
   check('4:00 已经不算夜里', at4.active === false);
   check('4:00 的倒计时指向 18:00（14 小时）',
     Math.abs(at4.msLeft - 14 * 3600000) < 60000, Math.round(at4.msLeft / 3600000) + ' 小时');
@@ -101,12 +101,12 @@ log('');
 log('=== 5 结算时用 cd 推 stealReadyAt（模拟 server.js 那两行）===');
 {
   const stealTick = 1000;
-  const p = { theme: 'night', stealReadyAt: 0 };
+  const p = { theme: 'night', skill: 'night', stealReadyAt: 0 };
   const cd = stealCooldownFor(db(), p, at(21));
   p.stealReadyAt = stealTick + cd;
   check('夜行者夜里偷完只要等 5 轮', p.stealReadyAt === 1005);
 
-  const q = { theme: 'night', stealReadyAt: 0 };
+  const q = { theme: 'night', skill: 'night', stealReadyAt: 0 };
   q.stealReadyAt = stealTick + stealCooldownFor(db(), q, at(12));
   check('同样的人白天偷完要等 60 轮', q.stealReadyAt === 1060);
 }

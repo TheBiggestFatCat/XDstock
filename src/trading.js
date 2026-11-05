@@ -191,7 +191,7 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
   player.cash -= cost;
   // 开多 = 买入推高；开空 = 卖出压低
   // 暗黑大手：自己的成交对市场冲击额外多 5%
-  const impactMult = player.theme === 'dark' ? 1.05 : 1;
+  const impactMult = player.skill === 'dark' ? 1.05 : 1;
   if (st.isIndex) {
     // 指数：按权重把冲击分摊给成分股
     distributeIndexFlow(db, (side === 'long' ? notional : -notional) * impactMult);
@@ -278,7 +278,7 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
   // 注意：每笔平仓单都独立判定一次，不做「每个持仓只算一次」的限制
   // （分批止盈/止损时，每一笔平仓都有机会吃到返现）
   const redRate = Number(cfg.redBonusRate ?? 0.01);
-  if (player.theme === 'red' && redRate > 0 && !noBonus) {
+  if (player.skill === 'red' && redRate > 0 && !noBonus) {
     const minTicks = Math.max(0, Number(cfg.redBonusMinTicks ?? 12));
     const held = db.tick - Number(pos.openedTick ?? db.tick);
     if (held >= minTicks && indexUptrend(db)) {
@@ -291,7 +291,7 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
 
   // 「绿绿的熊」技能：熊市里平仓，同样返 1% 成交额（和红牛正好反过来）
   const bearRate = Number(cfg.bearBonusRate ?? 0.01);
-  if (player.theme === 'bear' && bearRate > 0 && !noBonus) {
+  if (player.skill === 'bear' && bearRate > 0 && !noBonus) {
     const minTicks = Math.max(0, Number(cfg.bearBonusMinTicks ?? 12));
     const held = db.tick - Number(pos.openedTick ?? db.tick);
     if (held >= minTicks && indexDowntrend(db)) {
@@ -303,7 +303,7 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
 
   player.cash += back;
   // 平多 = 卖出压低；平空 = 买回推高
-  const impactMult2 = player.theme === 'dark' ? 1.05 : 1;
+  const impactMult2 = player.skill === 'dark' ? 1.05 : 1;
   if (st.isIndex) {
     distributeIndexFlow(db, (pos.side === 'long' ? -notional : notional) * impactMult2);
   } else {

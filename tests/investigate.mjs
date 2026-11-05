@@ -33,6 +33,7 @@ function mkPlayer(id, extra = {}) {
     positions: {},
     orders: [],
     theme: 'default',
+  skill: 'default',
     level: 1,
     ...extra
   };
@@ -62,6 +63,7 @@ log('=== 1 前置条件 ===');
   check('没装备主题 → 403', !r1.ok && r1.status === 403, r1.error || '');
 
   me.theme = 'probe';
+  me.skill = 'probe';
   const r2 = investigatePlayer(db, me, 'me');
   check('调查自己 → 400', !r2.ok && r2.status === 400, r2.error || '');
 
@@ -80,7 +82,7 @@ log('');
 log('=== 2 正常调查 ===');
 {
   const db = newDb();
-  const me = mkPlayer('me', { theme: 'probe', level: 2 });
+  const me = mkPlayer('me', { theme: 'probe', skill: 'probe', level: 2 });
   const target = mkPlayer('t1', {
     positions: {
       TGW: mkPos('TGW', 'long', 100),
@@ -106,7 +108,7 @@ log('');
 log('=== 3 冷却 ===');
 {
   const db = newDb();
-  const me = mkPlayer('me', { theme: 'probe' });
+  const me = mkPlayer('me', { theme: 'probe', skill: 'probe' });
   const target = mkPlayer('t1', { positions: { TGW: mkPos('TGW', 'long', 100) } });
   db.players = { me, t1: target };
 
@@ -128,7 +130,7 @@ log('');
 log('=== 4 冷却轮数读配置，缺省 30 ===');
 {
   const db = newDb(5);
-  const me = mkPlayer('me', { theme: 'probe' });
+  const me = mkPlayer('me', { theme: 'probe', skill: 'probe' });
   db.players = { me, t1: mkPlayer('t1', { positions: { TGW: mkPos('TGW', 'long', 10) } }) };
   const r = investigatePlayer(db, me, 't1');
   check('配置 5 轮 → readyAt = 1005', r.readyAt === 1005, `readyAt=${r.readyAt}`);
@@ -136,7 +138,7 @@ log('=== 4 冷却轮数读配置，缺省 30 ===');
   const db2 = createDb();
   db2.tick = 500;
   delete db2.config.investigateCooldownTicks;
-  const me2 = mkPlayer('me2', { theme: 'probe' });
+  const me2 = mkPlayer('me2', { theme: 'probe', skill: 'probe' });
   db2.players = { me2, t9: mkPlayer('t9', { positions: { LU: mkPos('LU', 'long', 10) } }) };
   const r2 = investigatePlayer(db2, me2, 't9');
   check('没配 → 默认 30 轮', r2.readyAt === 530, `readyAt=${r2.readyAt}`);
@@ -147,7 +149,7 @@ log('');
 log('=== 5 多次调查能覆盖到不同持仓 ===');
 {
   const db = newDb(0);   // 冷却 0，方便连查
-  const me = mkPlayer('me', { theme: 'probe' });
+  const me = mkPlayer('me', { theme: 'probe', skill: 'probe' });
   const target = mkPlayer('t1', {
     positions: { TGW: mkPos('TGW', 'long', 1), LU: mkPos('LU', 'long', 1), NW: mkPos('NW', 'long', 1) }
   });

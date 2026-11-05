@@ -150,6 +150,7 @@ function publicPlayer(p, db) {
     bearBonusEarned: p.bearBonusEarned || 0,
     dividendEarned: p.dividendEarned || 0,
     theme: p.theme || 'default',
+    skill: p.skill || p.theme || 'default',
     level: Math.max(1, Math.floor(Number(p.level) || 1)),
     bgUnlocked: !!p.bgUnlocked,
     background: p.background || '',
@@ -157,6 +158,8 @@ function publicPlayer(p, db) {
     bgOpacity: Number.isFinite(Number(p.bgOpacity)) ? Math.max(0, Math.min(100, Number(p.bgOpacity))) : 100,
     renameReadyAt: Number(p.renameReadyAt) || 0,
     themeChangedTick: p.themeChangedTick || 0,
+    // -1 = 从没换过技能
+    skillChangedTick: Number.isFinite(Number(p.skillChangedTick)) ? Number(p.skillChangedTick) : -1,
     themes: Array.isArray(p.themes) ? p.themes : [],
     frozen: Math.round((p.orders || []).reduce((a, o) => a + (Number(o.reserve) || 0), 0) * 100) / 100,
     // 这个玩家本轮的「单笔成交上限」（基础 + 商城通道 + 账号等级）
@@ -275,6 +278,7 @@ export function leaderboardRows(db) {
         total: Math.round((equity + bank) * 100) / 100,
         guardUntil: p.guardUntil || 0,
         theme: p.theme || 'default',
+        skill: p.skill || p.theme || 'default',
         level: Math.max(1, Math.floor(Number(p.level) || 1)),
         positions: []
       };
@@ -298,7 +302,7 @@ export function normalizeBgOpacity(v) {
  * 返回 { ok:true, ... } 或 { ok:false, status, error, leftTicks? }
  */
 export function investigatePlayer(db, me, targetId) {
-  if (me.theme !== 'probe') {
+  if (me.skill !== 'probe') {
     return { ok: false, status: 403, error: '需要装备「暗中调查」主题才能调查' };
   }
   const cd = Math.max(0, Math.round(Number(db.config.investigateCooldownTicks ?? 30)));
@@ -410,7 +414,7 @@ function marketPayload(db, me) {
       // 天气（st.weather / st.weatherTarget）只给引擎和财报用，不下发给前端
       report,
       // 金融大鳄：提前看到金融板块的下一期财报
-      preview: (me && me.theme === 'tycoon' && st.pendingReport)
+      preview: (me && me.skill === 'tycoon' && st.pendingReport)
         ? {
           eps: Number(st.pendingReport.eps) || 0,
           revenue: Number(st.pendingReport.revenue) || 0,
@@ -426,7 +430,7 @@ function marketPayload(db, me) {
         }
         : null,
       // 情绪读心：只有这个主题能看到每只票当前的情绪（v / 剩余轮数 / 方向分量）
-      sent: (me && me.theme === 'mind') ? sentimentView(st, db) : null,
+      sent: (me && me.skill === 'mind') ? sentimentView(st, db) : null,
       // 按各 K 线周期算涨跌幅（前端跟着当前周期显示）
       changes: changesFor(st.series, TIMEFRAMES),
       changePct: prev ? ((st.price - prev) / prev) * 100 : 0,
@@ -1241,7 +1245,7 @@ export async function handleApi(ctx) {
     // 隐世仙人：每笔成交有 50% 概率不出现在别人的成交记录里
     const hideHalf = (t) => {
       const owner = db.players[t.playerId];
-      if (!owner || owner.theme !== 'hermit') return false;
+      if (!owner || owner.skill !== 'hermit') return false;
       if (me && me.id === t.playerId) return false;          // 自己看得到自己的
       // 用单号做哈希，保证同一笔每次请求结果一致，不会闪
       let h = 0;
@@ -1536,9 +1540,15 @@ export async function handleApi(ctx) {
   // 个别主题单独定价（其余走 shopThemePrice）
   const THEME_PRICE = { mind: Number(db.config.mindThemePrice ?? 5000000) };
 
+  // 买/换主题。
+  //   part='look'  → 只换外观，**不吃冷却**（外观随时换）
+  //   part='skill' → 只换技能，吃 shopThemeCooldown
+  //   part 省略     → 两者都换（老接口行为，仍吃冷却）
+  // 价钱只在「第一次买这个主题」时收：买过之后外观/技能可以自由切。
   if (pathname === '/api/shop/theme' && method === 'POST') {
     const code = String(body.theme || '').trim();
     if (!THEMES.includes(code)) return json(res, 400, { error: '没有这个主题' });
+    const part = body.part === 'look' || body.part === 'skill' ? body.part : 'both';
 
     const needLv = Math.max(1, Number(THEME_NEED_LEVEL[code]) || 1);
     if ((Math.floor(Number(me.level)) || 1) < needLv) {
@@ -1547,18 +1557,24 @@ export async function handleApi(ctx) {
 
     const price = Number(THEME_PRICE[code] ?? db.config.shopThemePrice ?? 2000000);
     if (!Array.isArray(me.themes)) me.themes = [];
+    const owned = me.themes.includes(code);
 
-    // 主题切换冷却
+    // 只有「换技能」才吃冷却；换外观永远不拦
+    const wantsSkill = part === 'skill' || part === 'both';
     const cd = Math.max(0, Number(db.config.shopThemeCooldown ?? 100));
-    const lastAt = Number(me.themeChangedTick || 0);
-    if (cd > 0 && lastAt > 0 && db.tick - lastAt < cd) {
+    // -1 / 缺省 = 从没换过技能；0 是合法 tick（服务刚启动时也能正常冷却）
+    const rawLast = me.skillChangedTick ?? me.themeChangedTick;
+    const lastAt = Number.isFinite(Number(rawLast)) ? Number(rawLast) : -1;
+    if (wantsSkill && cd > 0 && lastAt >= 0 && db.tick - lastAt < cd) {
       const left = cd - (db.tick - lastAt);
       return json(res, 429, {
-        error: `主题刚换过，还要等 ${left} 轮（约 ${Math.ceil(left * (db.config.tickMs ?? 5000) / 60000)} 分钟）`,
+        error: `技能刚换过，还要等 ${left} 轮（约 ${Math.ceil(left * (db.config.tickMs ?? 5000) / 60000)} 分钟）`,
         leftTicks: left
       });
     }
-    if (!me.themes.includes(code)) {
+
+    let spent = 0;
+    if (!owned) {
       if (me.cash < price) {
         return json(res, 400, {
           error: `现金不足，售价 $${price.toLocaleString()}，你只有 $${me.cash.toFixed(2)}`
@@ -1567,31 +1583,38 @@ export async function handleApi(ctx) {
       me.cash -= price;
       me.shopSpent = (me.shopSpent || 0) + price;
       me.themes.push(code);
+      spent = price;
     }
-    me.theme = code;
-    me.themeChangedTick = db.tick;
+
+    if (part === 'look' || part === 'both') me.theme = code;
+    if (wantsSkill) {
+      me.skill = code;
+      me.skillChangedTick = db.tick;
+    }
     saveDb();
     return json(res, 200, {
-      ok: true, theme: code, themes: me.themes, price, cash: me.cash,
-      changedTick: me.themeChangedTick
+      ok: true,
+      part,
+      theme: me.theme,
+      skill: me.skill,
+      themes: me.themes,
+      price,
+      spent,
+      cash: me.cash,
+      cdLeft: Math.max(0, cd - (db.tick - Number(me.skillChangedTick ?? -1))),
+      changedTick: Number(me.skillChangedTick ?? -1)
     });
   }
 
+  // 只切外观（老的快捷切换走这里）：不吃冷却，也不动技能
   if (pathname === '/api/shop/theme/select' && method === 'POST') {
     const code = String(body.theme || 'default').trim();
     if (code !== 'default' && !(Array.isArray(me.themes) && me.themes.includes(code))) {
       return json(res, 400, { error: '还没买这个主题' });
     }
-    const cd = Math.max(0, Number(db.config.shopThemeCooldown ?? 100));
-    const lastAt = Number(me.themeChangedTick || 0);
-    if (code !== me.theme && cd > 0 && lastAt > 0 && db.tick - lastAt < cd) {
-      const left = cd - (db.tick - lastAt);
-      return json(res, 429, { error: `主题刚换过，还要等 ${left} 轮`, leftTicks: left });
-    }
-    if (code !== me.theme) me.themeChangedTick = db.tick;
     me.theme = code;
     saveDb();
-    return json(res, 200, { ok: true, theme: code, changedTick: me.themeChangedTick });
+    return json(res, 200, { ok: true, theme: code, skill: me.skill || me.theme });
   }
 
   // ---------- 自动定投（Lv.2 道具）----------

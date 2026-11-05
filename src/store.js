@@ -388,6 +388,15 @@ export function migrate(d) {
   // 老存档补账号等级
   for (const p of Object.values(merged.players || {})) {
     if (!Number.isFinite(Number(p.level)) || Number(p.level) < 1) p.level = 1;
+    // 主题拆成了「外观(theme)」和「技能(skill)」两部分：老存档里两者是同一个值
+    if (typeof p.skill !== 'string' || !p.skill) p.skill = p.theme || 'default';
+    if (typeof p.theme !== 'string' || !p.theme) p.theme = 'default';
+    // 老字段名：换主题冷却记在 themeChangedTick，现在只有换技能才吃冷却。
+    // -1 = 从没换过技能（这样 tick 0 换技能也能正常开始冷却）
+    if (!Number.isFinite(Number(p.skillChangedTick))) {
+      const oldTick = Number(p.themeChangedTick);
+      p.skillChangedTick = Number.isFinite(oldTick) && oldTick > 0 ? oldTick : -1;
+    }
   }
   delete merged.book;
   for (const k of Object.keys(merged.config)) {

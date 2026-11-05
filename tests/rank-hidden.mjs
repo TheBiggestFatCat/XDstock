@@ -63,7 +63,7 @@ log('=== 3 隐身之后不能被偷钱 / 调查 ===');
   const victim = db.players.ghost;
   check('隐身的号被当成「没这个人」', !victim || victim.hiddenRank);
   // 调查：probe 主题也不能看隐身的号
-  const probe = { id: 'probe1', nickname: '侦探', theme: 'probe', cash: 0, level: 2, positions: {} };
+  const probe = { id: 'probe1', nickname: '侦探', theme: 'probe', skill: 'probe', cash: 0, level: 2, positions: {} };
   const r = investigatePlayer(db, probe, 'ghost');
   check('调查隐身号被拒', r.ok === false, r.error || '');
   db.players.ghost.hiddenRank = false;
