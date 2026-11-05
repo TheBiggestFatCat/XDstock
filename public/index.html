@@ -101,9 +101,8 @@
     <button class="tab" data-view="portfolio">我的</button>
     <button class="tab" data-view="work">打工</button>
     <button class="tab" data-view="shop">商城</button>
-    <button class="tab" data-view="bank">银行</button>
     <button class="tab" data-view="rank">排行榜</button>
-    <button class="tab" data-view="admin">管理</button>
+    <button class="tab" data-view="achv">成就</button>
   </nav>
 
   <main class="content">
@@ -291,6 +290,12 @@
 
     <!-- ---------- 我的 ---------- -->
     <div class="view" id="view-portfolio">
+      <div class="pf-tabs" id="pfTabs">
+        <button class="pf-tab active" data-pf="overview">概览</button>
+        <button class="pf-tab" data-pf="bank">🏦 银行</button>
+        <button class="pf-tab" data-pf="admin">⚙️ 管理</button>
+      </div>
+      <div class="pf-pane" data-pf-pane="overview">
       <section class="profile-card">
         <button id="profileAvatarBtn" class="profile-avatar" type="button" title="更换头像">
           <img id="profileAvatarImg" alt="" />
@@ -312,12 +317,14 @@
       <div class="stat-grid" id="statGrid"></div>
       <div class="panel">
         <div class="panel-title">
-          <span>收益曲线</span>
+          <button id="equityToggle" class="panel-toggle" type="button">▸ 收益曲线</button>
           <span class="panel-sub" id="equityHint">每分钟记录一次</span>
         </div>
-        <div id="equityLegend" class="equity-legend"></div>
-        <div id="equityChart" class="equity-chart"></div>
-        <div id="equityEmpty" class="equity-empty">数据积累中，稍等一分钟…</div>
+        <div id="equityBody" class="collapse-body hidden" style="display:none">
+          <div id="equityLegend" class="equity-legend"></div>
+          <div id="equityChart" class="equity-chart"></div>
+          <div id="equityEmpty" class="equity-empty">数据积累中，稍等一分钟…</div>
+        </div>
       </div>
       <div class="panel">
         <div class="panel-title">持仓明细</div>
@@ -329,6 +336,191 @@
           <button id="refreshTrades" class="btn-link">刷新</button>
         </div>
         <div id="tradeTable" class="table-wrap"></div>
+      </div>
+      </div>
+      <div class="pf-pane hidden" data-pf-pane="bank">
+        <div class="bank-wrap">
+          <div class="bank-title">🏦 丰川银行</div>
+          <p class="bank-desc">
+            账号升级交的钱会存进这里，<b>不会凭空消失</b><br />
+            总资产低于 <span id="bankRuleText">$100,000</span> 时，可以取存款的
+            <b id="bankWithdrawRateText">1%~20%</b>（最低 10 万）救急
+          </p>
+
+          <div class="bank-card">
+            <div class="bank-card-label">银行存款</div>
+            <div id="bankAmount" class="bank-card-amount">$0.00</div>
+            <div id="bankDepositLine" class="bank-card-sub">累计存入 $0.00</div>
+          </div>
+
+          <button id="bankWithdrawBtn" class="bank-btn">取出存款的 <span id="bankWithdrawRate">1%~20%</span></button>
+          <p id="bankHint" class="bank-hint">还没有存款，升级账号时会自动存进来</p>
+
+          <div class="bank-stats">
+            <div><span>总资产（不含存款）</span><b id="bankEquity">$0.00</b></div>
+            <div><span>当前状态</span><b id="bankState">—</b></div>
+          </div>
+        </div>
+      </div>
+      <div class="pf-pane hidden" data-pf-pane="admin">
+        <div id="adminLock" class="panel admin-lock">
+          <div class="panel-title">管理员登录</div>
+          <label class="field">
+            <span>管理员口令</span>
+            <input id="adminPin" type="password" placeholder="请输入管理员口令" />
+          </label>
+          <button id="adminLoginBtn" class="btn btn-primary">验证</button>
+          <p id="adminMsg" class="order-msg"></p>
+        </div>
+
+        <div id="adminPanel" class="hidden">
+          <div class="admin-tabs" id="adminTabs">
+            <button class="admin-tab active" data-admin-tab="console">🎛 控制台</button>
+            <button class="admin-tab" data-admin-tab="market">📣 市场</button>
+            <button class="admin-tab" data-admin-tab="stock">📈 个股</button>
+            <button class="admin-tab" data-admin-tab="player">👥 玩家</button>
+            <button class="admin-tab" data-admin-tab="config">⚙️ 参数</button>
+          </div>
+
+          <!-- ===== 控制台：真人玩家实时成交 ===== -->
+          <div class="admin-pane" data-admin-pane="console">
+            <div class="panel">
+              <div class="panel-title">
+                <span>实时成交</span>
+                <span class="panel-sub">只显示真人玩家的单，每轮（5 秒）刷新</span>
+              </div>
+              <div class="csl-bar">
+                <div class="csl-stats">
+                  <span>近 1 小时 <b id="cslHourCount">0</b> 笔</span>
+                  <span>参与玩家 <b id="cslHourPlayers">0</b> 人</span>
+                  <span>累计 <b id="cslTotal">0</b> 笔</span>
+                  <span class="csl-live" id="cslLive">● 实时</span>
+                </div>
+                <div class="csl-actions">
+                  <label class="csl-check"><input type="checkbox" id="cslOnlyTrade" checked /> 只看开/平仓</label>
+                  <button id="cslPauseBtn" class="btn btn-ghost">暂停</button>
+                  <button id="cslClearBtn" class="btn btn-ghost">清屏</button>
+                </div>
+              </div>
+              <div class="csl-head">
+                <span>时间</span><span>玩家</span><span>标的</span><span>方向</span>
+                <span>股数</span><span>价格</span><span>金额</span><span>杠杆</span><span>备注</span>
+              </div>
+              <div id="cslList" class="csl-list">
+                <div class="csl-empty">还没有真人成交</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ===== 市场 ===== -->
+          <div class="admin-pane hidden" data-admin-pane="market">
+            <div class="admin-grid">
+              <div class="panel">
+                <div class="panel-title">市场控制</div>
+                <div class="market-ctrl">
+                  <div>
+                    <div class="mc-state" id="marketState">—</div>
+                    <div class="mc-hint">休市会立即冻结行情：价格、新闻、利息全部暂停</div>
+                  </div>
+                  <button id="marketToggleBtn" class="btn btn-primary">休市</button>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="panel-title">发布公告</div>
+                <label class="field">
+                  <span>公告内容（不影响行情，和新闻显示在一起）</span>
+                  <textarea id="noticeText" rows="2" placeholder="例如：今晚 24 点停服维护，请提前平仓"></textarea>
+                </label>
+                <label class="field">
+                  <span>显示时长（轮，0 = 永久）</span>
+                  <input id="noticeTicks" type="number" min="0" max="43200" step="10" value="720" />
+                </label>
+                <p class="panel-sub" style="margin:-4px 0 12px">720 轮 ≈ 1 小时（1 轮 = 5 秒）。到点自动从「市场快讯」里消失，填 0 表示一直挂着。</p>
+                <button id="noticeBtn" class="btn btn-primary">发布公告</button>
+                <div id="noticeList" class="notice-list"></div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-title">版本公告</div>
+                <label class="field">
+                  <span>版本号（可留空）</span>
+                  <input id="verNum" type="text" maxlength="24" placeholder="例如 v1.3.0" />
+                </label>
+                <label class="field">
+                  <span>标题</span>
+                  <input id="verTitle" type="text" maxlength="60" placeholder="例如 本次更新：表情互动上线" />
+                </label>
+                <label class="field">
+                  <span>正文（换行会保留）</span>
+                  <textarea id="verBody" rows="5" maxlength="4000" placeholder="一条一句，例如：&#10;- 新增表情互动&#10;- 修复手机端百分比不显示"></textarea>
+                </label>
+                <p class="panel-sub" style="margin:-4px 0 12px">发完立刻出现在「市场快讯」上方，玩家点开能看全文；只显示最新一条。</p>
+                <button id="verBtn" class="btn btn-primary">发布版本公告</button>
+                <div id="verList" class="notice-list"></div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-title">手动新闻</div>
+                <label class="field"><span>内容</span><textarea id="newsText" rows="3" placeholder="例如：丰川集团宣布收购…"></textarea></label>
+                <label class="field"><span>涉及标的（不选 = 全市场）</span></label>
+                <div id="newsStocks" class="chip-select"></div>
+                <div class="row-2">
+                  <label class="field"><span>方向</span>
+                    <select id="newsDir">
+                      <option value="1">利好</option>
+                      <option value="-1">利空</option>
+                    </select>
+                  </label>
+                  <label class="field"><span>持续（轮，80~200）</span><input id="newsDuration" type="number" step="10" value="120" /></label>
+                </div>
+                <p class="panel-sub" style="margin:-4px 0 12px">发布后先偷跑 5~10 轮，再公布消息</p>
+                <button id="newsBtn" class="btn btn-primary">发布新闻</button>
+                <div id="activeEvents" class="active-events"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ===== 个股 ===== -->
+          <div class="admin-pane hidden" data-admin-pane="stock">
+            <div class="panel">
+              <div class="panel-title">
+                <span>个股设置</span>
+                <span class="panel-sub">每只标的自己的脾气，改完下一个 tick 生效</span>
+              </div>
+              <div id="traitForm" class="trait-form"></div>
+              <button id="traitSaveBtn" class="btn btn-primary">保存个股设置</button>
+            </div>
+          </div>
+
+          <!-- ===== 玩家 ===== -->
+          <div class="admin-pane hidden" data-admin-pane="player">
+            <div class="panel">
+              <div class="panel-title">
+                <span>玩家管理</span>
+                <span class="panel-sub">封禁后立即掉线，无法登录</span>
+              </div>
+              <div class="ban-toolbar">
+                <input id="banSearch" type="text" placeholder="搜索昵称…" />
+                <span class="field-hint" id="banCount">共 0 人</span>
+              </div>
+              <div id="banList" class="ban-list"></div>
+            </div>
+          </div>
+
+          <!-- ===== 参数：按大类分页 ===== -->
+          <div class="admin-pane hidden" data-admin-pane="config">
+            <div class="panel">
+              <div class="panel-title">
+                <span>参数设置</span>
+                <span class="panel-sub">改完点底部「保存参数」，下一个 tick 生效</span>
+              </div>
+              <div class="cfg-cats" id="cfgCats"></div>
+              <div id="configForm" class="config-form"></div>
+              <button id="configSaveBtn" class="btn btn-primary">保存参数</button>
+              <p id="configMsg" class="order-msg"></p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -774,30 +966,6 @@
     </div>
 
     <!-- ---------- 丰川银行 ---------- -->
-    <div class="view" id="view-bank">
-      <div class="bank-wrap">
-        <div class="bank-title">🏦 丰川银行</div>
-        <p class="bank-desc">
-          账号升级交的钱会存进这里，<b>不会凭空消失</b><br />
-          总资产低于 <span id="bankRuleText">$100,000</span> 时，可以取存款的
-          <b id="bankWithdrawRateText">1%~20%</b>（最低 10 万）救急
-        </p>
-
-        <div class="bank-card">
-          <div class="bank-card-label">银行存款</div>
-          <div id="bankAmount" class="bank-card-amount">$0.00</div>
-          <div id="bankDepositLine" class="bank-card-sub">累计存入 $0.00</div>
-        </div>
-
-        <button id="bankWithdrawBtn" class="bank-btn">取出存款的 <span id="bankWithdrawRate">1%~20%</span></button>
-        <p id="bankHint" class="bank-hint">还没有存款，升级账号时会自动存进来</p>
-
-        <div class="bank-stats">
-          <div><span>总资产（不含存款）</span><b id="bankEquity">$0.00</b></div>
-          <div><span>当前状态</span><b id="bankState">—</b></div>
-        </div>
-      </div>
-    </div>
 
     <!-- ---------- 排行榜 ---------- -->
     <div class="view" id="view-rank">
@@ -810,167 +978,21 @@
       </div>
     </div>
 
+    <!-- ---------- 成就（主题成就 + 进化）---------- -->
+    <div class="view" id="view-achv">
+      <div class="achv-top">
+        <div class="achv-points">
+          <b id="achvPoints">0</b><span>成就点</span>
+        </div>
+        <div class="achv-summary" id="achvSummary">—</div>
+      </div>
+      <div class="achv-list" id="achvList"></div>
+      <p class="achv-foot">
+        每个主题两条成就，各得 1 枚结晶；攒够 2 枚结晶可把主题进化到 <b>Ⅱ 阶</b>，技能效果更强。
+      </p>
+    </div>
+
     <!-- ---------- 管理 ---------- -->
-    <div class="view" id="view-admin">
-      <div id="adminLock" class="panel admin-lock">
-        <div class="panel-title">管理员登录</div>
-        <label class="field">
-          <span>管理员口令</span>
-          <input id="adminPin" type="password" placeholder="请输入管理员口令" />
-        </label>
-        <button id="adminLoginBtn" class="btn btn-primary">验证</button>
-        <p id="adminMsg" class="order-msg"></p>
-      </div>
-
-      <div id="adminPanel" class="hidden">
-        <div class="admin-tabs" id="adminTabs">
-          <button class="admin-tab active" data-admin-tab="console">🎛 控制台</button>
-          <button class="admin-tab" data-admin-tab="market">📣 市场</button>
-          <button class="admin-tab" data-admin-tab="stock">📈 个股</button>
-          <button class="admin-tab" data-admin-tab="player">👥 玩家</button>
-          <button class="admin-tab" data-admin-tab="config">⚙️ 参数</button>
-        </div>
-
-        <!-- ===== 控制台：真人玩家实时成交 ===== -->
-        <div class="admin-pane" data-admin-pane="console">
-          <div class="panel">
-            <div class="panel-title">
-              <span>实时成交</span>
-              <span class="panel-sub">只显示真人玩家的单，每轮（5 秒）刷新</span>
-            </div>
-            <div class="csl-bar">
-              <div class="csl-stats">
-                <span>近 1 小时 <b id="cslHourCount">0</b> 笔</span>
-                <span>参与玩家 <b id="cslHourPlayers">0</b> 人</span>
-                <span>累计 <b id="cslTotal">0</b> 笔</span>
-                <span class="csl-live" id="cslLive">● 实时</span>
-              </div>
-              <div class="csl-actions">
-                <label class="csl-check"><input type="checkbox" id="cslOnlyTrade" checked /> 只看开/平仓</label>
-                <button id="cslPauseBtn" class="btn btn-ghost">暂停</button>
-                <button id="cslClearBtn" class="btn btn-ghost">清屏</button>
-              </div>
-            </div>
-            <div class="csl-head">
-              <span>时间</span><span>玩家</span><span>标的</span><span>方向</span>
-              <span>股数</span><span>价格</span><span>金额</span><span>杠杆</span><span>备注</span>
-            </div>
-            <div id="cslList" class="csl-list">
-              <div class="csl-empty">还没有真人成交</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- ===== 市场 ===== -->
-        <div class="admin-pane hidden" data-admin-pane="market">
-          <div class="admin-grid">
-            <div class="panel">
-              <div class="panel-title">市场控制</div>
-              <div class="market-ctrl">
-                <div>
-                  <div class="mc-state" id="marketState">—</div>
-                  <div class="mc-hint">休市会立即冻结行情：价格、新闻、利息全部暂停</div>
-                </div>
-                <button id="marketToggleBtn" class="btn btn-primary">休市</button>
-              </div>
-            </div>
-            <div class="panel">
-              <div class="panel-title">发布公告</div>
-              <label class="field">
-                <span>公告内容（不影响行情，和新闻显示在一起）</span>
-                <textarea id="noticeText" rows="2" placeholder="例如：今晚 24 点停服维护，请提前平仓"></textarea>
-              </label>
-              <label class="field">
-                <span>显示时长（轮，0 = 永久）</span>
-                <input id="noticeTicks" type="number" min="0" max="43200" step="10" value="720" />
-              </label>
-              <p class="panel-sub" style="margin:-4px 0 12px">720 轮 ≈ 1 小时（1 轮 = 5 秒）。到点自动从「市场快讯」里消失，填 0 表示一直挂着。</p>
-              <button id="noticeBtn" class="btn btn-primary">发布公告</button>
-              <div id="noticeList" class="notice-list"></div>
-            </div>
-
-            <div class="panel">
-              <div class="panel-title">版本公告</div>
-              <label class="field">
-                <span>版本号（可留空）</span>
-                <input id="verNum" type="text" maxlength="24" placeholder="例如 v1.3.0" />
-              </label>
-              <label class="field">
-                <span>标题</span>
-                <input id="verTitle" type="text" maxlength="60" placeholder="例如 本次更新：表情互动上线" />
-              </label>
-              <label class="field">
-                <span>正文（换行会保留）</span>
-                <textarea id="verBody" rows="5" maxlength="4000" placeholder="一条一句，例如：&#10;- 新增表情互动&#10;- 修复手机端百分比不显示"></textarea>
-              </label>
-              <p class="panel-sub" style="margin:-4px 0 12px">发完立刻出现在「市场快讯」上方，玩家点开能看全文；只显示最新一条。</p>
-              <button id="verBtn" class="btn btn-primary">发布版本公告</button>
-              <div id="verList" class="notice-list"></div>
-            </div>
-
-            <div class="panel">
-              <div class="panel-title">手动新闻</div>
-              <label class="field"><span>内容</span><textarea id="newsText" rows="3" placeholder="例如：丰川集团宣布收购…"></textarea></label>
-              <label class="field"><span>涉及标的（不选 = 全市场）</span></label>
-              <div id="newsStocks" class="chip-select"></div>
-              <div class="row-2">
-                <label class="field"><span>方向</span>
-                  <select id="newsDir">
-                    <option value="1">利好</option>
-                    <option value="-1">利空</option>
-                  </select>
-                </label>
-                <label class="field"><span>持续（轮，80~200）</span><input id="newsDuration" type="number" step="10" value="120" /></label>
-              </div>
-              <p class="panel-sub" style="margin:-4px 0 12px">发布后先偷跑 5~10 轮，再公布消息</p>
-              <button id="newsBtn" class="btn btn-primary">发布新闻</button>
-              <div id="activeEvents" class="active-events"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- ===== 个股 ===== -->
-        <div class="admin-pane hidden" data-admin-pane="stock">
-          <div class="panel">
-            <div class="panel-title">
-              <span>个股设置</span>
-              <span class="panel-sub">每只标的自己的脾气，改完下一个 tick 生效</span>
-            </div>
-            <div id="traitForm" class="trait-form"></div>
-            <button id="traitSaveBtn" class="btn btn-primary">保存个股设置</button>
-          </div>
-        </div>
-
-        <!-- ===== 玩家 ===== -->
-        <div class="admin-pane hidden" data-admin-pane="player">
-          <div class="panel">
-            <div class="panel-title">
-              <span>玩家管理</span>
-              <span class="panel-sub">封禁后立即掉线，无法登录</span>
-            </div>
-            <div class="ban-toolbar">
-              <input id="banSearch" type="text" placeholder="搜索昵称…" />
-              <span class="field-hint" id="banCount">共 0 人</span>
-            </div>
-            <div id="banList" class="ban-list"></div>
-          </div>
-        </div>
-
-        <!-- ===== 参数：按大类分页 ===== -->
-        <div class="admin-pane hidden" data-admin-pane="config">
-          <div class="panel">
-            <div class="panel-title">
-              <span>参数设置</span>
-              <span class="panel-sub">改完点底部「保存参数」，下一个 tick 生效</span>
-            </div>
-            <div class="cfg-cats" id="cfgCats"></div>
-            <div id="configForm" class="config-form"></div>
-            <button id="configSaveBtn" class="btn btn-primary">保存参数</button>
-            <p id="configMsg" class="order-msg"></p>
-          </div>
-        </div>
-      </div>
-    </div>  </main>
 </section>
 
 <input id="avatarInput" type="file" accept="image/*" class="hidden" />

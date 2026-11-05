@@ -27,6 +27,7 @@ const state = {
   candles: [],
   adminToken: localStorage.getItem('xd_admin') || '',
   adminTab: 'console',        // 管理页当前标签
+  pfPane: (localStorage.getItem('xd_pf_pane') || 'overview'),   // 我的：概览 / 银行 / 管理
   cfgCat: 'market',           // 参数页当前大类
   cslRows: [],                // 控制台成交（最新在前）
   cslSeen: new Set(),         // 已经画过的成交 id
@@ -622,30 +623,17 @@ function renderThemeAchvCards() {
       if (anchor) card.insertBefore(box, anchor);
       else card.appendChild(box);
     }
-    const items = (t.list || []).map((it) => {
-      const done = it.got;
-      const txt = achvProgressText(it);
-      return `<div class="ta-item ${done ? 'got' : ''}" title="${escapeHtml(it.desc || '')}">
-        <span class="ta-mark">${done ? '✅' : '🔒'}</span>
-        <span class="ta-name">${escapeHtml(it.name)}</span>
-        <span class="ta-num">${done ? '已达成' : txt}</span>
-      </div>`;
-    }).join('');
-    const canEvo = !!t.canEvolve;
+    // 明细和「进化」按钮都在「成就」页，这里只留一行摘要，别把卡片撑太长
     const evolved = Number(t.tier) >= 2;
-    const btn = evolved
-      ? '<span class="ta-evolved">已进化 Ⅱ 阶</span>'
-      : `<button class="btn btn-primary ta-evolve" data-evolve="${code}" ${canEvo ? '' : 'disabled'}>${canEvo ? '进化 ✦' : `结晶 ${t.shards}/${need}`}</button>`;
     box.innerHTML = `
       <div class="ta-head">
         <span class="ta-count">成就 <b>${t.got}/${t.total}</b></span>
-        ${evolved ? '' : `<span class="ta-shard">结晶 <b>${t.shards}/${need}</b></span>`}
-        ${btn}
-      </div>
-      <div class="ta-list">${items}</div>`;
-
-    const evoBtn = box.querySelector('[data-evolve]');
-    if (evoBtn) evoBtn.addEventListener('click', () => evolveTheme(code, evoBtn));
+        ${evolved ? '<span class="ta-evolved">已进化 Ⅱ 阶</span>'
+          : `<span class="ta-shard">结晶 <b>${t.shards}/${need}</b></span>`}
+        <button class="ta-goto" data-goto-achv="1">看成就 →</button>
+      </div>`;
+    const go = box.querySelector('[data-goto-achv]');
+    if (go) go.addEventListener('click', () => switchView('achv'));
   });
 }
 
@@ -660,10 +648,96 @@ async function evolveTheme(code, btn) {
     toast(`${meta.emoji} ${meta.name} 进化成功！技能效果已增强`, 'ok');
     await refreshMarket();
     renderShop();
+    renderAchvPage();
   } catch (e) {
     toast(e.message, 'err');
     btn.disabled = false;
   }
+}
+
+/**
+ * 「成就」页：8 个主题 × 2 条成就 + 结晶 + 进化按钮。
+ * 数据全部来自 payload 的 `me.achv`（服务端算好的，前端只渲染）。
+ */
+const ACHV_ORDER = ['red', 'bear', 'dark', 'tycoon', 'hermit', 'probe', 'mind', 'night'];
+
+function renderAchvPage() {
+  const wrap = $('#achvList');
+  if (!wrap) return;
+  const me = state.market?.me;
+  const achv = me?.achv;
+  if (!achv || !achv.themes) {
+    wrap.innerHTML = '<p class="field-hint">成就数据加载中…</p>';
+    return;
+  }
+  const need = Math.max(1, Number(state.market?.config?.achvShardPerEvolve ?? 2));
+  const themes = achv.themes;
+
+  // 顶部：成就点 + 总进度
+  let gotTotal = 0;
+  let allTotal = 0;
+  let evolvedCount = 0;
+  for (const code of ACHV_ORDER) {
+    const t = themes[code];
+    if (!t) continue;
+    gotTotal += Number(t.got) || 0;
+    allTotal += Number(t.total) || 0;
+    if (Number(t.tier) >= 2) evolvedCount++;
+  }
+  const pointsEl = $('#achvPoints');
+  if (pointsEl) pointsEl.textContent = String(Number(achv.points) || 0);
+  const sumEl = $('#achvSummary');
+  if (sumEl) {
+    sumEl.innerHTML = `主题成就 <b>${gotTotal}/${allTotal}</b> · 已进化 <b>${evolvedCount}/8</b>`
+      + `<span class="achv-tip">集齐一个主题的两条成就各得 1 枚结晶，2 枚即可进化</span>`;
+  }
+
+  wrap.innerHTML = ACHV_ORDER.map((code) => {
+    const t = themes[code] || { list: [], got: 0, total: 2, shards: 0, tier: 1, canEvolve: false };
+    const meta = ACHV_THEME_META[code] || { emoji: '✦', name: code };
+    const evolved = Number(t.tier) >= 2;
+    const canEvo = !!t.canEvolve;
+    const doneAll = Number(t.got) >= Number(t.total);
+    const btn = evolved
+      ? '<span class="achv-evolved">已进化 Ⅱ 阶</span>'
+      : `<button class="btn btn-primary achv-evolve" data-evolve="${code}" ${canEvo ? '' : 'disabled'}>`
+        + `${canEvo ? '进化到 Ⅱ 阶 ✦' : doneAll ? `结晶不足 ${t.shards}/${need}` : '未达成'}</button>`;
+    const rows = (t.list || []).map((it) => {
+      const target = Math.max(1, Number(it.target) || 1);
+      const cur = Math.max(0, Number(it.progress) || 0);
+      const pctDone = Math.min(100, (cur / target) * 100);
+      const num = it.target >= 10000
+        ? `${money0(Math.min(cur, target))} / ${money0(target)}`
+        : `${Math.min(cur, target).toFixed(0)} / ${target}`;
+      return `
+        <div class="achv-item ${it.got ? 'got' : ''}">
+          <div class="achv-item-head">
+            <span class="achv-mark">${it.got ? '✅' : '🔒'}</span>
+            <span class="achv-name">${escapeHtml(it.name)}</span>
+            <span class="achv-num">${it.got ? '已达成' : num}</span>
+          </div>
+          <div class="achv-bar"><i style="width:${it.got ? 100 : pctDone}%"></i></div>
+          <p class="achv-desc">${escapeHtml(it.desc || '')}</p>
+        </div>`;
+    }).join('');
+    return `
+      <section class="achv-card ${evolved ? 'is-evolved' : ''}">
+        <header class="achv-card-head">
+          <span class="achv-emoji">${meta.emoji}</span>
+          <div class="achv-title">
+            <h3>${meta.name}</h3>
+            <span class="achv-sub">成就 <b>${t.got}/${t.total}</b> · 结晶 <b>${t.shards}/${need}</b></span>
+          </div>
+          <span class="theme-tier ${evolved ? 'tier-2' : ''}">${evolved ? 'Ⅱ' : 'Ⅰ'}</span>
+        </header>
+        <div class="achv-items">${rows}</div>
+        <div class="achv-foot-row">${btn}</div>
+      </section>`;
+  }).join('');
+
+  wrap.querySelectorAll('[data-evolve]').forEach((b) => {
+    b.addEventListener('click', () => evolveTheme(b.dataset.evolve, b));
+  });
 }
 
 /** 情绪读心：一条双向情绪条（中线 0，左绿=看空，右红=看多），不显示任何文字 */
@@ -1330,7 +1404,7 @@ async function levelUp() {
     await refreshMarket();
     renderShopCats();
     renderLevelCard();
-    if ($('#view-bank')?.classList.contains('active')) renderBank();
+    if (pfPaneVisible('bank')) renderBank();
   } catch (e) {
     toast(e.message, 'err');
   }
@@ -3368,8 +3442,12 @@ function onTick(d) {
   renderMyOrders();
   if (state.listTab === 'positions') renderSidePositions();
   if ($('#view-portfolio').classList.contains('active')) {
-    renderPortfolio();
-    loadEquityCurve();
+    if ((state.pfPane || 'overview') === 'overview') {
+      renderPortfolio();
+      if (isEquityOpen()) loadEquityCurve();
+    } else if (state.pfPane === 'bank') {
+      renderBank();
+    }
   }
   if ($('#view-rank').classList.contains('active')) loadRank();
   // ST 进度每轮都在变，刷一下标题区和列表徽章
@@ -3384,10 +3462,10 @@ function onTick(d) {
   // 所以停在商城页时不刷新也能看到数字跟着变（切页面时 switchView 也会补一次）
   if ($('#view-shop').classList.contains('active')) renderShop();
   // 管理控制台：跟着 tick 一起刷，行情到哪一单就到哪
-  if (state.adminTab === 'console' && $('#view-admin')?.classList.contains('active')) {
+  if (state.adminTab === 'console' && pfPaneVisible('admin')) {
     pollConsole();
   }
-  if ($('#view-bank').classList.contains('active')) renderBank();
+  if (pfPaneVisible('bank')) renderBank();
   if (state.tradeTab === 'log' && $('#logPane') && !$('#logPane').classList.contains('hidden')) {
     loadStockTrades();
   }
@@ -5422,24 +5500,82 @@ async function publishNews() {
 function switchView(name) {
   $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === name));
   $$('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + name));
-  if (name === 'portfolio') { renderPortfolio(); loadTrades(); }
+  // 「我的」里还有三个子面板：概览 / 银行 / 管理
+  if (name === 'portfolio') switchPfPane(state.pfPane || 'overview', true);
   if (name === 'work') renderWork();
   if (name === 'rank') loadRank(true);
   if (name === 'shop') renderShop();
-  if (name === 'bank') renderBank();
+  if (name === 'achv') renderAchvPage();
   // 切回行情时图表容器可能刚从 display:none 恢复，补一次尺寸校正
-  if (name !== 'admin') stopConsole();
+  const onAdmin = name === 'portfolio' && (state.pfPane || 'overview') === 'admin';
+  if (!onAdmin) stopConsole();
   if (name === 'market') resizeChartNow();
   // 切换标签时退回列表态（手机上从个股详情回到列表）
   document.body.classList.remove('m-detail');
-  if (name === 'admin') {
+}
+
+/**
+ * 「我的」的子面板切换（银行 / 管理都塞进来了）。
+ * `hidden` 会被 `display:grid` 覆盖，所以同时用 style.display 兜底。
+ */
+function switchPfPane(name, force = false) {
+  const pane = ['overview', 'bank', 'admin'].includes(name) ? name : 'overview';
+  state.pfPane = pane;
+  try { localStorage.setItem('xd_pf_pane', pane); } catch (e) { /* 隐私模式下忽略 */ }
+  $$('#pfTabs .pf-tab').forEach((b) => b.classList.toggle('active', b.dataset.pf === pane));
+  $$('.pf-pane').forEach((el) => {
+    const on = el.dataset.pfPane === pane;
+    el.classList.toggle('hidden', !on);
+    el.style.display = on ? '' : 'none';
+  });
+  if (pane === 'overview') {
+    renderPortfolio();
+    loadTrades();
+    if (isEquityOpen()) loadEquityCurve();
+  }
+  if (pane === 'bank') renderBank();
+  if (pane === 'admin') {
     if (typeof loadAdminPlayers === 'function') loadAdminPlayers();
     if (state.adminToken) loadAdmin().then(() => switchAdminTab(state.adminTab || 'console'));
     else {
-      $('#adminLock').classList.remove('hidden');
-      $('#adminPanel').classList.add('hidden');
+      $('#adminLock')?.classList.remove('hidden');
+      $('#adminPanel')?.classList.add('hidden');
     }
+  } else {
+    stopConsole();
   }
+  if (force === true && pane === 'admin') resizeChartNow();
+}
+
+/** 当前「我的」是不是停在某个子面板上（每轮 tick 里判断用） */
+function pfPaneVisible(name) {
+  if (!$('#view-portfolio')?.classList.contains('active')) return false;
+  return (state.pfPane || 'overview') === name;
+}
+
+// ---------------- 收益曲线折叠 ----------------
+function isEquityOpen() {
+  return localStorage.getItem('xd_equity_open') === '1';
+}
+function setEquityOpen(open, save = true) {
+  const body = $('#equityBody');
+  const btn = $('#equityToggle');
+  if (!body) return;
+  body.classList.toggle('hidden', !open);
+  body.style.display = open ? '' : 'none';
+  if (btn) {
+    btn.textContent = `${open ? '▾' : '▸'} 收益曲线`;
+    btn.classList.toggle('open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  if (save) { try { localStorage.setItem('xd_equity_open', open ? '1' : '0'); } catch (e) { /* ignore */ } }
+  if (open) {
+    // 图表容器刚显示出来，尺寸得重新量一次
+    setTimeout(() => { ensureEquityChart(); loadEquityCurve(); }, 0);
+  }
+}
+function toggleEquity() {
+  setEquityOpen(!isEquityOpen());
 }
 
 // ---------------- 头像 ----------------
@@ -5491,6 +5627,11 @@ function bind() {
   $('#profileAvatarBtn')?.addEventListener('click', () => $('#avatarInput').click());
 
   $$('.tab').forEach((t) => t.addEventListener('click', () => switchView(t.dataset.view)));
+  // 「我的」子标签：概览 / 银行 / 管理
+  $$('#pfTabs .pf-tab').forEach((b) => b.addEventListener('click', () => switchPfPane(b.dataset.pf)));
+  // 收益曲线折叠（默认折叠，记在 localStorage）
+  $('#equityToggle')?.addEventListener('click', toggleEquity);
+  setEquityOpen(isEquityOpen(), false);
 
   $$('#tfGroup .tf').forEach((b) => {
     b.addEventListener('click', () => {
@@ -5663,6 +5804,8 @@ async function boot() {
   initSlipInput();
   bind();
   if (state.token) {
+    // 上次停在「我的 → 银行/管理」，登录后自动切回去
+    if (localStorage.getItem('xd_pf_pane')) switchPfPane(localStorage.getItem('xd_pf_pane'), true);
     try {
       const d = await api('/api/market');
       if (!d.me) throw new Error('未登录');

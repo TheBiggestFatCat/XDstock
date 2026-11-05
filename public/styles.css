@@ -689,9 +689,8 @@ input.tpsl-input {
   .tab[data-view="portfolio"]::before { content: '💼'; }
   .tab[data-view="work"]::before { content: '💰'; }
   .tab[data-view="shop"]::before { content: '🛒'; }
-  .tab[data-view="bank"]::before { content: '🏦'; }
   .tab[data-view="rank"]::before { content: '🏆'; }
-  .tab[data-view="admin"]::before { content: '⚙️'; }
+  .tab[data-view="achv"]::before { content: '🏅'; }
   .tab:hover { background: transparent; }
   .tab.active {
     background: transparent;
@@ -3752,4 +3751,178 @@ body[data-theme="bear"] .brand-logo {
   .ta-head { font-size: 11px; gap: 7px; }
   .ta-evolve { padding: 2px 9px; font-size: 11px; }
   .rank-achv { font-size: 11px; margin-left: 3px; }
+}
+
+/* ================= 「我的」子标签 ================= */
+.pf-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 5px;
+  border-radius: 13px;
+  background: var(--soft-2);
+  border: 1px solid var(--line);
+}
+.pf-tab {
+  flex: 1 1 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.pf-tab:hover { color: var(--ink); }
+.pf-tab.active {
+  background: var(--card, #fff);
+  color: var(--ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+}
+.pf-pane.hidden { display: none !important; }
+
+/* 收益曲线折叠头 */
+.panel-toggle {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.panel-toggle:hover { color: var(--accent-2); }
+.panel-toggle.open { color: var(--ink); }
+.collapse-body.hidden { display: none !important; }
+
+/* ================= 成就页 ================= */
+.achv-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: linear-gradient(150deg, var(--accent-soft), transparent 70%);
+  border: 1px solid var(--line);
+}
+.achv-points {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  flex: none;
+}
+.achv-points b {
+  font-size: 26px;
+  line-height: 1;
+  color: var(--accent-2);
+  font-variant-numeric: tabular-nums;
+}
+.achv-points span { font-size: 11.5px; color: var(--ink-3); }
+.achv-summary { font-size: 12px; color: var(--ink-2); }
+.achv-summary b { color: var(--ink); }
+.achv-tip { display: block; margin-top: 3px; font-size: 10.5px; color: var(--ink-3); }
+
+.achv-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+.achv-card {
+  padding: 13px 14px;
+  border-radius: 14px;
+  background: var(--card, #fff);
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .03);
+}
+.achv-card.is-evolved {
+  border-color: #e6c169;
+  background: linear-gradient(180deg, rgba(255, 226, 150, .18), var(--card, #fff) 60%);
+}
+.achv-card-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 10px;
+}
+.achv-emoji { font-size: 22px; line-height: 1; flex: none; }
+.achv-title { flex: 1 1 auto; min-width: 0; }
+.achv-title h3 { margin: 0; font-size: 14px; color: var(--ink); }
+.achv-sub { font-size: 11px; color: var(--ink-3); }
+.achv-sub b { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+.achv-items { display: flex; flex-direction: column; gap: 10px; }
+.achv-item {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--soft-2);
+  border: 1px solid transparent;
+}
+.achv-item.got { border-color: rgba(16, 163, 127, .35); background: rgba(16, 163, 127, .07); }
+.achv-item-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.achv-mark { flex: none; width: 14px; text-align: center; }
+.achv-name { flex: 1 1 auto; color: var(--ink-2); font-weight: 600; }
+.achv-item.got .achv-name { color: var(--ink); }
+.achv-num { flex: none; font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.achv-item.got .achv-num { color: var(--accent-2); font-weight: 700; }
+.achv-bar {
+  margin: 6px 0 4px;
+  height: 4px;
+  border-radius: 3px;
+  background: var(--soft-3);
+  overflow: hidden;
+}
+.achv-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width .25s;
+}
+.achv-item.got .achv-bar i { background: var(--accent-2); }
+.achv-desc { margin: 0; font-size: 10.5px; line-height: 1.5; color: var(--ink-3); }
+
+.achv-foot-row { margin-top: 11px; display: flex; justify-content: flex-end; }
+.achv-evolve { padding: 6px 14px; font-size: 12px; }
+.achv-evolved {
+  font-size: 12px;
+  font-weight: 700;
+  color: #7a4a00;
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: linear-gradient(160deg, #ffe9a8, #ffc247);
+}
+.achv-foot {
+  margin: 14px 0 0;
+  font-size: 11px;
+  color: var(--ink-3);
+  line-height: 1.6;
+}
+.ta-goto {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  color: var(--accent-2);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.ta-goto:hover { text-decoration: underline; }
+
+@media (max-width: 760px) {
+  .achv-list { grid-template-columns: 1fr; }
+  .pf-tab { font-size: 12px; padding: 7px 6px; }
+  .achv-points b { font-size: 22px; }
+  .achv-emoji { font-size: 19px; }
 }
