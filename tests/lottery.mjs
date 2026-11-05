@@ -6,8 +6,7 @@
 // （½ln(1−p²)），于是 HJF 不管财报多好都会长期阴跌。
 // 现在下跌改成 ×1/(1+p)，一次涨一次跌正好回到原点。
 
-import { createDb } from '../src/store.js';
-import { lotteryFactor, stepMarket } from '../src/engine.js';
+import { lotteryFactor } from '../src/engine.js';
 
 let fails = 0;
 let passes = 0;
@@ -58,68 +57,14 @@ log('=== 3 边界：p=0 / 超范围 / 非数字 ===');
 
 // ---------------------------------------------------------------- 4
 log('');
-log('=== 4 实跑引擎：两轮彩票只可能是 15.625 / 10 / 6.4（旧版是 14.06 / 9.375 / 5.625）===');
+log('=== 4 「抽奖异动」这条分支已经下线（没有股票用 trait.lottery）===');
 {
-  const db = createDb();
-  Object.assign(db.config, {
-    baseVolatility: 0,
-    meanReversion: 0,
-    eventChance: 0,
-    localEventChance: 0,
-    marketTradesRate: 0,
-    playerImpactEnabled: 0,
-    sentimentEnabled: 0,
-    weatherLotteryChance: 1,      // 每轮必触发
-    weatherLotteryLo: 0.25,       // 固定幅度：涨 ×1.25、跌 ×0.8
-    weatherLotteryHi: 0.25
-  });
-  for (const st of Object.values(db.stocks)) {
-    st.nextReportTick = 1e12;
-    st.sentiment = { v: 0, nextRoll: 1e12, nextApply: 1e12 };
-    st.flow = 0;
-    if (st.trait?.id === 'weather') {
-      st.price = 10;
-      st.fair = 10;
-      st.weatherTarget = 10;
-      st.trait.anticipate = 0;
-      st.trait.swing = 0.0001;
-    }
-  }
-  db.events = [];
-  db.events = [];
-  // 抽奖型个股（原哈基蜂业 HJF 已经下市，这里自己造一只同样体质的票）
-  const hjf = {
-    code: 'LOT', name: '测试抽奖股', industry: '农业种业',
-    shares: 260000000, freeFloat: 0.5, price: 10, fair: 10, initialPrice: 10,
-    status: 'normal', series: [10], streak: 0, flow: 0, nextReportTick: 1e12,
-    brokerMid: 100000,
-    sentiment: { v: 0, nextRoll: 1e12, nextApply: 1e12 },
-    trait: {
-      id: 'weather', name: '靠天吃饭', desc: '测试用', volMult: 1, revMult: 1,
-      swing: 0.0001, anticipate: 0,
-      lottery: 1, lotteryChance: 0.0006, lotteryLo: 0.12, lotteryHi: 0.40
-    }
-  };
-  db.stocks.LOT = hjf;
-  hjf.price = 10;
-
-  const realLog = console.log;
-  console.log = () => {};
-  try {
-    for (let i = 0; i < 2; i++) stepMarket(db);   // 两轮 = 两次彩票
-  } finally {
-    console.log = realLog;
-  }
-
-  const v = Number(hjf.price.toFixed(4));
-  const okNew = [15.625, 10, 6.4].some((x) => Math.abs(x - v) < 1e-6);
-  const oldVals = [14.0625, 9.375, 5.625];
-  check('结果落在「涨×1.25 / 跌×0.8」的三种组合里', okNew, `${v}`);
-  check('不落在旧公式的三种组合里', !oldVals.some((x) => Math.abs(x - v) < 1e-6),
-    `旧值 ${oldVals.join(' / ')}`);
-  check('公告幅度是真实涨跌幅（涨 25% 或跌 20%）',
-    [0.25, 0.2].some((x) => Math.abs(hjf.lastLottery.pct - x) < 1e-6),
-    `${(hjf.lastLottery.pct * 100).toFixed(2)}%`);
+  // 2026-11 起：所有票都没有 trait.lottery，engine 里的抽奖分支删了，
+  // 只保留 lotteryFactor 这个「涨 ×(1+p) / 跌 ×1/(1+p)」的零漂移公式（测试段 2、3 覆盖）。
+  // 这里只是防止有人又把 cfg.weatherLottery* 加回来。
+  const { DEFAULT_CONFIG } = await import('../src/config.js');
+  check('config 里没有 weatherLottery*', !('weatherLotteryChance' in DEFAULT_CONFIG));
+  check('config 里没有 activity*', !('activityEnabled' in DEFAULT_CONFIG));
 }
 
 console.log(out.join('\n'));

@@ -541,32 +541,6 @@ export function stepMarket(db) {
   // 3.5 生成市场噪声成交（反映本轮的随机波动）
   genMarketTrades(db);
 
-  // 3.55 蜜蜂脾气：低概率突然暴力拉升或砸盘
-  for (const st of stocks) {
-    if (st.isIndex || !st.trait?.lottery) continue;
-    // 面板参数优先，没配就用股票特质里的
-    const chance = Math.max(0, Math.min(1,
-      Number(cfg.weatherLotteryChance ?? st.trait.lotteryChance) || 0));
-    if (!(chance > 0) || Math.random() >= chance) continue;
-    const lo = Math.max(0.01, Number(cfg.weatherLotteryLo ?? st.trait.lotteryLo) || 0.12);
-    const hi = Math.max(lo, Number(cfg.weatherLotteryHi ?? st.trait.lotteryHi) || 0.40);
-    const pct = lo + Math.random() * (hi - lo);
-    const up = Math.random() < 0.5;
-    const before = st.price;
-    st.price = Number((st.price * lotteryFactor(up, pct)).toFixed(4));
-    // 实际涨跌幅：涨是 +p，跌是 -p/(1+p)（因为下跌用的是倒数）
-    const movePct = before > 0 ? st.price / before - 1 : 0;
-    st.lotteryAt = db.tick;
-    st.lastLottery = { pct: Math.abs(movePct), up, tick: db.tick };
-    // 哈基蜂业的异动公告固定显示 30 轮，过期自动消失
-    pushNotice(
-      db,
-      `${st.name}盘面异动，${up ? '直线拉升' : '闪崩下杀'} ${(Math.abs(movePct) * 100).toFixed(0)}%，全场哗然`,
-      LOTTERY_NOTICE_TICKS,
-      { kind: up ? 'up' : 'down' }
-    );
-  }
-
   // 3.58 天气股对齐（共用天气、同时发报）
   {
     let first = null;

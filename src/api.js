@@ -190,6 +190,66 @@ function publicPlayer(p, db) {
 }
 
 /**
+ * 管理端「控制台」：真人玩家最近的成交。
+ *
+ * - 过滤掉 `isMarket` 的噪声成交（那些不是人下的单）
+ * - `onlyTrade` 只要开仓/平仓；关掉后连分红、偷钱也一起看
+ * - `afterId`：增量轮询用。给了就从这条之后取新的；找不到（日志被裁掉了）就当首次
+ * 返回的 rows 是**最新在前**，字段按「成交记录」那套：股数 / 价格 / 金额 / 杠杆 / 方向。
+ */
+export function consoleRows(db, { afterId = '', limit = 60, onlyTrade = true } = {}) {
+  const all = Array.isArray(db?.trades) ? db.trades : [];
+  let real = all.filter((t) => t && t.playerId && !t.isMarket);
+  if (onlyTrade) real = real.filter((t) => t.action === 'open' || t.action === 'close');
+
+  const max = Math.max(1, Math.min(300, Math.floor(Number(limit) || 60)));
+  let start = 0;
+  if (afterId) {
+    const idx = real.findIndex((t) => t.id === afterId);
+    if (idx >= 0) start = idx + 1;
+  }
+  const slice = real.slice(start);
+  const rows = slice.slice(-max).reverse().map((t) => {
+    const qty = Number(t.qty) || 0;
+    const price = Number(t.price) || 0;
+    const amount = Number.isFinite(Number(t.amount))
+      ? Number(t.amount)
+      : Math.round(qty * price * 100) / 100;
+    return {
+      id: t.id,
+      at: Number(t.at) || 0,
+      playerId: t.playerId,
+      nickname: t.nickname || '',
+      code: t.code || '',
+      name: t.name || t.code || '',
+      action: t.action || '',
+      side: t.side || 'long',
+      qty,
+      price,
+      amount,
+      leverage: Number(t.leverage) || 1,
+      fee: Number(t.fee) || 0,
+      pnl: Number(t.pnl) || 0,
+      reason: t.reason || ''
+    };
+  });
+
+  // 最近一小时的小结（前端顶栏显示）
+  const since = Date.now() - 3600 * 1000;
+  const hour = real.filter((t) => (Number(t.at) || 0) >= since);
+  const players = new Set(hour.map((t) => t.playerId));
+
+  return {
+    rows,
+    total: real.length,
+    latestId: rows.length ? rows[0].id : (real.length ? real[real.length - 1].id : ''),
+    hourCount: hour.length,
+    hourPlayers: players.size,
+    now: Date.now()
+  };
+}
+
+/**
  * 排行榜数据（按总资产降序）。
  * `hiddenRank` 的号直接跳过：账号还在、能登录能交易，只是不出现在榜上，
  * 也就不会被别人在榜里点到「偷钱 / 调查」。
@@ -490,9 +550,6 @@ function marketPayload(db, me) {
       sentimentRollMax: db.config.sentimentRollMax ?? 960,
       sentimentRollTicks: db.config.sentimentRollTicks ?? 720,
       maxOrdersPerTick: db.config.maxOrdersPerTick,
-      weatherLotteryChance: db.config.weatherLotteryChance ?? 0.0006,
-      weatherLotteryLo: db.config.weatherLotteryLo ?? 0.12,
-      weatherLotteryHi: db.config.weatherLotteryHi ?? 0.40,
       globalEventScale: db.config.globalEventScale ?? 0.2,
 
       maxFillNotionalPerTick: db.config.maxFillNotionalPerTick ?? 150000,
@@ -739,6 +796,16 @@ export async function handleApi(ctx) {
       })),
       marketOpen: db.config.marketOpen !== false
     });
+  }
+
+  // 控制台：真人玩家最近成交（前端每 3 秒拉一次，用 afterId 增量）
+  if (pathname === '/api/admin/console' && method === 'GET') {
+    const data = consoleRows(db, {
+      afterId: String(query.afterId || ''),
+      limit: Number(query.limit) || 60,
+      onlyTrade: String(query.onlyTrade ?? '1') !== '0'
+    });
+    return json(res, 200, { ...data, tick: db.tick });
   }
 
   if (pathname === '/api/admin/player' && method === 'POST') {
@@ -993,7 +1060,7 @@ export async function handleApi(ctx) {
       'feeRate', 'stampDuty', 'minLeverage', 'maxLeverage',
       'dividendRate', 'dividendCap',
       'growthCeiling', 'maxPremium', 'indexRebalanceTicks', 'rallyMin', 'rallyMax',
-      'eventChance', 'localEventChance', 'eventDurationMin', 'eventDurationMax', 'globalEventScale',
+      'eventChance', 'eventDurationMin', 'eventDurationMax', 'globalEventScale',
       'workRatePerTick', 'workOnlineMultiplier', 'workBankTicks', 'stealMin', 'stealMax', 'stealCapRatio', 'stealCooldownTicks',
       'equitySampleTicks', 'equityMaxPoints',
       'shopFakeNewsPrice', 'shopFakeNewsChance', 'shopFakeNewsCooldown',
@@ -1006,7 +1073,7 @@ export async function handleApi(ctx) {
       'marketTradesEnabled',
       'sentimentEnabled', 'sentimentStrength', 'sentimentTicks', 'sentimentRollTicks',
       'sentimentRollMin', 'sentimentRollMax', 'sentimentDrift', 'sentimentEdge',
-      'marketTradesRate', 'weatherLotteryChance', 'weatherLotteryLo', 'weatherLotteryHi', 'redBonusRate', 'redBonusMinTicks', 'bearBonusRate', 'bearBonusMinTicks',
+      'marketTradesRate', 'redBonusRate', 'redBonusMinTicks', 'bearBonusRate', 'bearBonusMinTicks',
       'fxEnabled', 'fxCoef', 'fxLeverage', 'fxRefreshMs', 'fxTrack',
       'impactCostCoef', 'impactCostMax', 'playerImpactTail',
       'maxOrdersPerTick', 'maxFillNotionalPerTick',

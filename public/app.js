@@ -26,6 +26,14 @@ const state = {
   maVisible: { 5: true, 10: true, 30: false },
   candles: [],
   adminToken: localStorage.getItem('xd_admin') || '',
+  adminTab: 'console',        // 管理页当前标签
+  cfgCat: 'market',           // 参数页当前大类
+  cslRows: [],                // 控制台成交（最新在前）
+  cslSeen: new Set(),         // 已经画过的成交 id
+  cslLastId: '',              // 增量拉取的游标
+  cslTimer: null,
+  cslPaused: false,
+  cslOnlyTrade: true,
   adminSelected: new Set(),
   prevPrices: {},
   myTrades: [],
@@ -3990,6 +3998,164 @@ async function adminApi(path, body) {
   return d;
 }
 
+// ---------------- 管理：标签页 ----------------
+function switchAdminTab(name) {
+  const tabs = ['console', 'market', 'stock', 'player', 'config'];
+  const tab = tabs.includes(name) ? name : 'console';
+  state.adminTab = tab;
+  $$('#adminTabs [data-admin-tab]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.adminTab === tab);
+  });
+  $$('#adminPanel [data-admin-pane]').forEach((el) => {
+    const on = el.dataset.adminPane === tab;
+    el.classList.toggle('hidden', !on);
+    el.style.display = on ? '' : 'none';
+  });
+  // 控制台只在「看得见」的时候轮询
+  if (tab === 'console') startConsole();
+  else stopConsole();
+}
+
+// ---------------- 管理：控制台（真人实时成交） ----------------
+function stopConsole() {
+  if (state.cslTimer) {
+    clearInterval(state.cslTimer);
+    state.cslTimer = null;
+  }
+  const live = $('#cslLive');
+  if (live) {
+    live.textContent = '● 已暂停';
+    live.classList.add('paused');
+  }
+}
+
+function startConsole() {
+  if (!state.adminToken) return;
+  if (!state.cslRows.length) pollConsole(true);
+  if (state.cslTimer || state.cslPaused) {
+    const live = $('#cslLive');
+    if (live && state.cslPaused) {
+      live.textContent = '● 已暂停';
+      live.classList.add('paused');
+    }
+    return;
+  }
+  state.cslTimer = setInterval(pollConsole, 3000);
+  const live = $('#cslLive');
+  if (live) {
+    live.textContent = '● 实时';
+    live.classList.remove('paused');
+  }
+}
+
+/** first=true 时从头拉一批；否则用 cslLastId 增量拉 */
+async function pollConsole(first = false) {
+  if (!state.adminToken) return;
+  if (state.cslPaused && !first) return;
+  const only = state.cslOnlyTrade ? '1' : '0';
+  const url = first
+    ? `/api/admin/console?limit=60&onlyTrade=${only}`
+    : `/api/admin/console?afterId=${encodeURIComponent(state.cslLastId)}&limit=100&onlyTrade=${only}`;
+  try {
+    const res = await fetch(url, { headers: { Authorization: 'Bearer ' + state.adminToken } });
+    if (!res.ok) { stopConsole(); return; }
+    const d = await res.json();
+    applyConsole(d, first);
+  } catch {
+    // 网络抖一下不致命，下一轮再试
+  }
+}
+
+function applyConsole(d, reset) {
+  const rows = Array.isArray(d.rows) ? d.rows : [];
+  if (reset) {
+    state.cslRows = rows.slice();
+    state.cslSeen = new Set(rows.map((r) => r.id));
+  } else if (rows.length) {
+    // 增量：新的放最前面
+    const fresh = rows.filter((r) => !state.cslSeen.has(r.id));
+    for (const r of fresh) state.cslSeen.add(r.id);
+    state.cslRows = fresh.concat(state.cslRows).slice(0, 300);
+    for (const r of fresh) r.__new = true;
+  }
+  if (d.latestId) state.cslLastId = d.latestId;
+  const hc = $('#cslHourCount');
+  if (hc) hc.textContent = String(d.hourCount ?? 0);
+  const hp = $('#cslHourPlayers');
+  if (hp) hp.textContent = String(d.hourPlayers ?? 0);
+  const tt = $('#cslTotal');
+  if (tt) tt.textContent = String(d.total ?? 0);
+  renderConsole();
+}
+
+/** 成交类型 → 标签文字 */
+function cslTag(r) {
+  if (r.action === 'open') return r.reason === 'manual' ? '开仓' : '开仓';
+  if (r.action === 'close') {
+    const map = { tp: '止盈', sl: '止损', liq: '强平', delisted: '退市', manual: '手动', limit: '挂单' };
+    return '平仓' + (map[r.reason] ? '·' + map[r.reason] : '');
+  }
+  if (r.action === 'dividend') return '分红';
+  if (r.action === 'steal') return '偷钱';
+  return r.action || '-';
+}
+
+function renderConsole() {
+  const box = $('#cslList');
+  if (!box) return;
+  const rows = state.cslRows || [];
+  if (!rows.length) {
+    box.innerHTML = '<div class="csl-empty">还没有真人成交</div>';
+    return;
+  }
+  box.innerHTML = rows.map((r) => {
+    const buy = (r.action === 'open' && r.side === 'long') || (r.action === 'close' && r.side === 'short');
+    const t = new Date(Number(r.at) || Date.now());
+    const hhmm = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}:${String(t.getSeconds()).padStart(2, '0')}`;
+    const sideText = r.action === 'open' ? (r.side === 'long' ? '开多' : '开空')
+      : r.action === 'close' ? (r.side === 'long' ? '平多' : '平空')
+        : (r.side === 'long' ? '多' : '空');
+    return `<div class="csl-row${r.__new ? ' new' : ''}">
+      <span class="csl-time">${hhmm}</span>
+      <span class="csl-who" title="${escapeHtml(r.nickname)}">${escapeHtml(r.nickname)}</span>
+      <span class="csl-name">${escapeHtml(r.name)}<i>${escapeHtml(r.code)}</i></span>
+      <span class="csl-side ${buy ? 'buy' : 'sell'}">${sideText}</span>
+      <span class="csl-num">${r.qty} 股</span>
+      <span class="csl-num">${Number(r.price).toFixed(2)}</span>
+      <span class="csl-amt">${money0(r.amount)}</span>
+      <span class="csl-lev">${r.action === 'open' || r.action === 'close'
+        ? (Math.round(Number(r.leverage) * 10) / 10).toFixed(1).replace(/\.0$/, '') + 'x'
+        : '—'}</span>
+      <span class="csl-tag">${cslTag(r)}</span>
+    </div>`;
+  }).join('');
+  for (const r of rows) delete r.__new;
+}
+
+function bindAdminConsole() {
+  $$('#adminTabs [data-admin-tab]').forEach((b) => {
+    b.addEventListener('click', () => switchAdminTab(b.dataset.adminTab));
+  });
+  $('#cslPauseBtn')?.addEventListener('click', () => {
+    state.cslPaused = !state.cslPaused;
+    const btn = $('#cslPauseBtn');
+    if (btn) btn.textContent = state.cslPaused ? '继续' : '暂停';
+    if (state.cslPaused) stopConsole();
+    else startConsole();
+  });
+  $('#cslClearBtn')?.addEventListener('click', () => {
+    state.cslRows = [];
+    renderConsole();
+  });
+  $('#cslOnlyTrade')?.addEventListener('change', () => {
+    state.cslOnlyTrade = !!$('#cslOnlyTrade').checked;
+    state.cslRows = [];
+    state.cslSeen = new Set();
+    state.cslLastId = '';
+    pollConsole(true);
+  });
+}
+
 async function loadAdmin() {
   const res = await fetch('/api/admin/state', { headers: { Authorization: 'Bearer ' + state.adminToken } });
   if (!res.ok) {
@@ -4082,211 +4248,280 @@ async function loadAdmin() {
   // 个股设置
   renderTraitForm(d.stocks);
 
-  // 参数（分组渲染）
-  const CFG_GROUPS = [
+  // 参数（按大类分组渲染）
+  const CFG_CATS = [
     {
-      title: '行情节奏',
-      desc: '价格怎么动',
-      fields: [
-        ['tickMs', 'tick 间隔(ms)'],
-        ['baseVolatility', '基础波动率'],
-        ['meanReversion', '均值回归强度'],
-        ['indexRebalanceTicks', '指数调仓间隔(轮)']
+      key: 'market',
+      name: '行情节奏',
+      desc: '价格怎么动、天花板在哪',
+      groups: [
+        {
+          title: '行情节奏',
+          desc: '所有标的共用的底层参数',
+          fields: [
+            ['tickMs', 'tick 间隔(ms)'],
+            ['baseVolatility', '基础波动率'],
+            ['meanReversion', '均值回归强度'],
+            ['indexRebalanceTicks', '指数调仓间隔(轮)']
+          ]
+        },
+        {
+          title: '成长 / 估值上限',
+          desc: '给每家公司一条「无限接近但不超过」的线',
+          fields: [
+            ['growthCeiling', '营收天花板(基准的几倍)'],
+            ['maxPremium', '股价上限(合理价的几倍)'],
+            ['rallyMin', '整点拉升下限(0.05=5%)'],
+            ['rallyMax', '整点拉升上限(0.2=20%)']
+          ]
+        },
+        {
+          title: '新闻 / 随机成交',
+          desc: '消息怎么影响价格',
+          fields: [
+            ['eventChance', '新闻概率/tick'],
+            ['eventImpactScale', '影响倍率(1=标准)'],
+            ['eventDurationMin', '最短持续(轮)'],
+            ['eventDurationMax', '最长持续(轮)'],
+            ['globalEventScale', '全市场新闻折扣(0.2=20%)'],
+            ['marketTradesEnabled', '随机成交开关(1=开)'],
+            ['marketTradesRate', '随机成交倍率(3=三倍)']
+          ]
+        }
       ]
     },
     {
-      title: '公司成长 / 估值上限',
-      desc: '给每家公司一条「无限接近但不超过」的线',
-      fields: [
-        ['growthCeiling', '营收天花板(基准的几倍)'],
-        ['maxPremium', '股价上限(合理价的几倍)'],
-        ['rallyMin', '整点拉升下限(0.05=5%)'],
-        ['rallyMax', '整点拉升上限(0.2=20%)']
+      key: 'trade',
+      name: '交易规则',
+      desc: '开平仓、挂单、押金',
+      groups: [
+        {
+          title: '交易规则',
+          desc: '开仓平仓的代价',
+          fields: [
+            ['startingCash', '新开户资金'],
+            ['feeRate', '手续费率'],
+            ['stampDuty', '印花税率'],
+            ['minLeverage', '最小杠杆'],
+            ['maxLeverage', '最大杠杆'],
+            ['maxOrdersPerTick', '每轮最多下单'],
+            ['maxFillNotionalPerTick', '每轮最多成交(金额)'],
+            ['liquidationBuffer', '爆仓缓冲(0=不留头)']
+          ]
+        },
+        {
+          title: '挂单',
+          desc: '限价单的有效期与名额',
+          fields: [
+            ['limitOrderEnabled', '允许限价挂单(1=开)'],
+            ['orderTtlTicks', '挂单有效期(轮)'],
+            ['maxPendingOrders', '最多同时挂几笔']
+          ]
+        },
+        {
+          title: '市场冲击',
+          desc: '玩家大单怎么影响价格',
+          fields: [
+            ['playerImpactEnabled', '开关(1=开 0=关)'],
+            ['playerImpactRef', '参考成交额'],
+            ['playerImpactStrength', '推力系数'],
+            ['playerImpactDecay', '每轮衰减'],
+            ['playerImpactTail', '后续影响倍率(1=不变)'],
+            ['playerImpactMax', '单轮最大影响'],
+            ['playerImpactFlowMax', '压力上限'],
+            ['impactCostCoef', '冲击成本系数(0=不收)'],
+            ['impactCostMax', '冲击成本封顶(0.06=6%)']
+          ]
+        }
       ]
     },
     {
-      title: '交易规则',
-      desc: '开仓平仓的代价',
-      fields: [
-        ['startingCash', '新开户资金'],
-        ['feeRate', '手续费率'],
-        ['stampDuty', '印花税率'],
-        ['minLeverage', '最小杠杆'],
-        ['maxLeverage', '最大杠杆'],
-        ['maxOrdersPerTick', '每轮最多下单'],
-        ['maxFillNotionalPerTick', '每轮最多成交(金额)']
+      key: 'economy',
+      name: '经济与成长',
+      desc: '分红、等级、打工、银行',
+      groups: [
+        {
+          title: '分红派息',
+          desc: '每期财报按行业派息率 × EPS 派息，派完即除权',
+          fields: [
+            ['dividendRate', '派息倍率(1=标准 0=停发)'],
+            ['dividendCap', '单期股息率封顶(0=不限)']
+          ]
+        },
+        {
+          title: '账号等级',
+          desc: '升级门槛与花费',
+          fields: [
+            ['levelBaseAsset', '升级门槛基数(1000万)'],
+            ['levelGrowth', '每级门槛倍数(2=翻倍)'],
+            ['levelUpRatio', '升级花费比例(0.6=60%)'],
+            ['levelFillBonus', '每级成交上限加成']
+          ]
+        },
+        {
+          title: '打工',
+          desc: '自动积累的钱袋',
+          fields: [
+            ['workRatePerTick', '每轮积累'],
+            ['workOnlineMultiplier', '在线倍率(2=双倍)'],
+            ['workBankTicks', '钱袋上限(轮)']
+          ]
+        },
+        {
+          title: '银行',
+          desc: '升级费用存这里，破产时可取',
+          fields: [
+            ['bankPoorThreshold', '取钱门槛(总资产低于)'],
+            ['bankWithdrawRateMin', '取款比例下限(0.01=1%)'],
+            ['bankWithdrawRateMax', '取款比例上限(0.2=20%)'],
+            ['bankWithdrawFloor', '单次取款下限']
+          ]
+        },
+        {
+          title: '主题返现',
+          desc: '红牛 / 绿熊 平仓返利',
+          fields: [
+            ['redBonusRate', '红牛返现比例'],
+            ['redBonusMinTicks', '红牛最少持轮'],
+            ['bearBonusRate', '绿熊返现比例'],
+            ['bearBonusMinTicks', '绿熊最少持轮']
+          ]
+        }
       ]
     },
     {
-      title: '分红派息',
-      desc: '每期财报按行业派息率 × EPS 派息，派完即除权（股价下调相同金额）',
-      fields: [
-        ['dividendRate', '派息倍率(1=标准 0=停发)'],
-        ['dividendCap', '单期股息率封顶(0=不限)']
+      key: 'shop',
+      name: '商城',
+      desc: '道具、主题、夜行者',
+      groups: [
+        {
+          title: '道具价格',
+          desc: '假新闻 / 保镖 / 背景 / 改名 / 通道 / 定投',
+          fields: [
+            ['shopFakeNewsPrice', '假新闻售价'],
+            ['shopFakeNewsChance', '生效概率(0.2=20%)'],
+            ['shopFakeNewsCooldown', '假新闻冷却(轮)'],
+            ['shopBodyguardPrice', '保镖售价'],
+            ['shopBodyguardTicks', '保镖时长(轮)'],
+            ['shopBgPrice', '自定义背景价格'],
+            ['shopRenamePrice', '改名卡价格'],
+            ['shopRenameCooldown', '改名冷却(轮)'],
+            ['shopChannelBasePrice', '通道首价'],
+            ['shopChannelRatio', '通道涨价倍率'],
+            ['shopChannelStep', '通道每级加成'],
+            ['shopAutoDcaPrice', '自动定投售价'],
+            ['shopAutoDcaPremium', '定投挂单溢价(0.03=+3%)']
+          ]
+        },
+        {
+          title: '主题与技能',
+          desc: '主题售价、读心、夜行者、调查',
+          fields: [
+            ['shopThemePrice', '主题售价'],
+            ['mindThemePrice', '情绪读心售价'],
+            ['mindFakeChance', '读心假值概率(0~1)'],
+            ['nightStartHour', '夜行者开始(点)'],
+            ['nightEndHour', '夜行者结束(点)'],
+            ['nightStealCooldown', '夜里偷钱CD(轮)'],
+            ['investigateCooldownTicks', '调查冷却(轮)']
+          ]
+        }
       ]
     },
     {
-      title: '市场冲击',
-      desc: '玩家大单怎么影响价格',
-      fields: [
-        ['playerImpactEnabled', '开关(1=开 0=关)'],
-        ['playerImpactRef', '参考成交额'],
-        ['playerImpactStrength', '推力系数'],
-        ['playerImpactDecay', '每轮衰减'],
-        ['playerImpactTail', '后续影响倍率(1=不变)'],
-        ['playerImpactMax', '单轮最大影响'],
-        ['playerImpactFlowMax', '压力上限'],
-        ['impactCostCoef', '冲击成本系数(0=不收)'],
-        ['impactCostMax', '冲击成本封顶(0.06=6%)']
+      key: 'social',
+      name: '社交玩法',
+      desc: '偷钱、情绪',
+      groups: [
+        {
+          title: '偷钱',
+          desc: '从别人口袋里拿（上限按现金算）',
+          fields: [
+            ['stealMin', '最少金额'],
+            ['stealMax', '最多金额'],
+            ['stealCapRatio', '上限比例(占对方现金)'],
+            ['stealCooldownTicks', '冷却(轮)']
+          ]
+        },
+        {
+          title: '散户情绪',
+          desc: '全局默认值；个股面板填了才覆盖',
+          fields: [
+            ['sentimentEnabled', '开关(1=开 0=关)'],
+            ['sentimentStrength', '基准偏移(0.004=0.4%)'],
+            ['sentimentTicks', '每多少轮施加一次'],
+            ['sentimentDrift', '方向分量(0=纯随机 1=纯方向)'],
+            ['sentimentEdge', '顶端难度(0=均匀, 3=默认)'],
+            ['sentimentRollMin', '重掷周期下限(轮)'],
+            ['sentimentRollMax', '重掷周期上限(轮)']
+          ]
+        }
       ]
     },
     {
-      title: '新闻事件',
-      desc: '消息怎么影响价格',
-      fields: [
-        ['eventChance', '新闻概率/tick'],
-        ['eventImpactScale', '影响倍率(1=标准)'],
-        ['eventDurationMin', '最短持续(轮)'],
-        ['eventDurationMax', '最长持续(轮)'],
-        ['globalEventScale', '全市场新闻折扣(0.2=20%)'],
-        ['marketTradesEnabled', '随机成交开关(1=开)'],
-        ['marketTradesRate', '随机成交倍率(3=三倍)']
+      key: 'advanced',
+      name: '高级',
+      desc: '券商特质、收益曲线、ST 等冷门项',
+      groups: [
+        {
+          title: '券商特质',
+          desc: '小灯证券的业绩效应',
+          fields: [
+            ['brokerSensitivity', '灵敏度'],
+            ['brokerCap', '单轮上限'],
+            ['brokerMidpoint', '成交中枢'],
+            ['brokerMidFloor', '中枢地板'],
+            ['brokerAlpha', '追踪速度']
+          ]
+        },
+        {
+          title: '收益曲线',
+          desc: '快照记录频率',
+          fields: [
+            ['equitySampleTicks', '采样间隔(轮)'],
+            ['equityMaxPoints', '最多保留点数']
+          ]
+        },
+        {
+          title: 'ST / 退市',
+          desc: '跌破阈值进 ST，长期不回升就退市',
+          fields: [
+            ['stPrice', 'ST 价格线'],
+            ['stDelistTicks', '退市观察期(轮)']
+          ]
+        },
+        {
+          title: '汇率',
+          desc: '留美外汇（AUD/JPY）驱动',
+          fields: [
+            ['fxEnabled', '开关(1=开)'],
+            ['fxCoef', '汇率系数'],
+            ['fxLeverage', '汇率杠杆'],
+            ['fxRefreshMs', '抓取间隔(ms)'],
+            ['fxTrack', '靠拢比例']
+          ]
+        }
       ]
     },
     {
-      title: '账号等级 / 商店',
-      desc: '升级门槛与花费',
-      fields: [
-        ['levelBaseAsset', '升级门槛基数(1000万)'],
-        ['levelGrowth', '每级门槛倍数(2=翻倍)'],
-        ['levelUpRatio', '升级花费比例(0.6=60%)'],
-        ['levelFillBonus', '每级成交上限加成'],
-        ['shopBgPrice', '自定义背景价格'],
-        ['shopRenamePrice', '改名卡价格'],
-        ['shopRenameCooldown', '改名冷却(轮)']
-      ]
-    },
-    {
-      title: '散户情绪',
-      desc: '全局默认值；个股面板填了才覆盖',
-      fields: [
-        ['sentimentEnabled', '开关(1=开 0=关)'],
-        ['sentimentStrength', '基准偏移(0.004=0.4%)'],
-        ['sentimentTicks', '每多少轮施加一次'],
-        ['sentimentDrift', '方向分量(0=纯随机 1=纯方向)'],
-        ['sentimentEdge', '顶端难度(0=均匀, 3=默认)'],
-        ['sentimentRollMin', '重掷周期下限(轮)'],
-        ['sentimentRollMax', '重掷周期上限(轮)']
-      ]
-    },
-    {
-      title: '哈基蜂业抽奖',
-      desc: '低概率瞬间暴涨暴跌',
-      fields: [
-        ['weatherLotteryChance', '触发概率/轮(0.0006≈每28分钟)'],
-        ['weatherLotteryLo', '最小涨跌幅(0.12=12%)'],
-        ['weatherLotteryHi', '最大涨跌幅(0.40=40%)']
-      ]
-    },
-    {
-      title: '打工',
-      desc: '自动积累的钱袋',
-      fields: [
-        ['workRatePerTick', '每轮积累'],
-        ['workOnlineMultiplier', '在线倍率(2=双倍)'],
-        ['workBankTicks', '钱袋上限(轮)']
-      ]
-    },
-    {
-      title: '银行',
-      desc: '升级费用存这里，破产时可取',
-      fields: [
-        ['bankPoorThreshold', '取钱门槛(总资产低于)'],
-        ['bankWithdrawRateMin', '取款比例下限(0.01=1%)'],
-        ['bankWithdrawRateMax', '取款比例上限(0.2=20%)'],
-        ['bankWithdrawFloor', '单次取款下限']
-      ]
-    },
-    {
-      title: '商城',
-      desc: '道具价格与效果',
-      fields: [
-        ['shopFakeNewsPrice', '假新闻售价'],
-        ['shopFakeNewsChance', '生效概率(0.2=20%)'],
-        ['shopFakeNewsCooldown', '假新闻冷却(轮)'],
-        ['shopBodyguardPrice', '保镖售价'],
-        ['shopBodyguardTicks', '保镖时长(轮)'],
-        ['shopThemePrice', '主题售价'],
-        ['mindThemePrice', '情绪读心售价'],
-        ['mindFakeChance', '读心假值概率(0~1)'],
-        ['nightStartHour', '夜行者开始(点)'],
-        ['nightEndHour', '夜行者结束(点)'],
-        ['nightStealCooldown', '夜里偷钱CD(轮)'],
-        ['shopChannelBasePrice', '通道首价'],
-        ['shopChannelRatio', '通道涨价倍率'],
-        ['shopChannelStep', '通道每级加成'],
-        ['shopAutoDcaPrice', '自动定投售价'],
-        ['shopAutoDcaPremium', '定投挂单溢价(0.03=+3%)']
-      ]
-    },
-    {
-      title: '现时活动',
-      desc: '打倒量化资本',
-      fields: [
-        ['activityEnabled', '活动开关(1=开)'],
-        ['activityThreshold', '触发阈值(资产)'],
-        ['activityReward', '平分总金额'],
-        ['activityCooldownMinutes', '同一目标冷却(分钟)']
-      ]
-    },
-    {
-      title: '暗中调查',
-      desc: 'Lv.2 主题技能：查别人的持仓',
-      fields: [
-        ['investigateCooldownTicks', '调查冷却(轮)']
-      ]
-    },
-    {
-      title: '偷钱',
-      desc: '从别人口袋里拿',
-      fields: [
-        ['stealMin', '最少金额'],
-        ['stealMax', '最多金额'],
-        ['stealCapRatio', '上限比例(占对方现金)'],
-        ['stealCooldownTicks', '冷却(轮)']
-      ]
-    },
-    {
-      title: '收益曲线',
-      desc: '快照记录频率',
-      fields: [
-        ['equitySampleTicks', '采样间隔(轮)'],
-        ['equityMaxPoints', '最多保留点数']
-      ]
-    },
-    {
-      title: '券商特质',
-      desc: '小灯证券的业绩效应',
-      fields: [
-        ['brokerSensitivity', '灵敏度'],
-        ['brokerCap', '单轮上限'],
-        ['brokerMidpoint', '成交中枢'],
-        ['brokerMidFloor', '中枢地板'],
-        ['brokerAlpha', '追踪速度']
-      ]
-    },
-    {
-      title: '管理与账号',
+      key: 'admin',
+      name: '账号',
       desc: '登录与注册',
-      fields: [
-        ['adminPin', '管理员口令', 'text'],
-        ['pinLength', 'PIN 位数'],
-        ['allowRegister', '开放注册(1/0)']
+      groups: [
+        {
+          title: '管理与账号',
+          desc: '改口令要谨慎，改完自己记住',
+          fields: [
+            ['adminPin', '管理员口令', 'text'],
+            ['pinLength', 'PIN 位数'],
+            ['allowRegister', '开放注册(1/0)']
+          ]
+        }
       ]
     }
   ];
 
-  $('#configForm').innerHTML = CFG_GROUPS.map((g) => `
+  const groupHtml = (g) => `
     <section class="cfg-group">
       <div class="cfg-group-head">
         <h4>${g.title}</h4>
@@ -4305,7 +4540,38 @@ async function loadAdmin() {
           </label>`;
         }).join('')}
       </div>
-    </section>`).join('');
+    </section>`;
+
+  $('#cfgCats').innerHTML = CFG_CATS.map((c) => (
+    `<button class="cfg-cat" data-cfg-cat="${c.key}" title="${c.desc || ''}">${c.name}</button>`
+  )).join('');
+
+  // 全部渲染进 DOM（保存时一次读全），只按大类显隐
+  $('#configForm').innerHTML = CFG_CATS.map((c) => (
+    `<div class="cfg-cat-pane" data-cfg-pane="${c.key}">${c.groups.map(groupHtml).join('')}</div>`
+  )).join('');
+
+  if (!state.cfgCat || !CFG_CATS.some((c) => c.key === state.cfgCat)) {
+    state.cfgCat = CFG_CATS[0].key;
+  }
+  switchCfgCat(state.cfgCat);
+
+  $$('#cfgCats [data-cfg-cat]').forEach((b) => {
+    b.addEventListener('click', () => switchCfgCat(b.dataset.cfgCat));
+  });
+}
+
+/** 参数大类切换：只改显示，输入框全部留在 DOM 里 */
+function switchCfgCat(key) {
+  state.cfgCat = key;
+  $$('#cfgCats [data-cfg-cat]').forEach((b) => {
+    b.classList.toggle('active', b.dataset.cfgCat === key);
+  });
+  $$('#configForm [data-cfg-pane]').forEach((el) => {
+    const on = el.dataset.cfgPane === key;
+    el.classList.toggle('hidden', !on);
+    el.style.display = on ? '' : 'none';
+  });
 }
 
 // ---------------- 个股特质 ----------------
@@ -4527,12 +4793,13 @@ function switchView(name) {
   if (name === 'shop') renderShop();
   if (name === 'bank') renderBank();
   // 切回行情时图表容器可能刚从 display:none 恢复，补一次尺寸校正
+  if (name !== 'admin') stopConsole();
   if (name === 'market') resizeChartNow();
   // 切换标签时退回列表态（手机上从个股详情回到列表）
   document.body.classList.remove('m-detail');
   if (name === 'admin') {
     if (typeof loadAdminPlayers === 'function') loadAdminPlayers();
-    if (state.adminToken) loadAdmin();
+    if (state.adminToken) loadAdmin().then(() => switchAdminTab(state.adminTab || 'console'));
     else {
       $('#adminLock').classList.remove('hidden');
       $('#adminPanel').classList.add('hidden');
@@ -4730,6 +4997,8 @@ function bind() {
     b.addEventListener('click', () => chooseTheme(b.dataset.themeCode));
   });
   $('#traitSaveBtn')?.addEventListener('click', saveTraits);
+  bindAdminConsole();
+  switchAdminTab(state.adminTab || 'console');
 
   // 定时刷新「我的」与「排行」，保证不靠 SSE 也准确
   setInterval(() => {

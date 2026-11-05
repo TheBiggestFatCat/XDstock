@@ -3272,3 +3272,80 @@ body[data-theme="bear"] .brand-logo {
 .slip-row .slip-label { flex: none; }
 .slip-row #slipInput { width: 68px; flex: none; padding: 5px 8px; font-size: 12px; }
 .slip-row .slip-unit { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+
+/* ---------- 管理页：顶部标签 + 控制台 ---------- */
+.admin-tabs {
+  display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 16px;
+}
+.admin-tab {
+  padding: 9px 18px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--card);
+  color: var(--ink-2); font-size: 13.5px; font-weight: 600;
+  transition: all .15s;
+}
+.admin-tab:hover { background: var(--soft-2); }
+.admin-tab.active {
+  background: var(--accent); border-color: var(--accent);
+  color: #fff; box-shadow: 0 4px 12px rgba(20, 184, 166, .25);
+}
+.admin-pane { animation: adminFade .18s ease; }
+@keyframes adminFade { from { opacity: .4; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+/* 控制台顶栏 */
+.csl-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 10px;
+}
+.csl-stats { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-3); }
+.csl-stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.csl-live { color: #10b981; font-weight: 700; }
+.csl-live.paused { color: var(--ink-3); }
+.csl-actions { display: flex; align-items: center; gap: 8px; }
+.csl-actions .btn { width: auto; margin: 0; padding: 6px 14px; font-size: 12.5px; }
+.csl-check { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
+
+/* 成交列表 */
+.csl-head, .csl-row {
+  display: grid;
+  grid-template-columns: 62px 96px minmax(120px, 1fr) 54px 72px 78px 100px 44px 104px;
+  gap: 8px; align-items: center;
+}
+.csl-head {
+  padding: 6px 10px; font-size: 11.5px; color: var(--ink-3);
+  border-bottom: 1px solid var(--line);
+}
+.csl-list { max-height: 520px; overflow-y: auto; }
+.csl-row {
+  padding: 7px 10px; font-size: 12.5px; border-bottom: 1px dashed var(--line);
+  font-variant-numeric: tabular-nums;
+}
+.csl-row.new { animation: cslIn .8s ease; }
+@keyframes cslIn { from { background: var(--hl-4); } to { background: transparent; } }
+.csl-row .csl-time { color: var(--ink-3); font-size: 11.5px; }
+.csl-row .csl-who { color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.csl-row .csl-name { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.csl-row .csl-name i { font-style: normal; color: var(--ink-3); font-size: 11px; margin-left: 4px; }
+.csl-row .csl-side { font-weight: 700; font-size: 12px; }
+.csl-row .csl-side.buy { color: #ef4444; }
+.csl-row .csl-side.sell { color: #10b981; }
+.csl-row .csl-num { text-align: right; color: var(--ink-2); }
+.csl-row .csl-amt { text-align: right; color: var(--ink); font-weight: 600; }
+.csl-row .csl-lev { text-align: center; color: var(--ink-3); font-size: 11.5px; }
+.csl-row .csl-tag { font-size: 11px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.csl-empty { padding: 28px 10px; text-align: center; color: var(--ink-3); font-size: 12.5px; }
+
+/* 参数分类标签 */
+.cfg-cats { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.cfg-cat {
+  padding: 6px 13px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--soft-2);
+  color: var(--ink-2); font-size: 12.5px; font-weight: 600;
+}
+.cfg-cat.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+@media (max-width: 900px) {
+  .csl-head { display: none; }
+  .csl-row { grid-template-columns: 1fr 1fr; row-gap: 4px; }
+  .csl-row .csl-time { grid-column: 1 / -1; }
+}
