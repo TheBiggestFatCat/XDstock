@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { DEFAULT_CONFIG } from './config.js';
 import { STOCK_SEED, STOCK_CODES, INDEX_BASE, INDEX_STOCK, SMALL_INDEX_STOCK } from './stocks.js';
 import { backDerive, fairFromReport } from './fundamentals.js';
+import { seedBars15, BAR15_MAX } from './bars15.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(__dirname, '..');
@@ -40,6 +41,9 @@ function freshStock(code) {
     status: 'normal', // normal | suspended | delisted
     statusUntil: 0,
     series: [seed.initialPrice],
+  // 15 分钟 K 线单独存一份（48 小时 = 192 根），见 engine.js#pushBar15
+  bars15: [],
+  bars15Seeded: false,
     streak: 0,
     // 券商特质的活跃度中枢
     brokerMid: DEFAULT_CONFIG.brokerMidpoint
@@ -235,6 +239,19 @@ export function migrate(d) {
     console.log('  分红参数升级为「行业派息率 × 倍率」：倍率 1、封顶 1.5%/期');
   }
 
+  // 指数标的（DENG / DENGS）也要 15 分钟 K 线，但上面那段按 isIndex 跳过了，这里补
+  for (const st of Object.values(merged.stocks)) {
+    if (!st.isIndex) continue;
+    if (!Array.isArray(st.bars15) || st.bars15.length < 8) {
+      const price = Math.max(0.01, Number(st.price) || INDEX_BASE);
+      st.bars15 = seedBars15(st.bars15, price, Number(merged.tick) || 0, 0.006);
+      st.bars15Seeded = true;
+    }
+    if (st.bars15.length > BAR15_MAX) {
+      st.bars15.splice(0, st.bars15.length - BAR15_MAX);
+    }
+  }
+
   // 老存档补上股本与财报（按现价倒推，让 fair ≈ 现价）
   for (const st of Object.values(merged.stocks)) {
     if (st.isIndex) continue;
@@ -253,6 +270,17 @@ export function migrate(d) {
     if (!st.fundamentals) {
       st.fundamentals = backDerive(st, Math.max(0.01, Number(st.price) || Number(st.initialPrice) || 1));
     }
+    // 15 分钟 K 线：老档没有就铺满 48 小时（尾部接上现价，图上不会断）
+    if (!Array.isArray(st.bars15) || st.bars15.length < 8) {
+      const price = Math.max(0.01, Number(st.price) || Number(st.initialPrice) || 1);
+      const vol = Math.max(0.004, Number(merged.config?.baseVolatility ?? 0.01) * 2.4);
+      st.bars15 = seedBars15(st.bars15, price, Number(merged.tick) || 0, vol);
+      st.bars15Seeded = true;
+    }
+    if (st.bars15.length > BAR15_MAX) {
+      st.bars15.splice(0, st.bars15.length - BAR15_MAX);
+    }
+    if (!Array.isArray(st.bars15)) st.bars15 = [];
     // 合理价跟着财报走
     st.fair = Number(fairFromReport(st).toFixed(4));
 

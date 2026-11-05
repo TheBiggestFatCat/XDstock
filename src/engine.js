@@ -1,4 +1,5 @@
 import { INDEX_BASE, SMALL_INDEX_STOCK } from './stocks.js';
+import { pushBar15, BAR15_TICKS } from './bars15.js';
 import { genNextReport, fairFromReport, impactFactor, industryMidGrowth, rollWeather, dividendPerShare } from './fundamentals.js';
 import { genMarketTrades } from './marketTrades.js';
 import { logTrade } from './trading.js';
@@ -201,12 +202,6 @@ const RALLY_WINDOW_MIN = 10;
 /** 有市值天花板的票，合理价最多顶到天花板的多少（剩下留给整点拉升） */
 const FAIR_CAP_RATIO = 0.95;
 
-/**
- * 整点拉升：这只票今天这一档还没拉过、而且现在就在整点窗口里 → 返回槽位标记。
- *
- * 槽位按「年-月-日-小时」记，所以同一天同一档只会拉一次；
- * 服务器如果在整点那头挂了，10 分钟窗口之外不会补拉。
- */
 export function rallySlotFor(st, nowMs = Date.now()) {
   const hours = Array.isArray(st?.rallyHours) ? st.rallyHours : [];
   if (!hours.length) return null;
@@ -539,6 +534,8 @@ export function stepMarket(db) {
     st.series.push(Number(st.price.toFixed(4)));
     const cap = cfg.historyTicks ?? 3600;
     if (st.series.length > cap) st.series.splice(0, st.series.length - cap);
+    // 15 分钟 K 线单独攒一份（48 小时）
+    pushBar15(st.bars15, Math.floor(db.tick / BAR15_TICKS), st.price);
   }
 
   // 3.5 生成市场噪声成交（反映本轮的随机波动）
@@ -639,6 +636,7 @@ export function stepMarket(db) {
         if (idxStock.series.length > 3600) {
           idxStock.series.splice(0, idxStock.series.length - 3600);
         }
+        pushBar15(idxStock.bars15, Math.floor(db.tick / BAR15_TICKS), db.index.value);
         idxStock.changePct = 0;
       }
     }
@@ -692,6 +690,7 @@ export function stepMarket(db) {
       if (sidxStock.series.length > 3600) {
         sidxStock.series.splice(0, sidxStock.series.length - 3600);
       }
+      pushBar15(sidxStock.bars15, Math.floor(db.tick / BAR15_TICKS), sidx.value);
     }
     sidx.series.push(sidx.value);
     if (sidx.series.length > 3600) sidx.series.splice(0, sidx.series.length - 3600);

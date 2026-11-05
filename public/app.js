@@ -2562,7 +2562,11 @@ async function loadCandles(opts = {}) {
   const tf = state.tf;
   state.resyncing = true;
   try {
-    const d = await api(`/api/candles?code=${encodeURIComponent(code)}&tf=${tf}`);
+    // 15 分钟单独一个包（服务端存了 48 小时 = 192 根）；其它周期还是老接口
+    const url = tf === '15m'
+      ? `/api/candles15?code=${encodeURIComponent(code)}`
+      : `/api/candles?code=${encodeURIComponent(code)}&tf=${tf}`;
+    const d = await api(url);
     // 防竞态：切股票/切周期时前一个请求可能后到，直接把新数据覆盖成旧股票
     if (code !== state.code || tf !== state.tf) return;
 

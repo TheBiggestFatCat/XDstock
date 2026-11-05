@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
 import { candlesFromSeries, changesFor, timeFromAxis, tickTimeAxis, pushNotice, noticeAlive, sentimentView, liveIndexWeights } from './engine.js';
+import { bars15Candles } from './bars15.js';
 import { nightInfoFor } from './theme.js';
 import { TIMEFRAMES } from './config.js';
 import { getBuild } from './build.js';
@@ -675,6 +676,17 @@ export async function handleApi(ctx) {
       (absTick) => timeFromAxis(axis, absTick, db)
     );
     return json(res, 200, { code, tf, candles });
+  }
+
+  // 15 分钟 K 线：单独一份 48 小时的包（192 根，约 10~16 KB）
+  // 主 series 只有 5 小时，凑不出 48 小时的 15m，所以单独存、单独发
+  if (pathname === '/api/candles15' && method === 'GET') {
+    const code = String(query.code || '').toUpperCase();
+    const src = db.stocks[code];
+    if (!src) return json(res, 404, { error: '标的不存在' });
+    const axis = tickTimeAxis(db);
+    const candles = bars15Candles(src.bars15 || [], (absTick) => timeFromAxis(axis, absTick, db));
+    return json(res, 200, { code, tf: '15m', candles, max: candles.length });
   }
 
   if (pathname === '/api/leaderboard' && method === 'GET') {
