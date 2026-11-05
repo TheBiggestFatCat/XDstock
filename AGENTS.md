@@ -21,6 +21,7 @@ node tests/order-conflict.mjs        # 同票开平冲突（改挂单必跑，21
 node tests/theme-split.mjs           # 主题=外观+技能（改商城必跑，28 条断言）
 node tests/shop-gate.mjs             # 商城等级门槛（改商城必跑，30 条断言）
 node tests/theme-evolution.mjs       # 主题成就 + 主题进化（改成就/技能必跑，69 条断言）
+node tests/imports.mjs               # 静态体检：跨模块「用了但没 import」（改 server/api 必跑，17 条）
 ```
 
 ## 铁律
@@ -55,6 +56,7 @@ node tests/theme-evolution.mjs       # 主题成就 + 主题进化（改成就/�
 | 止盈止损走限价撮合 | 跳空时止损永远不成交（挂单在上方等反弹） | auto 单必须强制成交，不能按限价判断 |
 | 给限价单「加语义」 | 开仓大面积不成交（2026-11 踩过两次） | 限价单就是「成交价 = 市价」，任何价位都能挂；要改先问 |
 | 押金漏算冲击成本 | 全仓挂单成交那一刻报「现金不足」并自动撤单 | `estimateReserve()` 里加 `impactCost` |
+| 跨模块函数忘了 import | `node --check` 只查语法 → 上线后每个 tick 抛 ReferenceError、systemd 重启循环 | 跑 `node tests/imports.mjs`；新写的分支本地一定要**真的走一遍**（2026-11 踩过：`isNightWindow`） |
 
 ## 新增配置参数（四处都要改）
 

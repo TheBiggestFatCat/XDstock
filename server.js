@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { getDb, saveDb, now, backupDb } from './src/store.js';
 import { getBuild } from './src/build.js';
 import { stepMarket, seedHistory, changesFor, noticeAlive, sentimentView, liveIndexWeights } from './src/engine.js';
-import { stealCooldownFor, nightInfoFor } from './src/theme.js';
+import { stealCooldownFor, nightInfoFor, isNightWindow } from './src/theme.js';
 import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, positionPnl, logTrade } from './src/trading.js';
 import { processOrders, fillCapFor } from './src/orders.js';
