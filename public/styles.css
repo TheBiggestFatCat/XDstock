@@ -1974,11 +1974,13 @@ input.tpsl-input {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 14px;
+  align-content: flex-start;
+  gap: 4px 14px;
   height: 22px;
   padding: 0 2px;
   margin: 2px 0 4px;
   font-size: 11.5px;
+  line-height: 1.45;
   color: var(--ink-3);
   font-variant-numeric: tabular-nums;
   overflow: hidden;
@@ -3416,6 +3418,22 @@ body[data-theme="bear"] .brand-logo {
   80% { opacity: 1; transform: scale(1.02) translateY(-6px); }
   100% { opacity: 0; transform: scale(.9) translateY(-12px); }
 }
+
+/* ---------- 手机端：K 线悬停信息要能放两行，否则涨跌幅会被 height:22px 裁掉 ---------- */
+@media (max-width: 900px) {
+  .hover-info {
+    height: 42px;                /* 固定两行高度：既不裁切，也不会 hover 时把下面的图挤动 */
+    gap: 2px 9px;
+    font-size: 10.5px;
+    line-height: 1.5;
+  }
+  .hover-info .hi-chg { font-size: 11px; }
+}
+@media (max-width: 380px) {
+  .hover-info { height: 42px; gap: 2px 7px; font-size: 10px; }
+  .hover-info .hi-amp { display: none; }   /* 超窄屏先牺牲振幅，保住涨跌幅 */
+}
+
 
 /* 手机端：不占行，绝对定位到标题栏右上角（否则会把下面的价格/工具栏挤乱） */
 @media (max-width: 760px) {
