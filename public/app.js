@@ -4451,6 +4451,17 @@ async function loadAdmin() {
           ]
         },
         {
+          title: '早市冲量（LU 专属）',
+          desc: '每天 6~10 点按斜坡往上托，力度在这里调',
+          fields: [
+            ['morningRallyEnabled', '开关(1=开 0=关)'],
+            ['morningRallyStartHour', '开始小时(0~23)'],
+            ['morningRallyEndHour', '结束小时(0~23)'],
+            ['morningRallyTotal', '窗口累计涨幅(0.25=+25%)'],
+            ['morningRallyPull', '每轮最多贴近(0.02)']
+          ]
+        },
+        {
           title: '新闻 / 随机成交',
           desc: '消息怎么影响价格',
           fields: [

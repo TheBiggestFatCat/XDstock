@@ -49,6 +49,15 @@ export const DEFAULT_CONFIG = {
   impactCostCoef: 6,
   impactCostMax: 0.06,
 
+  // ---- 个股特性「早市冲量」（LU 瑞幸咖啡）----
+  // 每天 start~end 点之间，价格沿一条线性斜坡被推上去：t 时刻的目标价 =
+  // 进窗口时的价格 × (1 + total × 进度)。每轮最多贴近 pull，所以是「托着涨」而不是瞬移。
+  morningRallyEnabled: 1,
+  morningRallyStartHour: 6,     // 窗口开始（服务器本地时间，0~23）
+  morningRallyEndHour: 10,      // 窗口结束
+  morningRallyTotal: 0.25,      // 窗口内累计目标涨幅（0.25 = +25%）
+  morningRallyPull: 0.02,       // 每轮最多向目标价贴近多少（对数）
+
   // ---- 挂单 ----
   limitOrderEnabled: 1,     // 1=允许限价挂单
   orderTtlTicks: 2000,      // 挂单多久没成交自动撤（2000 轮 ≈ 2.8 小时）

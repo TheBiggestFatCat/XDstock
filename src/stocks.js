@@ -65,14 +65,12 @@ export const STOCK_SEED = {
     desc: '咖啡连锁、新零售、饮品',
     initialPrice: 85,
     trait: {
-      id: 'reversal',
-      name: '反转王',
-      desc: '连跌必反弹，连涨必回落',
-      volMult: 1.3,
-      revMult: 0.7,
-      streak: 72,
-      bounceLo: 0.04,
-      bounceHi: 0.08
+      // 早市冲量：每天 6~10 点有一波「托着涨」的行情，力度在管理面板里调
+      id: 'morning',
+      name: '早市冲量',
+      desc: '每天早上 6~10 点有一波持续的拉升',
+      volMult: 1.1,
+      revMult: 0.8
     }
   },
   NW: {

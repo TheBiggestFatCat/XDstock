@@ -385,6 +385,17 @@ export function migrate(d) {
     delete p.bankruptAt;
     delete p.bankruptDebt;
   }
+  // LU 2026-11 换了专属特性（反转王 → 早市冲量）：老存档里存的是旧 trait，这里迁移一次。
+  // 只在「还是旧 id」时才覆盖，玩家/管理员后来手调过的参数不会被冲掉。
+  const luNow = merged.stocks && merged.stocks.LU;
+  const luSeed = base.stocks && base.stocks.LU;
+  if (luNow && luSeed && luNow.trait && luNow.trait.id === 'reversal') {
+    luNow.trait = { ...luSeed.trait };
+    delete luNow.streak;                 // 连击计数是旧特性留下的
+    luNow.morningSlot = '';
+    luNow.morningBase = 0;
+  }
+
   // 老存档补账号等级
   for (const p of Object.values(merged.players || {})) {
     if (!Number.isFinite(Number(p.level)) || Number(p.level) < 1) p.level = 1;

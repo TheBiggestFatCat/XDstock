@@ -215,6 +215,84 @@ export function rallySlotFor(st, nowMs = Date.now()) {
   return slot;
 }
 
+/** 把一个可能越界的「小时」夹回 0~23 */
+function normHour(v, fallback) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return ((Math.round(n) % 24) + 24) % 24;
+}
+
+/**
+ * 「早市冲量」的窗口状态（个股特性 `trait.id === 'morning'`，目前是 LU 瑞幸咖啡）。
+ *
+ * 每天 `morningRallyStartHour` ~ `morningRallyEndHour`（服务器本地时间）之间生效：
+ * 进窗口那一轮记住基准价，之后目标价按**线性斜坡**从基准涨到 基准×(1+total)，
+ * 价格被「托着」往目标走 —— 不是瞬移，所以分时图上是持续的爬坡。
+ *
+ * @returns {{active:boolean, slot:string, progress:number}}
+ *   progress：0 = 刚进窗口，1 = 窗口结束（用来算目标价）
+ */
+export function morningRallyWindow(cfg = {}, nowMs = Date.now()) {
+  const win = (cfg && typeof cfg.morningRallyWindow === 'object' && cfg.morningRallyWindow) || cfg || {};
+  if (Number(win.morningRallyEnabled ?? 1) === 0) return { active: false, slot: '', progress: 0 };
+  const start = normHour(win.morningRallyStartHour, 6);
+  const end = normHour(win.morningRallyEndHour, 10);
+  if (start === end) return { active: false, slot: '', progress: 0 };
+
+  const DAY = 24 * 3600 * 1000;
+  const d = new Date(Number.isFinite(Number(nowMs)) ? Number(nowMs) : Date.now());
+  const now = d.getTime();
+  const midnight = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
+
+  // 先按「今天开始的这一班」算，不中就试「昨天开始的那一班」（跨零点时凌晨属于前一班）
+  let startMs = midnight + start * 3600 * 1000;
+  let endMs = midnight + end * 3600 * 1000;
+  if (endMs <= startMs) endMs += DAY;                       // start > end：结束在次日
+  if (!(now >= startMs && now < endMs)) {
+    startMs -= DAY;
+    endMs -= DAY;
+    if (!(now >= startMs && now < endMs)) return { active: false, slot: '', progress: 0 };
+  }
+
+  const span = Math.max(60000, endMs - startMs);
+  const progress = Math.max(0, Math.min(1, (now - startMs) / span));
+  const sd = new Date(startMs);
+  const p2 = (n) => String(n).padStart(2, '0');
+  const slot = `${sd.getFullYear()}-${p2(sd.getMonth() + 1)}-${p2(sd.getDate())}-${p2(sd.getHours())}`;
+  return { active: true, slot, progress };
+}
+
+/**
+ * 把「早市冲量」作用到价格上。
+ *
+ * 目标价 = 进窗口时的价格 × (1 + total × progress)，价格只被**往上托**：
+ * 已经高于目标（比如玩家刚砸过盘又买回来）就不动，绝不主动往下压。
+ * 每轮最多贴近 `pull`（对数），所以不会瞬移。
+ *
+ * @returns {number} 处理后的价格
+ */
+export function applyMorningRally(cfg, st, price, nowMs = Date.now()) {
+  if (!(price > 0) || !st) return price;
+  const win = morningRallyWindow(cfg, nowMs);
+  if (!win.active) return price;
+
+  const total = Number((cfg && cfg.morningRallyTotal) ?? 0.25);
+  const pull = Math.max(0, Number((cfg && cfg.morningRallyPull) ?? 0.02));
+  if (!(total > 0) || !(pull > 0)) return price;
+
+  // 进窗口（或进入新的一天）→ 记这一轮的基准价
+  if (st.morningSlot !== win.slot || !(Number(st.morningBase) > 0)) {
+    st.morningSlot = win.slot;
+    st.morningBase = price;
+  }
+  const base = Number(st.morningBase) || price;
+  const target = base * (1 + total * win.progress);
+  if (price >= target) return price;              // 只在目标价下方才托
+
+  const step = Math.min(pull, Math.log(target / price));
+  return price * Math.exp(step);
+}
+
 /** 单只股票走一步 */
 function stepStock(st, cfg, events, brokerDrift, fxData, db) {
   const t = st.trait || {};
@@ -257,6 +335,11 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
       p *= 1 - uniform(t.bounceLo ?? 0.04, t.bounceHi ?? 0.08);
       st.streak = 0;
     }
+  }
+
+  // 早市冲量（LU）：窗口内把价格往「线性斜坡目标价」上托
+  if (t.id === 'morning') {
+    p = applyMorningRally(cfg, st, p, Date.now());
   }
 
   // 护盘：跌破合理估值的比例就有买盘
