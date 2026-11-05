@@ -81,6 +81,48 @@ export function consumeOrderSlot(db, player) {
 }
 
 /** 挂一笔限价单 */
+/**
+ * 同一只票的挂单冲突检查。
+ *
+ * 老版本只看「有没有反向持仓」，于是玩家可以在同一只票上
+ * 一边挂开仓单、一边挂平仓单 —— 两笔一起排队，谁先成交就把另一笔的前提打乱：
+ *   - 开仓先成交 → 持仓变多，后面那笔「平 100 股」只平掉一半，玩家以为自己已经清仓
+ *   - 平仓先成交 → 持仓没了，开仓单成交后变成满仓，和玩家预期相反
+ *   - 两笔平仓单还可能按「挂单时的数量」重复卖，触发一次注定失败的撮合
+ *
+ * 所以规则收紧成：
+ *   1. 要开仓：这只票不许有**未成交的手动平仓单**
+ *   2. 要平仓：这只票不许有**未成交的开仓单**，也不许已经有平仓单在排队
+ *   3. 止盈止损（auto）单是系统风控单，**不挡开仓**（否则玩家加仓前得先撤掉止损）；
+ *      但它算「已有平仓单」，避免手动再挂一笔重复卖
+ *
+ * @returns {null|string} 冲突时返回给玩家看的话
+ */
+export function pendingConflict(player, code, action) {
+  const list = Array.isArray(player?.orders) ? player.orders : [];
+  const same = list.filter((o) => o && String(o.code || '').toUpperCase() === code);
+  if (!same.length) return null;
+
+  const opens = same.filter((o) => o.action === 'open');
+  const closes = allCloseOrders(same);
+
+  if (action === 'open') {
+    // 自动定投是系统单，不挡开仓；手动平仓单挡
+    const manualClose = closes.find((o) => !o.auto);
+    if (manualClose) return '这只票还有未成交的平仓单，等它成交或先撤掉';
+    return null;
+  }
+
+  if (opens.length) return '这只票还有未成交的开仓单，等它成交或先撤掉';
+  if (closes.length) return '这只票已经有一笔平仓单在排队了';
+  return null;
+}
+
+/** 所有「平仓性质」的在挂单（hand: 手动 / auto: 止盈止损 / autoDca: 定投不算） */
+function allCloseOrders(list) {
+  return list.filter((o) => o && o.action === 'close' && !o.autoDca);
+}
+
 export function placeLimitOrder(db, player, body) {
   const cfg = db.config;
   if (num(cfg.limitOrderEnabled, 1) === 0) {
@@ -109,6 +151,10 @@ export function placeLimitOrder(db, player, body) {
   if (!body.system && manualCount >= maxPending) {
     return { ok: false, error: `最多同时挂 ${maxPending} 笔单，先撤掉一些` };
   }
+
+  // 同一只票不允许同时挂着冲突的单（开仓 ↔ 平仓、重复平仓）
+  const conflict = body.system ? null : pendingConflict(player, code, action);
+  if (conflict) return { ok: false, error: conflict };
 
   const ttl = Math.max(1, num(cfg.orderTtlTicks, 2000));
   const expireTick = db.tick + ttl;
