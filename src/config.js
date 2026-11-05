@@ -52,6 +52,9 @@ export const DEFAULT_CONFIG = {
   // ---- 挂单 ----
   limitOrderEnabled: 1,     // 1=允许限价挂单
   orderTtlTicks: 2000,      // 挂单多久没成交自动撤（2000 轮 ≈ 2.8 小时）
+  // 买单挂价高出市价这么多以内，算「愿意按市价成交」（让利用的）；
+  // 超出这个带宽就当成「到价触发」：现价涨到挂单价才成交
+  orderMarketableBand: 0.1,
   maxPendingOrders: 5,      // 每人最多同时挂几笔
 
   // ---- ST 与退市 ----

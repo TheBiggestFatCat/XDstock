@@ -40,6 +40,24 @@ export function isBuyOrder(order) {
 }
 
 /**
+ * 这笔单子是「到价触发」还是「愿意按市价成交」。
+ *
+ * 买单（开多 / 平空）如果挂价高出市价超过 `orderMarketableBand`，
+ * 说明玩家是在等价格涨上去（现价 100 挂 300），不能当成市价单立刻吃掉；
+ * 挂价只高一点点（让利那套）才是「愿意多付一点、按市价成交」。
+ * 卖单不用分：挂价 ≥ 现价本来就等到价，挂价 < 现价本来就按市价卖。
+ *
+ * @returns {'limit'|'stop'}
+ */
+export function decideTrigger(cfg, st, buySide, limit) {
+  if (!buySide) return 'limit';
+  const band = Math.max(0, num(cfg?.orderMarketableBand, 0.1));
+  const px = num(st?.price, 0);
+  if (!(px > 0)) return 'limit';
+  return num(limit, 0) > px * (1 + band) ? 'stop' : 'limit';
+}
+
+/**
  * 按「最坏情况成交价」估开仓要押多少钱：
  *   保证金 + 手续费 + 印花税（做空）+ 冲击成本
  *
@@ -168,6 +186,9 @@ export function placeLimitOrder(db, player, body) {
     const wantQty = Math.floor(num(body.qty, 0));
     const closeQty = wantQty > 0 ? Math.min(pos.qty, wantQty) : pos.qty;
 
+    // 平空 = 买回，同样要防空价单被立刻成交
+    const closeTrigger = decideTrigger(cfg, st, side === 'short', limit);
+
     const order = {
       id: uid(),
       code,
@@ -177,6 +198,7 @@ export function placeLimitOrder(db, player, body) {
       qty: closeQty,
       limit,
       leverage: pos.leverage || 1,
+      trigger: closeTrigger,
       reserve: 0,
       createdAt: Date.now(),
       createdTick: db.tick,
@@ -200,6 +222,8 @@ export function placeLimitOrder(db, player, body) {
     return { ok: false, error: '这只票你还有反向持仓，先平掉再挂' };
   }
 
+  const trigger = decideTrigger(cfg, st, side === 'long', limit);
+
   // 押金按「最坏情况成交价」冻结：
   //   买单 → 直接按【限价】冻结（成交价最高就是限价）
   //   卖单 → 取限价和现价里更高的那个（成交价没有上限，成交时再按买得起的量缩小）
@@ -221,6 +245,7 @@ export function placeLimitOrder(db, player, body) {
     qty,
     limit,
     leverage,
+    trigger,
     reserve,
     createdAt: Date.now(),
     createdTick: db.tick,
@@ -348,6 +373,9 @@ export function processOrders(db) {
       // 风控单：每轮重定一次穿价，并且无视限价直接成交。
       // 价格跳空时若还按原限价判断，卖单会永远等不到成交。
       order.limit = r2(buy ? px * (1 + AUTO_SLIP) : px * (1 - AUTO_SLIP));
+    } else if (order.trigger === 'stop') {
+      // 到价单（远价买单）：现价涨到挂单价才成交，成交价还是市价
+      if (!(px >= num(order.limit))) continue;
     } else {
       const hit = buy ? px <= num(order.limit) : px >= num(order.limit);
       if (!hit) continue;
