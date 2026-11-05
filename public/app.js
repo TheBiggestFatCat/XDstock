@@ -587,6 +587,53 @@ function renderMind() {
     + '</div>';
 }
 
+/**
+ * 「金融大鳄」的提前财报卡。
+ * 服务端已经把「实际 − 预期」算好了，这里只负责把它讲清楚：
+ *   超预期 / 不及预期 / 符合预期 + 差值 + 预计价格冲击。
+ */
+function renderTycoonPreview(st) {
+  const p = st.preview || {};
+  const verdictMap = {
+    beat: { text: '超预期', cls: 'beat', icon: '🔥' },
+    miss: { text: '不及预期', cls: 'miss', icon: '🧊' },
+    inline: { text: '符合预期', cls: 'inline', icon: '⚖️' }
+  };
+  const v = verdictMap[p.verdict] || verdictMap.inline;
+  const diffPp = (Number(p.surprise) || 0) * 100;
+  const shock = Number(p.shockPct) || 0;
+  // 服务端下发的是小数（0.0932 = 9.32%），显示前统一乘 100
+  const growth = (Number(p.growth) || 0) * 100;
+  const expected = (Number(p.expected) || 0) * 100;
+  const tickLeft = Math.max(0, Number(p.tickLeft) || 0);
+  const secLeft = tickLeft * ((state.market?.config?.tickMs || 5000) / 1000);
+
+  const cls = (x) => (x > 0.0001 ? 'up' : x < -0.0001 ? 'down' : 'flat');
+  const signed = (x, digits = 2) => `${x >= 0 ? '+' : ''}${x.toFixed(digits)}%`;
+
+  return `
+    <div class="tp-box tp-${v.cls}">
+      <div class="tp-head">
+        <span class="tp-title">🐊 提前看到的财报</span>
+        <span class="tp-left">${tickLeft} 轮后公布 · 约 ${Math.max(1, Math.round(secLeft / 60))} 分钟</span>
+      </div>
+
+      <div class="tp-verdict">
+        <span class="tp-badge">${v.icon} ${v.text}</span>
+        <span class="tp-diff">实际 <b class="${cls(growth)}">${signed(growth)}</b> · 预期 ${signed(expected)} · 差 <b class="${cls(diffPp)}">${diffPp >= 0 ? '+' : ''}${diffPp.toFixed(2)}pp</b></span>
+        <span class="tp-shock ${cls(shock)}">发报时价格 ${signed(shock)}</span>
+      </div>
+
+      <div class="tp-grid">
+        <div><span>营业收入</span><b>${fmtMoney(p.revenue || 0)}</b></div>
+        <div><span>净利润</span><b>${fmtMoney(p.netProfit || 0)}</b></div>
+        <div><span>每股收益</span><b>$${Number(p.eps || 0).toFixed(3)}</b></div>
+        <div><span>净利变化</span><b class="${cls(p.expectPct || 0)}">${Number(p.expectPct || 0) >= 0 ? '+' : ''}${Number(p.expectPct || 0).toFixed(1)}%</b></div>
+      </div>
+      <p class="tp-tip">只有你能看到；数字就是发报那一刻的结果，不会再变。</p>
+    </div>`;
+}
+
 function renderReport() {
   const st = state.market?.stocks?.[state.code];
   const panel = $('#reportPanel');
@@ -683,19 +730,7 @@ function renderReport() {
     </div>
     <div class="rp-div" id="reportDiv">${renderDividendLine(st)}</div>
     ${renderReportChart(r.history)}
-    ${(st.preview && (state.market?.me?.skill || state.market?.me?.theme) === 'tycoon') ? `
-      <div class="preview-box">
-        <div class="preview-head">
-          <span>🐊 提前看到的财报</span>
-          <span>还有 ${st.preview.tickLeft} 轮公布</span>
-        </div>
-        <div class="preview-grid">
-          <div><span>营业收入</span><b>${fmtMoney(st.preview.revenue)}</b></div>
-          <div><span>净利润</span><b>${fmtMoney(st.preview.netProfit)}</b></div>
-          <div><span>每股收益</span><b>$${Number(st.preview.eps).toFixed(3)}</b></div>
-          <div><span>预期变化</span><b class="${st.preview.expectPct >= 0 ? 'up' : 'down'}">${st.preview.expectPct >= 0 ? '+' : ''}${st.preview.expectPct.toFixed(1)}%</b></div>
-        </div>
-      </div>` : ''}
+    ${(st.preview && (state.market?.me?.skill || state.market?.me?.theme) === 'tycoon') ? renderTycoonPreview(st) : ''}
   `;
 }
 

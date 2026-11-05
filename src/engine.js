@@ -927,6 +927,9 @@ export function changesFor(series, tfTicks) {
   return out;
 }
 
+/** 提前多少轮把下一期财报算好（金融大鳄技能能看到这段提前量） */
+export const TYCOON_LEAD_TICKS = 20;
+
 /** 每家公司错开发财报：间隔 reportIntervalTicks 轮 */
 export function runReports(db) {
   const cfg = db.config;
@@ -945,17 +948,20 @@ export function runReports(db) {
       st.nextReportTick = db.tick + gap * (i + 1);
       continue;
     }
-    // 金融板块：提前 20 轮把下一期财报算好，给「金融大鳄」主题偷看
-    const isFinance = st.trait?.id === 'broker' || st.trait?.id === 'fx'
-      || String(st.industry || '').includes('金融');
-    const lead = 20;
-    if (isFinance && !st.pendingReport && db.tick >= st.nextReportTick - lead) {
+    // 「金融大鳄」技能：**所有个股**都提前 TYCOON_LEAD_TICKS 轮把下一期财报算好，
+    // 有技能的玩家能在 payload 里看到 preview；没技能的看不到（服务端按 skill 过滤）。
+    // 发布时直接用这份 pendingReport，所以「看到什么就发什么」。
+    const lead = TYCOON_LEAD_TICKS;
+    if (!st.pendingReport && db.tick >= st.nextReportTick - lead) {
       const fxNowP = Number(db.fx?.rate) || 0;
       const fxBaseP = Number(db.fx?.reportBase) || fxNowP;
       const ctxP = {
         volumeFactor: (Number(db.volumeAvg) || 0) / 2,
         fxFactor: (Number(db.fxVolAvg) || 0) / 0.004,
         fxReturn: fxBaseP > 0 ? fxNowP / fxBaseP - 1 : 0,
+        // ⚠️ 天气也要带进来：现在所有票都提前算 pendingReport，
+        // 少了这一项天气股的增速会恒为 0（发报时直接用 pendingReport，不会再重算）
+        weather: Number(st.weather?.score) || 0,
         growthCeiling: cfg.growthCeiling
       };
       st.pendingReport = genNextReport(st, ctxP);

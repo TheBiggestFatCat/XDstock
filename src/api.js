@@ -414,21 +414,33 @@ function marketPayload(db, me) {
       payout: dividendPayout(st, db.config.dividendRate),
       // 天气（st.weather / st.weatherTarget）只给引擎和财报用，不下发给前端
       report,
-      // 金融大鳄：提前看到金融板块的下一期财报
+      // 金融大鳄：任意个股的下一期财报，提前 TYCOON_LEAD_TICKS 轮就能看到
       preview: (me && me.skill === 'tycoon' && st.pendingReport)
-        ? {
-          eps: Number(st.pendingReport.eps) || 0,
-          revenue: Number(st.pendingReport.revenue) || 0,
-          netProfit: Number(st.pendingReport.netProfit) || 0,
-          growth: Number(st.pendingReport.growth) || 0,
-          tickLeft: Math.max(0, (Number(st.nextReportTick) || 0) - db.tick),
-          expectPct: (() => {
-            const f = st.fundamentals || {};
-            const oldEps = Number(f.eps) || 0;
-            const newEps = Number(st.pendingReport.eps) || 0;
-            return oldEps > 0 ? ((newEps / oldEps) - 1) * 100 : 0;
-          })()
-        }
+        ? (() => {
+          const pr = st.pendingReport;
+          const f = st.fundamentals || {};
+          const growth = Number(pr.growth) || 0;
+          const expected = Number(pr.expectedGrowth) || 0;
+          // 和 runReports 发报时的口径完全一致：surprise = 实际 − 预期
+          const surprise = Math.max(-0.3, Math.min(0.3, growth - expected));
+          const verdict = surprise > 0.02 ? 'beat' : surprise < -0.02 ? 'miss' : 'inline';
+          const oldEps = Number(f.eps) || 0;
+          const newEps = Number(pr.eps) || 0;
+          return {
+            eps: Number(pr.eps) || 0,
+            revenue: Number(pr.revenue) || 0,
+            netProfit: Number(pr.netProfit) || 0,
+            growth,                                     // 同比增速（实际）
+            expected,                                   // 市场预期
+            surprise,                                   // 差值（正 = 超预期）
+            verdict,                                    // beat / miss / inline
+            // 发报那一刻的价格冲击（和 runReports 的 shock 同公式）
+            shockPct: Math.max(-0.06, Math.min(0.06, surprise * 0.8)) * 100,
+            tickLeft: Math.max(0, (Number(st.nextReportTick) || 0) - db.tick),
+            // EPS 变化幅度（老指标，保留给老前端）
+            expectPct: oldEps > 0 ? ((newEps / oldEps) - 1) * 100 : 0
+          };
+        })()
         : null,
       // 情绪读心：只有这个主题能看到每只票当前的情绪（v / 剩余轮数 / 方向分量）
       sent: (me && me.skill === 'mind') ? sentimentView(st, db) : null,
