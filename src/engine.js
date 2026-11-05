@@ -369,6 +369,7 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
   }
 
   // 整点拉升（麦当劳专属）：每天 12:00 / 18:00 各来一次，一次 +5%~+20%
+  // 只推价格，不发公告（2026-11 按需求去掉公告，玩家从盘面自己看）
   const rallySlot = rallySlotFor(st, Date.now());
   if (rallySlot) {
     st.lastRallySlot = rallySlot;
@@ -376,8 +377,6 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
     const hi = Math.max(lo, Number(cfg.rallyMax ?? 0.2));
     const boost = lo + Math.random() * (hi - lo);
     p *= 1 + boost;
-    pushNotice(db, `🍔 ${st.name} 整点拉升 +${(boost * 100).toFixed(1)}%（每天 ${st.rallyHours.join(' / ')} 点各一次）`,
-      30, { kind: 'up' });
   }
 
   // 市值天花板：price × 总股本 不允许超过 capCeiling（如麦当劳 10000 亿）

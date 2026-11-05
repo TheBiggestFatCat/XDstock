@@ -160,6 +160,7 @@ log('=== 5 真的会拉升：幅度落在 5%~20%，而且不会连拉 ===');
   Date.now = () => fakeNow;
   const realLog = console.log;
   console.log = () => {};
+  db.notices = [];
   let after = 0;
   let again = 0;
   let boostSum = 0;
@@ -188,6 +189,9 @@ log('=== 5 真的会拉升：幅度落在 5%~20%，而且不会连拉 ===');
   check('幅度在 5%~20% 之间', after >= 0.0499 && after <= 0.2001,
     '+' + (after * 100).toFixed(2) + '%');
   check('后面 29 轮都没有再拉', Math.abs(again) < 1e-12, (again * 100).toFixed(4) + '%');
+  // 2026-11：整点拉升不再发公告，只动价格
+  const rallyNotices = (db.notices || []).filter((n) => String(n.text || '').includes('整点拉升'));
+  check('整点拉升不发公告', rallyNotices.length === 0, `${rallyNotices.length} 条公告`);
   void minB; void maxB;
 }
 
