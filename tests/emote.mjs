@@ -3,7 +3,7 @@
 
 import {
   unlockedEmojis, isEmojiUnlocked, tierDirOf,
-  pushEmote, visibleEmotes, EMOTE_MAX, EMOTE_PER_TICK_MAX
+  pushEmote, visibleEmotes, filterEmotesByCode, EMOTE_MAX, EMOTE_PER_TICK_MAX
 } from '../src/emoji.js';
 
 let fails = 0;
@@ -105,6 +105,31 @@ log('=== 6 上限与脏数据 ===');
   check('没玩家不炸', pushEmote({ tick: 1 }, null, { file: 'Emo_00001_0.png' }).ok === false);
   check('未解锁的推不进去',
     pushEmote({ tick: 1, emotes: [] }, { id: 'y', level: 1 }, { file: 'nope.png' }).ok === false);
+}
+
+// ---------------------------------------------------------------- 7
+log('');
+log('=== 7 一只票一个互动区：只显示当前这只票的 ===');
+{
+  const db = { tick: 500, emotes: [] };
+  pushEmote(db, { id: 'p1', nickname: '甲', level: 1 }, { file: 'Emo_00001_0.png', code: 'TGW' });
+  pushEmote(db, { id: 'p2', nickname: '乙', level: 1 }, { file: 'Emo_00001_1.png', code: 'MCD' });
+  pushEmote(db, { id: 'p3', nickname: '丙', level: 1 }, { file: 'Emo_00001_2.png', code: 'tgw' });
+  db.tick = 501;
+  const all = visibleEmotes(db);
+  check('全局这批有 3 条', all.length === 3, String(all.length));
+
+  const tgw = filterEmotesByCode(all, 'TGW');
+  check('TGW 页面只看到 TGW 的 2 条', tgw.length === 2, String(tgw.length));
+  check('含大小写不同的那条', tgw.some((e) => e.nickname === '丙'));
+  const mcd = filterEmotesByCode(all, 'mcd');
+  check('MCD 页面看到 1 条', mcd.length === 1 && mcd[0].nickname === '乙', String(mcd.length));
+  check('别的票（LU）什么都看不到', filterEmotesByCode(all, 'LU').length === 0);
+
+  check('空 code 不匹配任何表情', filterEmotesByCode(all, '').length === 0);
+  check('code 为空的老数据不显示', filterEmotesByCode([{ id: 'x', code: '' }], 'TGW').length === 0);
+  check('列表为空不炸', filterEmotesByCode([], 'TGW').length === 0);
+  check('null 不炸', filterEmotesByCode(null, 'TGW').length === 0);
 }
 
 console.log(out.join('\n'));

@@ -303,10 +303,23 @@ function emoSrc(file) {
   return `/assets/emo_lv1/${encodeURIComponent(file)}`;
 }
 
+/** 清掉正在飘的表情（换票 / 退出详情时用） */
+function clearEmoteFloats() {
+  const layer = $('#emoLayer');
+  if (layer) layer.innerHTML = '';
+  state.emoSeen = new Set();
+}
+
 /** 画「我的表情」面板（只画解锁的） */
 function renderEmoPanel() {
   const box = $('#emoList');
   if (!box) return;
+  // 标题带上当前标的，让「只在这只票显示」更清楚
+  const head = $('#emoHead');
+  if (head) {
+    const st = state.market?.stocks?.[state.code];
+    head.textContent = st ? `表情 · ${st.name}` : '我的表情';
+  }
   const list = Array.isArray(state.market?.me?.emojis) ? state.market.me.emojis : [];
   if (!list.length) {
     box.innerHTML = '<p class="field-hint" style="grid-column:1/-1">还没有解锁的表情</p>';
@@ -357,6 +370,10 @@ function renderEmotes(list) {
   if (!layer || !Array.isArray(list)) return;
   const tickMs = Number(state.market?.tickMs) || 5000;
   const now = Date.now();
+  // 表情按「一只票一个互动区」：只看当前这只票的，别人的票不显示
+  const code = String(state.code || '').toUpperCase();
+  list = list.filter((e) => e && String(e.code || '').toUpperCase() === code);
+  if (!list.length) return;
 
   // 先记下这一批的 id，老的飘屏到点自己会消失
   const EMOTE_SHOW_MAX = 8;   // 一轮最多同时冒 8 个，人多也不至于糊满屏
@@ -2417,6 +2434,8 @@ function renderMyOrders() {
 
 function selectStock(code) {
   toggleEmoPanel(false);
+  // 换票了：上只票的飘屏清掉，别串台
+  clearEmoteFloats();
   const changed = state.code !== code;
   state.code = code;
   // 换股票了：输入框内容重新按新持仓回填

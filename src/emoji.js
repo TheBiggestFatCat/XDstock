@@ -117,6 +117,17 @@ export function pushEmote(db, player, { file, code } = {}) {
 }
 
 /**
+ * 表情只属于「发它的那只票」。
+ * 客户端拿到全局那一批之后，用这个函数筛出当前正在看的那只票的。
+ * `code` 比对不区分大小写；没有 code 的老数据按「不显示」处理。
+ */
+export function filterEmotesByCode(list, code) {
+  const want = String(code || '').toUpperCase();
+  if (!want || !Array.isArray(list)) return [];
+  return list.filter((e) => e && String(e.code || '').toUpperCase() === want);
+}
+
+/**
  * 这一刻该给玩家看哪些表情。
  * 规则：看**上一轮**发出来的（玩家点完，下一轮才冒出来），
  * 再下一轮就被过滤掉 → 天然「只活一轮」。
