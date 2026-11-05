@@ -16,7 +16,9 @@ QQ 群风格的模拟炒股网页游戏。Node.js 零依赖、单文件 `data/db
 node server.js                       # 本地起服务
 node --check src/api.js              # 语法检查（改完必跑）
 node --check public/app.js
-node tests/order-audit.mjs           # 下单/撮合/押金回归（改下单必跑，62 条断言）
+node tests/order-audit.mjs           # 下单/撮合/押金回归（改下单必跑，64 条断言）
+node tests/order-conflict.mjs        # 同票开平冲突（改挂单必跑，21 条断言）
+node tests/theme-split.mjs           # 主题=外观+技能（改商城必跑，28 条断言）
 node tests/shop-gate.mjs             # 商城等级门槛（改商城必跑，30 条断言）
 ```
 
@@ -39,7 +41,7 @@ node tests/shop-gate.mjs             # 商城等级门槛（改商城必跑，30
 6. **发布流程**：改代码 → `node --check` → 本地跑通 → SFTP 上传 → 改线上数据（先备份）→
    `systemctl restart xdstock` → curl 验证 → `git commit` → `git push`（需代理 `127.0.0.1:4780`）。
 
-## 最容易踩的 8 个坑
+## 最容易踩的 9 个坑
 
 | 坑 | 症状 | 正解 |
 |---|---|---|
@@ -50,6 +52,7 @@ node tests/shop-gate.mjs             # 商城等级门槛（改商城必跑，30
 | 兄弟股发报用旧 tick | 每 tick 都发报 | 赋 `db.tick` |
 | 参数误判作用域 | 以为是全服限制，其实是每人 | 读实现：`maxOrdersPerTick` 是**每人每轮操作次数** |
 | 止盈止损走限价撮合 | 跳空时止损永远不成交（挂单在上方等反弹） | auto 单必须强制成交，不能按限价判断 |
+| 给限价单「加语义」 | 开仓大面积不成交（2026-11 踩过两次） | 限价单就是「成交价 = 市价」，任何价位都能挂；要改先问 |
 | 押金漏算冲击成本 | 全仓挂单成交那一刻报「现金不足」并自动撤单 | `estimateReserve()` 里加 `impactCost` |
 
 ## 新增配置参数（四处都要改）
@@ -71,6 +74,11 @@ server.js          HTTP 入口、静态文件、SSE、tickPayload
 src/engine.js      stepMarket 主循环（顺序敏感：噪声→新闻→漂移→特质→回归→情绪→冲击）
 src/trading.js     开平仓、保证金、爆仓、资金冲击、止盈止损触发
 src/orders.js      限价单、撮合队列（风控单优先 → 价格优先；每玩家每票每方向限额）
+src/theme.js       夜行者时间窗 / 偷钱冷却（技能判定一律读 player.skill）
+src/emoji.js       表情互动（按等级解锁、每轮只留最后一个、按票隔离）
+src/bars15.js      15 分钟 K 线单独打包（48 小时）
+src/notify.js      站内通知（止盈止损/强平/被偷）
+src/steal.js       偷钱金额（上限按对方现金）
 src/api.js         全部 REST + payload 组装 + 管理接口
 src/fundamentals.js 财报生成、估值 fair、预览
 src/store.js       db 加载/保存/migrate
