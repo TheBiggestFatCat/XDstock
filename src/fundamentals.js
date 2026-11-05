@@ -227,7 +227,6 @@ export function genNextReport(st, ctx = {}) {
     bias = 0;
   }
 
-  // 市场预期 = 这家公司按当前规模本该有的增速（不含随机噪声）
   // 种业：营收完全由天气决定（天气全程公开，大家都知道）
   if (trait === 'weather') {
     const w = clamp(Number(ctx.weather) || 0, -1, 1);
@@ -236,7 +235,19 @@ export function genNextReport(st, ctx = {}) {
     growth = w * swing * decay;
   }
 
-  const expectedGrowth = clamp(growth, -0.35, 0.9);
+  // 规模天花板：营收只能「无限接近」baseRev × growthCeiling，永远不超过。
+  // 个股自己的天花板优先（麦当劳 4.5 倍），其次全局配置。
+  // 剩余空间在这里就算好，预期和实际用的是同一个值。
+  const ceilMult = Math.max(1.2,
+    Number(st.growthCeiling) || Number(ctx.growthCeiling) || DEFAULT_GROWTH_CEILING);
+  const revCeil = baseRev * ceilMult;
+  const ceilRoom = Math.max(0, 1 - (Number(f.revenue) || baseRev) / revCeil);
+
+  // 市场预期 = 这家公司按当前规模本该有的增速（不含随机噪声）。
+  // ⚠️ 必须也吃掉天花板剩余空间：否则营收已经 6 倍多的票，
+  // 预期 2% 而实际被压到 0.4%，每期都白挨一次「不及预期」的价格下杀。
+  // 负增长不吃 room（该萎缩就萎缩，天花板只管往上）。
+  const expectedGrowth = clamp(growth > 0 ? growth * ceilRoom : growth, -0.35, 0.9);
 
   // 稳步增长 / 有市值目标的票：财报不抖（它们的走势是「慢慢走」，不该被随机噪声带跑）
   const smoothReport = trait === 'steady' || capTargetNow > 0;
@@ -256,16 +267,8 @@ export function genNextReport(st, ctx = {}) {
 
   growth = clamp(growth, -0.35, 0.9);
 
-  // 规模天花板：营收只能「无限接近」baseRev × growthCeiling，永远不超过。
-  // 越接近天花板，正向增速被压得越低（负增长不受影响，该萎缩还是会萎缩）。
-  // 个股自己的天花板优先（麦当劳 4.5 倍），其次全局配置
-  const ceilMult = Math.max(1.2,
-    Number(st.growthCeiling) || Number(ctx.growthCeiling) || DEFAULT_GROWTH_CEILING);
-  const revCeil = baseRev * ceilMult;
-  if (growth > 0) {
-    const room = Math.max(0, 1 - (Number(f.revenue) || baseRev) / revCeil);
-    growth *= room;
-  }
+  // 实际增速同样吃天花板剩余空间（负增长不受影响，该萎缩还是会萎缩）
+  if (growth > 0) growth *= ceilRoom;
 
   let margin = (Number(f.margin) || (ind.margin[0] + ind.margin[1]) / 2) + rand(-0.02, 0.02);
   // 稳步增长 / 有市值目标的公司净利率也稳（不然 ±2pp 的抖动会让 EPS 上下乱跳，PE 看着像过山车）
