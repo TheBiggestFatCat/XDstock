@@ -3053,6 +3053,11 @@ function onTick(d) {
   if (Array.isArray(d.notices)) m.notices = d.notices;
 
   checkBuild(d.build);
+  // 版本公告：管理员发完，下一轮就出现在快讯上方
+  if (d.versionPost !== undefined) {
+    m.versionPost = d.versionPost;
+    renderVersionBox();
+  }
   // 表情：本轮该冒出来的（服务端只下发「上一轮发出来的」那一批）
   if (Array.isArray(d.emotes)) renderEmotes(d.emotes);
   if (d.closed !== undefined) m.marketOpen = !d.closed;
@@ -3083,6 +3088,7 @@ function onTick(d) {
   }
 
   renderTopbar();
+  renderVersionBox();
   renderNews();
   if (Array.isArray(state.market?.emotes)) renderEmotes(state.market.emotes);
   updatePriceCells();
@@ -4331,6 +4337,91 @@ function bindAdminConsole() {
   });
 }
 
+// ---------------- 版本公告（快讯上方固定一栏）----------------
+function renderVersionBox() {
+  const box = $('#versionBox');
+  if (!box) return;
+  const post = state.market?.versionPost;
+  if (!post) {
+    box.classList.add('hidden');
+    return;
+  }
+  box.classList.remove('hidden');
+  const verEl = $('#vbVersion');
+  if (verEl) verEl.textContent = post.version ? ' ' + post.version : '';
+  const titleEl = $('#vbTitle');
+  if (titleEl) titleEl.textContent = post.title || '—';
+}
+
+function openVersionModal() {
+  const post = state.market?.versionPost;
+  const mask = $('#versionModal');
+  if (!post || !mask) return;
+  $('#vmVersion').textContent = post.version ? ' ' + post.version : '';
+  $('#vmTitle').textContent = post.title || '—';
+  const when = post.at ? new Date(post.at) : null;
+  $('#vmMeta').textContent = when
+    ? `${when.getFullYear()}-${p2(when.getMonth() + 1)}-${p2(when.getDate())} ${p2(when.getHours())}:${p2(when.getMinutes())}`
+    : '';
+  $('#vmBody').textContent = post.body || '';
+  mask.classList.remove('hidden');
+  mask.setAttribute('aria-hidden', 'false');
+}
+
+function closeVersionModal() {
+  const mask = $('#versionModal');
+  if (!mask) return;
+  mask.classList.add('hidden');
+  mask.setAttribute('aria-hidden', 'true');
+}
+
+/** 管理页：已发的版本公告列表 */
+function renderAdminVersionList() {
+  const box = $('#verList');
+  if (!box) return;
+  const posts = state.adminVersionPosts || [];
+  if (!posts.length) {
+    box.innerHTML = '<div class="notice-empty">还没有版本公告</div>';
+    return;
+  }
+  box.innerHTML = posts.slice().reverse().map((p) => `
+    <div class="notice-row">
+      <span class="notice-text"><b>${escapeHtml(p.version || '')}</b> ${escapeHtml(p.title || '')}</span>
+      <span class="notice-left">${p.at ? new Date(p.at).toLocaleString('zh-CN', { hour12: false }) : ''}</span>
+      <button class="mini-btn danger" data-del-ver="${p.id}">删除</button>
+    </div>`).join('');
+  box.querySelectorAll('[data-del-ver]').forEach((b) => {
+    b.addEventListener('click', async () => {
+      try {
+        const r = await adminApi('/api/admin/version-post/delete', { id: b.dataset.delVer });
+        state.adminVersionPosts = r.posts || [];
+        renderAdminVersionList();
+        toast('已删除', 'ok');
+        refreshMarket();
+      } catch (e) { toast(e.message, 'err'); }
+    });
+  });
+}
+
+async function publishVersionPost() {
+  const version = $('#verNum')?.value.trim() || '';
+  const title = $('#verTitle')?.value.trim() || '';
+  const body = $('#verBody')?.value.trim() || '';
+  if (!title) { toast('标题不能为空', 'err'); return; }
+  if (!body) { toast('正文不能为空', 'err'); return; }
+  try {
+    const r = await adminApi('/api/admin/version-post', { version, title, body });
+    state.adminVersionPosts = r.posts || [];
+    renderAdminVersionList();
+    $('#verTitle').value = '';
+    $('#verBody').value = '';
+    toast('版本公告已发布，玩家下一轮就能看到', 'ok');
+    refreshMarket();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
 async function loadAdmin() {
   const res = await fetch('/api/admin/state', { headers: { Authorization: 'Bearer ' + state.adminToken } });
   if (!res.ok) {
@@ -4341,6 +4432,10 @@ async function loadAdmin() {
   const d = await res.json();
   $('#adminLock').classList.add('hidden');
   $('#adminPanel').classList.remove('hidden');
+
+  // 版本公告列表
+  state.adminVersionPosts = Array.isArray(d.versionPosts) ? d.versionPosts : [];
+  renderAdminVersionList();
 
   // 公告
   const tickNow = Number(d.tick) || 0;
@@ -5186,6 +5281,15 @@ function bind() {
     b.addEventListener('click', () => chooseTheme(b.dataset.themeCode, 'skill'));
   });
   $('#traitSaveBtn')?.addEventListener('click', saveTraits);
+  $('#versionBox')?.addEventListener('click', openVersionModal);
+  $('#versionModalClose')?.addEventListener('click', closeVersionModal);
+  $('#versionModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'versionModal') closeVersionModal();     // 点遮罩关闭
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeVersionModal();
+  });
+  $('#verBtn')?.addEventListener('click', publishVersionPost);
   bindAdminConsole();
   bindEmoteUi();
   switchAdminTab(state.adminTab || 'console');

@@ -17,6 +17,7 @@ import { NEWS_POOL } from './src/news.js';
 import { dividendPerShare, dividendPayout } from './src/fundamentals.js';
 import { pushNotify, notifyList, unreadCount } from './src/notify.js';
 import { visibleEmotes } from './src/emoji.js';
+import { latestVersionPost } from './src/version.js';
 import { stealAmount } from './src/steal.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -316,6 +317,8 @@ function tickPayload(forPlayerId) {
     tick: d.tick,
     // 表情互动：本轮该冒出来的那些（上一轮发出来的，下一轮自动消失）
     emotes: visibleEmotes(d),
+    // 版本公告：管理员发完，在线玩家下一轮就能看到（不用刷新）
+    versionPost: latestVersionPost(d),
     closed: d.config.marketOpen === false,
     index: d.index.value,
     indexChanges: changesFor(d.index.series, TIMEFRAMES),

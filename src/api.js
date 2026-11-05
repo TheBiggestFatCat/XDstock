@@ -4,6 +4,7 @@ import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
 import { candlesFromSeries, changesFor, timeFromAxis, tickTimeAxis, pushNotice, noticeAlive, sentimentView, liveIndexWeights } from './engine.js';
 import { bars15Candles } from './bars15.js';
 import { unlockedEmojis, pushEmote, visibleEmotes } from './emoji.js';
+import { pushVersionPost, latestVersionPost, listVersionPosts, deleteVersionPost } from './version.js';
 import { nightInfoFor } from './theme.js';
 import { TIMEFRAMES } from './config.js';
 import { getBuild } from './build.js';
@@ -454,6 +455,8 @@ function marketPayload(db, me) {
     marketOpen: db.config.marketOpen !== false,
     // 首屏就能看到的表情（上一轮发出来的那些）
     emotes: visibleEmotes(db),
+    // 版本更新公告（「市场快讯」上方固定那一栏；没有就 null）
+    versionPost: latestVersionPost(db),
     startedAt: db.startedAt || 0,
     serverTime: now(),
     index: {
@@ -805,6 +808,7 @@ export async function handleApi(ctx) {
         trait: s.trait || {}
       })),
       events: db.events,
+      versionPosts: listVersionPosts(db),
       players: Object.values(db.players).map((p) => ({
         id: p.id,
         nickname: p.nickname,
@@ -813,6 +817,21 @@ export async function handleApi(ctx) {
       })),
       marketOpen: db.config.marketOpen !== false
     });
+  }
+
+  // 版本公告：发一条 / 删一条
+  if (pathname === '/api/admin/version-post' && method === 'POST') {
+    const r = pushVersionPost(db, { version: body.version, title: body.title, body: body.body, tick: db.tick });
+    if (!r.ok) return json(res, 400, { error: r.error });
+    saveDb();
+    return json(res, 200, { ok: true, post: r.post, posts: listVersionPosts(db) });
+  }
+
+  if (pathname === '/api/admin/version-post/delete' && method === 'POST') {
+    const removed = deleteVersionPost(db, body.id);
+    if (!removed) return json(res, 404, { error: '没有这条版本公告' });
+    saveDb();
+    return json(res, 200, { ok: true, posts: listVersionPosts(db) });
   }
 
   // 控制台：真人玩家最近成交（前端每 3 秒拉一次，用 afterId 增量）

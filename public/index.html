@@ -114,6 +114,11 @@
           <span class="news-title">📢 市场快讯</span>
           <span class="news-count" id="newsCount"></span>
         </div>
+        <button id="versionBox" class="version-box hidden" type="button">
+          <span class="vb-badge">版本更新<b id="vbVersion"></b></span>
+          <span class="vb-title" id="vbTitle">—</span>
+          <span class="vb-more">查看详情 ›</span>
+        </button>
         <div id="newsFeed" class="news-feed"></div>
       </div>
 
@@ -882,6 +887,25 @@
             </div>
 
             <div class="panel">
+              <div class="panel-title">版本公告</div>
+              <label class="field">
+                <span>版本号（可留空）</span>
+                <input id="verNum" type="text" maxlength="24" placeholder="例如 v1.3.0" />
+              </label>
+              <label class="field">
+                <span>标题</span>
+                <input id="verTitle" type="text" maxlength="60" placeholder="例如 本次更新：表情互动上线" />
+              </label>
+              <label class="field">
+                <span>正文（换行会保留）</span>
+                <textarea id="verBody" rows="5" maxlength="4000" placeholder="一条一句，例如：&#10;- 新增表情互动&#10;- 修复手机端百分比不显示"></textarea>
+              </label>
+              <p class="panel-sub" style="margin:-4px 0 12px">发完立刻出现在「市场快讯」上方，玩家点开能看全文；只显示最新一条。</p>
+              <button id="verBtn" class="btn btn-primary">发布版本公告</button>
+              <div id="verList" class="notice-list"></div>
+            </div>
+
+            <div class="panel">
               <div class="panel-title">手动新闻</div>
               <label class="field"><span>内容</span><textarea id="newsText" rows="3" placeholder="例如：丰川集团宣布收购…"></textarea></label>
               <label class="field"><span>涉及标的（不选 = 全市场）</span></label>
@@ -958,6 +982,18 @@
     </div>
     <div id="spyBody" class="spy-body"></div>
     <button id="spyOk" class="btn btn-ghost btn-block">知道了</button>
+  </div>
+</div>
+
+<div id="versionModal" class="modal-mask hidden" aria-hidden="true">
+  <div class="modal-card" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <span class="vb-badge">版本更新<b id="vmVersion"></b></span>
+      <button id="versionModalClose" class="modal-close" type="button" aria-label="关闭">×</button>
+    </div>
+    <h3 id="vmTitle" class="modal-title">—</h3>
+    <div id="vmMeta" class="modal-meta"></div>
+    <pre id="vmBody" class="modal-body"></pre>
   </div>
 </div>
 

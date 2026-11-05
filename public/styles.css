@@ -3455,3 +3455,107 @@ body[data-theme="bear"] .brand-logo {
 @media (max-width: 720px) {
   .theme-btn-row .btn { padding: 10px 4px; font-size: 12.5px; }
 }
+
+
+/* ---------- 版本公告（市场快讯上方固定一栏 + 弹层） ---------- */
+.version-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+  border: 1px solid var(--bd-accent);
+  background: linear-gradient(90deg, var(--hl-4), var(--card) 65%);
+  color: var(--ink-2);
+  transition: transform .12s, box-shadow .15s, border-color .15s;
+}
+.version-box:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(20, 184, 166, .18); }
+.version-box:active { transform: scale(.995); }
+.vb-badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 9px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: .3px;
+}
+.vb-badge b { font-weight: 700; opacity: .92; }
+.vb-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vb-more { flex: none; font-size: 12px; color: var(--accent); font-weight: 600; }
+
+/* 弹层 */
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(15, 23, 42, .45);
+  backdrop-filter: blur(2px);
+}
+.modal-card {
+  width: min(560px, 100%);
+  max-height: min(78vh, 720px);
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, .3);
+  padding: 16px 18px 18px;
+}
+.modal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.modal-close {
+  border: none;
+  background: var(--soft-2);
+  color: var(--ink-2);
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.modal-close:hover { background: var(--soft-3); }
+.modal-title { margin: 12px 0 4px; font-size: 17px; color: var(--ink); }
+.modal-meta { font-size: 11.5px; color: var(--ink-3); }
+.modal-body {
+  margin: 12px 0 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--ink-2);
+  background: var(--soft-2);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+@media (max-width: 760px) {
+  .version-box { padding: 8px 10px; gap: 8px; }
+  .vb-title { font-size: 12.5px; }
+  .vb-more { font-size: 11px; }
+  .modal-card { max-height: 82vh; padding: 14px 14px 16px; }
+  .modal-title { font-size: 15.5px; }
+}
