@@ -14,7 +14,7 @@ import { checkDelist } from './src/delist.js';
 import { fetchAudJpy } from './src/fx.js';
 import { handleApi } from './src/api.js';
 import { NEWS_POOL } from './src/news.js';
-import { dividendPerShare, dividendPayout } from './src/fundamentals.js';
+import { dividendPerShare, dividendPayout, tycoonPreviewPayload, previewInTicks } from './src/fundamentals.js';
 import { pushNotify, notifyList, unreadCount } from './src/notify.js';
 import { visibleEmotes } from './src/emoji.js';
 import { latestVersionPost } from './src/version.js';
@@ -199,26 +199,12 @@ const server = http.createServer(async (req, res) => {
 // ---------------- 游戏主循环 ----------------
 // 金融大鳄：下期财报预览（提前 20 轮）
 // 注意：每轮的 SSE 广播用的是「无玩家」的公共 payload，所以预览必须在
-// 按人下发时单独补上，否则开着页面不刷新就永远看不到预览、倒计时也是死的
-function tycoonPreview(st, d) {
-  const pend = st.pendingReport;
-  if (!pend) return null;
-  const oldEps = Number(st.fundamentals?.eps) || 0;
-  return {
-    eps: Number(pend.eps) || 0,
-    revenue: Number(pend.revenue) || 0,
-    netProfit: Number(pend.netProfit) || 0,
-    growth: Number(pend.growth) || 0,
-    tickLeft: Math.max(0, (Number(st.nextReportTick) || 0) - d.tick),
-    expectPct: oldEps > 0 ? ((Number(pend.eps) || 0) / oldEps - 1) * 100 : 0
-  };
-}
-
 function tickPayload(forPlayerId) {
   const d = getDb();
   const tp = forPlayerId ? d.players[forPlayerId] : null;
-  const isTycoon = tp && tp.theme === 'tycoon';
-  const isMind = tp && tp.theme === 'mind';
+  // 注意：皮肤和技能已经拆开了，这里判断的是「技能」不是「皮肤」
+  const isTycoon = tp && (tp.skill || tp.theme) === 'tycoon';
+  const isMind = tp && (tp.skill || tp.theme) === 'mind';
   const stocks = {};
   for (const [code, st] of Object.entries(d.stocks)) {
     const prev = st.series.length > 1 ? st.series[st.series.length - 2] : st.price;
@@ -231,9 +217,10 @@ function tickPayload(forPlayerId) {
       dps: st.isIndex ? 0 : dividendPerShare(st, { rate: d.config.dividendRate, cap: d.config.dividendCap }),
       payout: st.isIndex ? 0 : dividendPayout(st, d.config.dividendRate)
     };
-    // 金融大鳄：每轮都下发预览状态，否则前端只在刷新时才知道
-    if (isTycoon && !st.isIndex) {
-      stocks[code].preview = tycoonPreview(st, d);
+    // 金融大鳄：每轮都下发预览状态和倒计时，否则开着页面不刷新就看不到
+    if (!st.isIndex) {
+      stocks[code].previewIn = previewInTicks(st, d.tick);
+      if (isTycoon) stocks[code].preview = tycoonPreviewPayload(st, d.tick);
     }
     // 情绪读心：只有这个主题能看到当前情绪
     if (isMind && !st.isIndex) {

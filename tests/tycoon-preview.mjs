@@ -3,7 +3,7 @@
 
 import { createDb } from '../src/store.js';
 import { runReports, TYCOON_LEAD_TICKS } from '../src/engine.js';
-import { genNextReport } from '../src/fundamentals.js';
+import { genNextReport, previewInTicks, tycoonPreviewPayload, TYCOON_LEAD_TICKS as LEAD } from '../src/fundamentals.js';
 
 let fails = 0;
 let passes = 0;
@@ -174,6 +174,43 @@ log('=== 7 pendingReport 字段齐全（前端要用）===');
   for (const k of ['revenue', 'netProfit', 'eps', 'growth', 'expectedGrowth']) {
     check(`有 ${k}`, Number.isFinite(Number(rep[k])), String(rep[k]));
   }
+}
+
+// ---------------------------------------------------------------- 8
+log('');
+log('=== 8 倒计时：还需多少轮才能预览 ===');
+{
+  check('常量是 20', LEAD === 20, String(LEAD));
+  check('发报还有 100 轮 → 还要等 80 轮', previewInTicks({ nextReportTick: 1100 }, 1000) === 80);
+  check('发报还有 20 轮 → 正好 0（已进窗口）', previewInTicks({ nextReportTick: 1020 }, 1000) === 0);
+  check('发报还有 10 轮 → 负数（窗口内）', previewInTicks({ nextReportTick: 1010 }, 1000) === -10);
+  check('没有排期（指数/退市）→ null', previewInTicks({}, 1000) === null);
+  check('自定义提前量也认', previewInTicks({ nextReportTick: 1100 }, 1000, 50) === 50);
+}
+
+// ---------------------------------------------------------------- 9
+log('');
+log('=== 9 共用构造器：两处 payload 数字一致 ===');
+{
+  fixRandom(0.5);
+  const db = newDb();
+  const st = db.stocks.LU;
+  st.nextReportTick = db.tick + 12;
+  const rep = genNextReport(st, { growthCeiling: 8, weather: 0 });
+  st.pendingReport = rep;
+
+  const p1 = tycoonPreviewPayload(st, db.tick);
+  const p2 = tycoonPreviewPayload(st, db.tick);
+  check('同一状态两次调用结果一致', JSON.stringify(p1) === JSON.stringify(p2));
+  check('没有 pendingReport → null', tycoonPreviewPayload({ ...st, pendingReport: null }, db.tick) === null);
+  for (const k of ['eps', 'revenue', 'netProfit', 'growth', 'expected', 'surprise', 'verdict', 'shockPct', 'tickLeft', 'previewIn']) {
+    check(`字段 ${k} 在`, p1[k] !== undefined, String(p1[k]));
+  }
+  check('tickLeft = 距发报轮数', p1.tickLeft === 12, String(p1.tickLeft));
+  check('previewIn = tickLeft − 提前量', p1.previewIn === 12 - LEAD, String(p1.previewIn));
+  check('verdict 与 surprise 自洽',
+    (p1.surprise > 0.02) === (p1.verdict === 'beat')
+    && (p1.surprise < -0.02) === (p1.verdict === 'miss'));
 }
 
 Math.random = realRandom;

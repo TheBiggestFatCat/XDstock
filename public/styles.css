@@ -3631,3 +3631,22 @@ body[data-theme="bear"] .brand-logo {
   .tp-diff { font-size: 11px; }
   .tp-shock { margin-left: 0; }
 }
+
+/* 「还需 N 轮可预览」 */
+.tp-pending {
+  margin-top: 10px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--line);
+  background: var(--soft-2);
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.tp-pending-icon { font-size: 14px; filter: grayscale(.35); }
+.tp-pending-text { color: var(--ink-2); }
+.tp-pending-text b { color: var(--accent-2); font-weight: 700; }
+.tp-pending-sub { font-size: 11px; }
+@media (max-width: 760px) {
+  .tp-pending { font-size: 11px; gap: 6px; }
+}

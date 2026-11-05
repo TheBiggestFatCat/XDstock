@@ -588,6 +588,37 @@ function renderMind() {
 }
 
 /**
+ * 「金融大鳄」在财报面板里的那一块：
+ *   已有 pendingReport → 三色预览卡
+ *   还没到提前窗口   → 「🐊 还需 N 轮可预览」
+ */
+function renderTycoonSlot(st) {
+  const me = state.market?.me || {};
+  if ((me.skill || me.theme) !== 'tycoon') return '';
+  if (st.preview) return renderTycoonPreview(st);
+  if (!st || st.isIndex) return '';
+
+  const left = Number(st.previewIn);
+  if (!Number.isFinite(left)) return '';
+  const secLeft = left * ((state.market?.config?.tickMs || 5000) / 1000);
+  const mins = Math.max(1, Math.round(secLeft / 60));
+  if (left > 0) {
+    return `
+      <div class="tp-pending">
+        <span class="tp-pending-icon">🐊</span>
+        <span class="tp-pending-text">还需 <b>${left} 轮</b>可预览本期财报</span>
+        <span class="tp-pending-sub">（约 ${mins} 分钟后开放）</span>
+      </div>`;
+  }
+  return `
+    <div class="tp-pending">
+      <span class="tp-pending-icon">🐊</span>
+      <span class="tp-pending-text">本期预览生成中…</span>
+      <span class="tp-pending-sub">下一轮刷新</span>
+    </div>`;
+}
+
+/**
  * 「金融大鳄」的提前财报卡。
  * 服务端已经把「实际 − 预期」算好了，这里只负责把它讲清楚：
  *   超预期 / 不及预期 / 符合预期 + 差值 + 预计价格冲击。
@@ -730,7 +761,7 @@ function renderReport() {
     </div>
     <div class="rp-div" id="reportDiv">${renderDividendLine(st)}</div>
     ${renderReportChart(r.history)}
-    ${(st.preview && (state.market?.me?.skill || state.market?.me?.theme) === 'tycoon') ? renderTycoonPreview(st) : ''}
+    ${renderTycoonSlot(st)}
   `;
 }
 
@@ -3141,6 +3172,7 @@ function onTick(d) {
     if (s.fxTarget !== undefined) m.stocks[code].fxTarget = s.fxTarget;
     // 金融大鳄的预览状态每轮同步
     if (s.preview !== undefined) m.stocks[code].preview = s.preview;
+    if (s.previewIn !== undefined) m.stocks[code].previewIn = s.previewIn;
     // 每股股息含现价封顶，所以每轮都会变
     if (s.dps !== undefined) m.stocks[code].dps = s.dps;
     // 情绪读心：只有这个主题的 payload 里才有 sent

@@ -1,6 +1,7 @@
 import { INDEX_BASE, SMALL_INDEX_STOCK } from './stocks.js';
 import { pushBar15, BAR15_TICKS } from './bars15.js';
-import { genNextReport, fairFromReport, impactFactor, industryMidGrowth, rollWeather, dividendPerShare } from './fundamentals.js';
+import { TYCOON_LEAD_TICKS, genNextReport, fairFromReport, impactFactor, industryMidGrowth, rollWeather, dividendPerShare } from './fundamentals.js';
+export { TYCOON_LEAD_TICKS };
 import { genMarketTrades } from './marketTrades.js';
 import { logTrade } from './trading.js';
 import { now } from './store.js';
@@ -926,9 +927,6 @@ export function changesFor(series, tfTicks) {
   }
   return out;
 }
-
-/** 提前多少轮把下一期财报算好（金融大鳄技能能看到这段提前量） */
-export const TYCOON_LEAD_TICKS = 20;
 
 /** 每家公司错开发财报：间隔 reportIntervalTicks 轮 */
 export function runReports(db) {

@@ -39,6 +39,53 @@ const BPS_RETAIN = [0.15, 0.3];
 const BOOK_SHRINK = 0.003;
 /** 营收天花板：最多长到基准营收的多少倍（会无限接近但不超过） */
 const DEFAULT_GROWTH_CEILING = 8;
+
+/** 「金融大鳄」能提前多少轮看到下一期财报（引擎生成 pendingReport 时也用这个） */
+export const TYCOON_LEAD_TICKS = 20;
+
+/**
+ * 距离「可以预览下一期财报」还有多少轮：
+ *   > 0  还要等这么多轮
+ *   <= 0 已经在窗口内（有技能的话下一轮就能看到）
+ * 没有排期（指数 / 已退市）返回 null。
+ */
+export function previewInTicks(st, tick, lead = TYCOON_LEAD_TICKS) {
+  const next = Number(st?.nextReportTick) || 0;
+  if (!(next > 0)) return null;
+  return next - Number(tick || 0) - Math.max(0, Number(lead) || 0);
+}
+
+/**
+ * 「金融大鳄」的预览数据。**api.js 和 server.js 共用这一份**，
+ * 免得两处算出不一样的数字（历史上就是这样飘的）。
+ * 没有任何 pendingReport 就返回 null。
+ */
+export function tycoonPreviewPayload(st, tick, lead = TYCOON_LEAD_TICKS) {
+  const pr = st?.pendingReport;
+  if (!pr) return null;
+  const f = st.fundamentals || {};
+  const growth = Number(pr.growth) || 0;
+  const expected = Number(pr.expectedGrowth) || 0;
+  // 和 runReports 发报当轮的口径完全一致
+  const surprise = Math.max(-0.3, Math.min(0.3, growth - expected));
+  const verdict = surprise > 0.02 ? 'beat' : surprise < -0.02 ? 'miss' : 'inline';
+  const oldEps = Number(f.eps) || 0;
+  const newEps = Number(pr.eps) || 0;
+  return {
+    eps: Number(pr.eps) || 0,
+    revenue: Number(pr.revenue) || 0,
+    netProfit: Number(pr.netProfit) || 0,
+    growth,
+    expected,
+    surprise,
+    verdict,
+    // 发报那一刻的价格冲击（%）
+    shockPct: Math.max(-0.06, Math.min(0.06, surprise * 0.8)) * 100,
+    tickLeft: Math.max(0, (Number(st.nextReportTick) || 0) - Number(tick || 0)),
+    previewIn: previewInTicks(st, tick, lead),
+    expectPct: oldEps > 0 ? (newEps / oldEps - 1) * 100 : 0
+  };
+}
 /**
  * 体质向「行业性格」回归的速度：每期把偏离收掉 15%。
  * 0.15 → 半衰期约 4.3 期，一次衰退大概 15 期就散尽，
