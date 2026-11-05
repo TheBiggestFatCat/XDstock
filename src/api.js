@@ -3,6 +3,7 @@ import path from 'node:path';
 import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
 import { candlesFromSeries, changesFor, timeFromAxis, tickTimeAxis, pushNotice, noticeAlive, sentimentView, liveIndexWeights } from './engine.js';
 import { bars15Candles } from './bars15.js';
+import { unlockedEmojis, pushEmote, visibleEmotes } from './emoji.js';
 import { nightInfoFor } from './theme.js';
 import { TIMEFRAMES } from './config.js';
 import { getBuild } from './build.js';
@@ -188,6 +189,8 @@ function publicPlayer(p, db) {
     // 站内通知：最新 20 条 + 未读数（止盈止损触发/成交、强平、被偷都在这儿）
     notices: notifyList(p, 20),
     notifyUnread: unreadCount(p),
+    // 表情互动：这个等级解锁了哪些贴纸
+    emojis: unlockedEmojis(p.level),
     createdAt: p.createdAt
   };
 }
@@ -448,6 +451,8 @@ function marketPayload(db, me) {
     tick: db.tick,
     tickMs: db.config.tickMs,
     marketOpen: db.config.marketOpen !== false,
+    // 首屏就能看到的表情（上一轮发出来的那些）
+    emotes: visibleEmotes(db),
     startedAt: db.startedAt || 0,
     serverTime: now(),
     index: {
@@ -568,6 +573,8 @@ function marketPayload(db, me) {
       nightEndHour: db.config.nightEndHour ?? 4,
       nightStealCooldown: db.config.nightStealCooldown ?? 5,
       themeNeedLevel: THEME_NEED_LEVEL,
+      // 表情互动的目录（前端拼 /assets/<dir>/<file>）
+      emojiDirs: { 1: 'emo_lv1' },
       // 道具/其他的等级门槛：前端照这个渲染「Lv.N 解锁」，服务端照这个拦
       shopItems: SHOP_NEED_LEVEL,
       shopBgPrice: db.config.shopBgPrice ?? 5000000,
@@ -1121,6 +1128,19 @@ export async function handleApi(ctx) {
   if (pathname === '/api/me' && method === 'GET') {
     saveDb();
     return json(res, 200, { player: publicPlayer(me, db) });
+  }
+
+  // 表情互动：同一个人同一轮只留最后一个（点多少次都只算最后那个）
+  if (pathname === '/api/emote' && method === 'POST') {
+    const r = pushEmote(db, me, { file: body.emo, code: body.code });
+    if (!r.ok) return json(res, 400, { error: r.error });
+    saveDb();
+    return json(res, 200, {
+      ok: true,
+      replaced: !!r.replaced,
+      tick: db.tick,
+      emo: r.emote.emo
+    });
   }
 
   // 站内通知：标已读（不传 ids = 全部已读）

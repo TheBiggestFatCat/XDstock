@@ -16,6 +16,7 @@ import { handleApi } from './src/api.js';
 import { NEWS_POOL } from './src/news.js';
 import { dividendPerShare, dividendPayout } from './src/fundamentals.js';
 import { pushNotify, notifyList, unreadCount } from './src/notify.js';
+import { visibleEmotes } from './src/emoji.js';
 import { stealAmount } from './src/steal.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -313,6 +314,8 @@ function tickPayload(forPlayerId) {
     type: 'tick',
     build: getBuild(),
     tick: d.tick,
+    // 表情互动：本轮该冒出来的那些（上一轮发出来的，下一轮自动消失）
+    emotes: visibleEmotes(d),
     closed: d.config.marketOpen === false,
     index: d.index.value,
     indexChanges: changesFor(d.index.series, TIMEFRAMES),

@@ -35,6 +35,11 @@ const state = {
   cslPaused: false,
   cslBusy: false,
   cslLastPoll: 0,
+  // 表情互动
+  emoOpen: false,
+  emoSeen: new Set(),      // 已经飘过的表情 id
+  emoPicked: '',
+  emoPending: 0,           // 本轮还没回执的发送数
   cslOnlyTrade: true,
   adminSelected: new Set(),
   prevPrices: {},
@@ -291,6 +296,114 @@ function syncShellSession() {
   } catch { /* 壳里没这个方法就算了 */ }
 }
 
+// ---------------- 表情互动（贴纸）----------------
+
+/** 表情目录：服务端在 config.emojiDirs 里给（1 → emo_lv1） */
+function emoSrc(file) {
+  return `/assets/emo_lv1/${encodeURIComponent(file)}`;
+}
+
+/** 画「我的表情」面板（只画解锁的） */
+function renderEmoPanel() {
+  const box = $('#emoList');
+  if (!box) return;
+  const list = Array.isArray(state.market?.me?.emojis) ? state.market.me.emojis : [];
+  if (!list.length) {
+    box.innerHTML = '<p class="field-hint" style="grid-column:1/-1">还没有解锁的表情</p>';
+    return;
+  }
+  box.innerHTML = list.map((f) => (
+    `<button class="emo-item${f === state.emoPicked ? ' picked' : ''}" type="button" data-emo="${f}" title="发送">
+       <img src="${emoSrc(f)}" alt="表情" loading="lazy" />
+     </button>`
+  )).join('');
+}
+
+function toggleEmoPanel(force) {
+  const panel = $('#emoPanel');
+  if (!panel) return;
+  const open = force === undefined ? panel.classList.contains('hidden') : !!force;
+  panel.classList.toggle('hidden', !open);
+  state.emoOpen = open;
+  if (open) renderEmoPanel();
+}
+
+/**
+ * 发一个表情。
+ * 同一轮点多次是允许的 —— 服务端只留最后一个，所以这里直接发，
+ * 后到的会把自己上一条覆盖掉。
+ */
+async function sendEmote(file) {
+  if (!file) return;
+  state.emoPicked = file;
+  // 面板里高亮一下，顺便给个"已发送"的感觉
+  $$('#emoList .emo-item').forEach((b) => {
+    b.classList.toggle('picked', b.dataset.emo === file);
+  });
+  try {
+    await api('/api/emote', {
+      method: 'POST',
+      body: JSON.stringify({ emo: file, code: state.code })
+    });
+    toast('表情已发出，下一轮全场可见', 'ok');
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
+/** 收到本轮该显示的表情：在页面随机位置冒出来，持续一轮（5 秒）后消失 */
+function renderEmotes(list) {
+  const layer = $('#emoLayer');
+  if (!layer || !Array.isArray(list)) return;
+  const tickMs = Number(state.market?.tickMs) || 5000;
+  const now = Date.now();
+
+  // 先记下这一批的 id，老的飘屏到点自己会消失
+  const EMOTE_SHOW_MAX = 8;   // 一轮最多同时冒 8 个，人多也不至于糊满屏
+  let fresh = list.filter((e) => e && e.id && !state.emoSeen.has(e.id));
+  for (const e of list) if (e && e.id) state.emoSeen.add(e.id);
+  if (fresh.length > EMOTE_SHOW_MAX) {
+    fresh = fresh.slice(0, EMOTE_SHOW_MAX);
+  }
+  // 清掉太久以前的 id，免得 Set 一直涨
+  if (state.emoSeen.size > 400) state.emoSeen = new Set([...state.emoSeen].slice(-200));
+
+  for (const e of fresh) {
+    const el = document.createElement('div');
+    el.className = 'emo-float';
+    // 随机位置：留出边距，避开正中间和下边栏
+    const x = 6 + Math.random() * 78;     // vw
+    const y = 12 + Math.random() * 66;    // vh
+    el.style.left = x + 'vw';
+    el.style.top = y + 'vh';
+    el.style.transform = 'rotate(' + (Math.random() * 16 - 8).toFixed(1) + 'deg)';
+    el.innerHTML = `<img src="${emoSrc(e.emo)}" alt="表情" />`
+      + (e.nickname ? `<span class="emo-who">${escapeHtml(e.nickname)}</span>` : '');
+    layer.appendChild(el);
+    // 表情只活一轮
+    setTimeout(() => {
+      try { el.remove(); } catch { /* ignore */ }
+    }, Math.max(1500, tickMs));
+  }
+  void now;
+}
+
+function bindEmoteUi() {
+  $('#emoBtn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleEmoPanel();
+  });
+  document.addEventListener('click', (e) => {
+    if (!state.emoOpen) return;
+    if (e.target.closest?.('.emo-wrap')) return;
+    toggleEmoPanel(false);
+  });
+  $('#emoList')?.addEventListener('click', (e) => {
+    const b = e.target.closest?.('[data-emo]');
+    if (!b) return;
+    sendEmote(b.dataset.emo);
+  });
+}
 function renderClosed() {
   const closed = state.market && state.market.marketOpen === false;
   const banner = $('#closedBanner');
@@ -2303,6 +2416,7 @@ function renderMyOrders() {
 }
 
 function selectStock(code) {
+  toggleEmoPanel(false);
   const changed = state.code !== code;
   state.code = code;
   // 换股票了：输入框内容重新按新持仓回填
@@ -2897,6 +3011,8 @@ function onTick(d) {
   if (Array.isArray(d.notices)) m.notices = d.notices;
 
   checkBuild(d.build);
+  // 表情：本轮该冒出来的（服务端只下发「上一轮发出来的」那一批）
+  if (Array.isArray(d.emotes)) renderEmotes(d.emotes);
   if (d.closed !== undefined) m.marketOpen = !d.closed;
   // 后台改了参数（杠杆上限等），下一轮就同步过来
   if (d.config) m.config = { ...(m.config || {}), ...d.config };
@@ -2926,6 +3042,7 @@ function onTick(d) {
 
   renderTopbar();
   renderNews();
+  if (Array.isArray(state.market?.emotes)) renderEmotes(state.market.emotes);
   updatePriceCells();
   syncLeverageLimits();
   const st = m.stocks[state.code];
@@ -5015,6 +5132,7 @@ function bind() {
   });
   $('#traitSaveBtn')?.addEventListener('click', saveTraits);
   bindAdminConsole();
+  bindEmoteUi();
   switchAdminTab(state.adminTab || 'console');
 
   // 定时刷新「我的」与「排行」，保证不靠 SSE 也准确

@@ -135,6 +135,18 @@
               <img id="chartIcon" class="stock-icon-lg" alt="" />
               <h2 id="chartName">—</h2>
               <span id="chartCode" class="chip">—</span>
+              <div class="emo-wrap">
+                <button id="emoBtn" class="emo-btn" type="button" title="发个表情">
+                  <span class="emo-btn-face">😀</span>
+                </button>
+                <div id="emoPanel" class="emo-panel hidden">
+                  <div class="emo-head">
+                    <b>我的表情</b>
+                    <span class="emo-tip">点一下就发给全场，下一轮出现</span>
+                  </div>
+                  <div id="emoList" class="emo-list"></div>
+                </div>
+              </div>
             </div>
             <div class="chart-price">
               <span id="chartPrice" class="big-price">—</span>
@@ -921,6 +933,8 @@
     <button id="spyOk" class="btn btn-ghost btn-block">知道了</button>
   </div>
 </div>
+
+<div id="emoLayer" class="emo-layer" aria-hidden="true"></div>
 
 <div id="toast" class="toast"></div>
 

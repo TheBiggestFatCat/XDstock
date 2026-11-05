@@ -3349,3 +3349,79 @@ body[data-theme="bear"] .brand-logo {
   .csl-row { grid-template-columns: 1fr 1fr; row-gap: 4px; }
   .csl-row .csl-time { grid-column: 1 / -1; }
 }
+
+
+/* ---------- 表情互动 ---------- */
+.emo-wrap { position: relative; display: inline-flex; }
+.emo-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 0; margin-left: 2px;
+  border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--card);
+  transition: transform .15s, background .15s, border-color .15s;
+}
+.emo-btn:hover { background: var(--soft-2); border-color: var(--bd-accent); transform: translateY(-1px); }
+.emo-btn:active { transform: scale(.94); }
+.emo-btn-face { font-size: 16px; line-height: 1; }
+
+.emo-panel {
+  position: absolute; top: 36px; left: 0; z-index: 70;
+  width: 268px; max-height: 250px; display: flex; flex-direction: column;
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, .18);
+  overflow: hidden;
+}
+.emo-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 8px; padding: 9px 12px; border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+}
+.emo-tip { font-size: 11px; color: var(--ink-3); }
+.emo-list {
+  overflow-y: auto; padding: 8px;
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
+}
+.emo-item {
+  padding: 3px; border: none; background: none; cursor: pointer; border-radius: 9px;
+  transition: transform .12s, background .12s;
+  line-height: 0;
+}
+.emo-item:hover { background: var(--soft-2); transform: scale(1.1); }
+.emo-item:active { transform: scale(.92); }
+.emo-item img { width: 100%; height: auto; display: block; border-radius: 6px; }
+.emo-item.picked { background: var(--hl-4); outline: 2px solid var(--accent); }
+
+/* 漂浮在页面上的表情 */
+.emo-layer { position: fixed; inset: 0; pointer-events: none; z-index: 90; }
+.emo-float {
+  position: absolute; width: 74px; height: 74px;
+  transform-origin: 50% 60%;
+  animation: emoPop .42s cubic-bezier(.2, 1.4, .5, 1) both, emoFloat 4.8s ease-in-out .42s forwards;
+  filter: drop-shadow(0 6px 14px rgba(15, 23, 42, .22));
+  will-change: transform, opacity;
+}
+.emo-float img { width: 100%; height: 100%; display: block; }
+.emo-float .emo-who {
+  position: absolute; left: 50%; bottom: -15px; transform: translateX(-50%);
+  font-size: 10px; color: var(--ink-3); white-space: nowrap;
+  background: rgba(255, 255, 255, .72); border-radius: 6px; padding: 0 4px;
+}
+@keyframes emoPop {
+  0% { transform: scale(.15); opacity: 0; }
+  60% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes emoFloat {
+  0% { opacity: 1; transform: scale(1) translateY(0); }
+  80% { opacity: 1; transform: scale(1.02) translateY(-6px); }
+  100% { opacity: 0; transform: scale(.9) translateY(-12px); }
+}
+
+/* 手机端：按钮落在股票名字下面一行 */
+@media (max-width: 720px) {
+  .chart-title { flex-wrap: wrap; }
+  .emo-wrap { flex-basis: 100%; margin-top: 4px; }
+  .emo-panel { left: 50%; transform: translateX(-50%); width: calc(100vw - 32px); max-height: 220px; }
+  .emo-list { grid-template-columns: repeat(6, 1fr); }
+  .emo-float { width: 64px; height: 64px; }
+}
