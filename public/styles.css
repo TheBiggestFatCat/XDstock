@@ -3417,11 +3417,14 @@ body[data-theme="bear"] .brand-logo {
   100% { opacity: 0; transform: scale(.9) translateY(-12px); }
 }
 
-/* 手机端：按钮落在股票名字下面一行 */
-@media (max-width: 720px) {
-  .chart-title { flex-wrap: wrap; }
-  .emo-wrap { flex-basis: 100%; margin-top: 4px; }
-  .emo-panel { left: 50%; transform: translateX(-50%); width: calc(100vw - 32px); max-height: 220px; }
+/* 手机端：不占行，绝对定位到标题栏右上角（否则会把下面的价格/工具栏挤乱） */
+@media (max-width: 760px) {
+  .chart-head { position: relative; padding-right: 42px; }
+  .emo-wrap { position: absolute; top: 2px; right: 0; margin: 0; }
+  .emo-panel {
+    top: 34px; left: auto; right: 0; transform: none;
+    width: min(320px, calc(100vw - 40px)); max-height: 220px;
+  }
   .emo-list { grid-template-columns: repeat(6, 1fr); }
   .emo-float { width: 64px; height: 64px; }
 }
