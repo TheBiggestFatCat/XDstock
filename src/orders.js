@@ -26,6 +26,11 @@ const r2 = (v) => Math.round(Number(v) * 100) / 100;
 
 /** 风控单的穿价幅度：挂单价在现价基础上让 0.4%，保证方向正确 */
 const AUTO_SLIP = 0.004;
+
+// 买单挂价最多能高于现价多少（1 = 100%）。
+// 限价撮合里「挂 300 买、现价 100」会立刻按 100 成交 —— 玩家其实是想等涨到 300，
+// 但这个游戏没有到价单，所以这种离谱挂价直接拒掉，别让它悄悄成交。
+const MAX_BUY_PREMIUM = 1;
 /** 同一张单连续失败几次就撤掉（避免每轮刷失败提示） */
 const MAX_ORDER_FAILS = 3;
 
@@ -37,24 +42,6 @@ function uid() {
 export function isBuyOrder(order) {
   if (order.action === 'open') return order.side === 'long';
   return order.side === 'short'; // 平空 = 买回
-}
-
-/**
- * 这笔单子是「到价触发」还是「愿意按市价成交」。
- *
- * 买单（开多 / 平空）如果挂价高出市价超过 `orderMarketableBand`，
- * 说明玩家是在等价格涨上去（现价 100 挂 300），不能当成市价单立刻吃掉；
- * 挂价只高一点点（让利那套）才是「愿意多付一点、按市价成交」。
- * 卖单不用分：挂价 ≥ 现价本来就等到价，挂价 < 现价本来就按市价卖。
- *
- * @returns {'limit'|'stop'}
- */
-export function decideTrigger(cfg, st, buySide, limit) {
-  if (!buySide) return 'limit';
-  const band = Math.max(0, num(cfg?.orderMarketableBand, 0.1));
-  const px = num(st?.price, 0);
-  if (!(px > 0)) return 'limit';
-  return num(limit, 0) > px * (1 + band) ? 'stop' : 'limit';
 }
 
 /**
@@ -186,9 +173,6 @@ export function placeLimitOrder(db, player, body) {
     const wantQty = Math.floor(num(body.qty, 0));
     const closeQty = wantQty > 0 ? Math.min(pos.qty, wantQty) : pos.qty;
 
-    // 平空 = 买回，同样要防空价单被立刻成交
-    const closeTrigger = decideTrigger(cfg, st, side === 'short', limit);
-
     const order = {
       id: uid(),
       code,
@@ -198,7 +182,6 @@ export function placeLimitOrder(db, player, body) {
       qty: closeQty,
       limit,
       leverage: pos.leverage || 1,
-      trigger: closeTrigger,
       reserve: 0,
       createdAt: Date.now(),
       createdTick: db.tick,
@@ -222,7 +205,19 @@ export function placeLimitOrder(db, player, body) {
     return { ok: false, error: '这只票你还有反向持仓，先平掉再挂' };
   }
 
-  const trigger = decideTrigger(cfg, st, side === 'long', limit);
+  // 只拦「开多」的离谱挂价：
+  //   现价 100 挂 300 买入，在限价撮合里等于市价单，会按 100 立刻成交，
+  //   而玩家的意思其实是「等涨到 300 再说」。游戏没有到价单，直接拒绝最清楚。
+  //   卖单、平空不动 —— 挂高卖本来就是等到价，买回便宜了也不吃亏。
+  if (side === 'long' && st.price > 0) {
+    const capPrice = st.price * (1 + MAX_BUY_PREMIUM);
+    if (limit > capPrice + 1e-9) {
+      return {
+        ok: false,
+        error: `买单挂价不能高于现价 ${MAX_BUY_PREMIUM * 100}%（现价 ${st.price.toFixed(2)}，最高 ${capPrice.toFixed(2)}）`
+      };
+    }
+  }
 
   // 押金按「最坏情况成交价」冻结：
   //   买单 → 直接按【限价】冻结（成交价最高就是限价）
@@ -245,7 +240,6 @@ export function placeLimitOrder(db, player, body) {
     qty,
     limit,
     leverage,
-    trigger,
     reserve,
     createdAt: Date.now(),
     createdTick: db.tick,
@@ -373,9 +367,6 @@ export function processOrders(db) {
       // 风控单：每轮重定一次穿价，并且无视限价直接成交。
       // 价格跳空时若还按原限价判断，卖单会永远等不到成交。
       order.limit = r2(buy ? px * (1 + AUTO_SLIP) : px * (1 - AUTO_SLIP));
-    } else if (order.trigger === 'stop') {
-      // 到价单（远价买单）：现价涨到挂单价才成交，成交价还是市价
-      if (!(px >= num(order.limit))) continue;
     } else {
       const hit = buy ? px <= num(order.limit) : px >= num(order.limit);
       if (!hit) continue;

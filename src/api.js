@@ -180,10 +180,7 @@ function publicPlayer(p, db) {
       expireTick: o.expireTick,
       createdAt: o.createdAt,
       auto: o.auto || null,
-      autoDca: !!o.autoDca,
-      // limit = 到价就按市价成交（普通限价 / 让利单）
-      // stop  = 等现价涨到挂单价才成交（远价买单）
-      trigger: o.trigger || 'limit'
+      autoDca: !!o.autoDca
     })),
     income: (p.workEarned || 0) + (p.stealEarned || 0),
     // 站内通知：最新 20 条 + 未读数（止盈止损触发/成交、强平、被偷都在这儿）
@@ -601,7 +598,6 @@ function marketPayload(db, me) {
     bearBonusMinTicks: db.config.bearBonusMinTicks ?? 12,
       limitOrderEnabled: db.config.limitOrderEnabled ?? 1,
       orderTtlTicks: db.config.orderTtlTicks ?? 2000,
-      orderMarketableBand: db.config.orderMarketableBand ?? 0.1,
       maxPendingOrders: db.config.maxPendingOrders ?? 5,
       playerImpactEnabled: db.config.playerImpactEnabled ?? 1,
       playerImpactRef: db.config.playerImpactRef ?? 1000000,
@@ -1088,7 +1084,7 @@ export async function handleApi(ctx) {
       'fxEnabled', 'fxCoef', 'fxLeverage', 'fxRefreshMs', 'fxTrack',
       'impactCostCoef', 'impactCostMax', 'playerImpactTail',
       'maxOrdersPerTick', 'maxFillNotionalPerTick',
-      'limitOrderEnabled', 'orderTtlTicks', 'orderMarketableBand', 'maxPendingOrders',
+      'limitOrderEnabled', 'orderTtlTicks', 'maxPendingOrders',
       'investigateCooldownTicks',
       'levelBaseAsset', 'levelGrowth', 'levelUpRatio', 'levelFillBonus',
       'playerImpactEnabled', 'playerImpactRef', 'playerImpactStrength', 'impactRefFreeCap',

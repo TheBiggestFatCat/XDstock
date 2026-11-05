@@ -2406,8 +2406,7 @@ function renderMyOrders() {
       const label = o.action === 'close' ? '平' : '开';
       const autoTag = o.auto
         ? `<span class="mo-auto">${o.auto === 'tp' ? '止盈单' : '止损单'}</span>`
-        : (o.autoDca ? '<span class="mo-auto">定投</span>'
-          : (o.trigger === 'stop' ? '<span class="mo-auto">到价才买</span>' : ''));
+        : (o.autoDca ? '<span class="mo-auto">定投</span>' : '');
       return `<div class="mo-row">
         <span class="mo-side ${buy ? 'buy' : 'sell'}">${label}${buy ? '买' : '卖'}</span>
         <span class="mo-name">${o.name}${autoTag}</span>
@@ -4467,7 +4466,6 @@ async function loadAdmin() {
           fields: [
             ['limitOrderEnabled', '允许限价挂单(1=开)'],
             ['orderTtlTicks', '挂单有效期(轮)'],
-            ['orderMarketableBand', '买单可成交带宽(0.1=高10%以内算市价单)'],
             ['maxPendingOrders', '最多同时挂几笔']
           ]
         },
