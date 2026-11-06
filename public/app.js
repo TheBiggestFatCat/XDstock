@@ -28,6 +28,11 @@ const state = {
   adminToken: localStorage.getItem('xd_admin') || '',
   adminTab: 'console',        // 管理页当前标签
   pfPane: (localStorage.getItem('xd_pf_pane') || 'overview'),   // 我的：概览 / 银行 / 管理
+  // 已经提示过的成就 id（localStorage 持久化，换设备会重新提示一次）
+  achvSeen: new Set((() => {
+    try { return JSON.parse(localStorage.getItem('xd_achv_seen') || '[]'); } catch (e) { return []; }
+  })()),
+  achvPrimed: false,          // 首次拿到快照时只记录、不弹窗
   cfgCat: 'market',           // 参数页当前大类
   cslRows: [],                // 控制台成交（最新在前）
   cslSeen: new Set(),         // 已经画过的成交 id
@@ -175,6 +180,80 @@ function toast(msg, type = '') {
   clearTimeout(toast._t);
   toast._t = setTimeout(() => (el.className = 'toast ' + type), 2600);
 }
+/**
+ * 成就完成弹窗：从屏幕上方滑下来，颜色按成就类型区分。
+ *   theme  → 主题成就（青绿）
+ *   value  → 全局成就·价值投资（紫）
+ *   dragon → 全局成就·短线擒龙（橙红）
+ * 只对「这次新解锁」的弹，刷新页面不会重播。
+ */
+const ACHV_TONE_LABEL = {
+  theme: '主题成就达成',
+  value: '全局成就达成',
+  dragon: '全局成就达成'
+};
+
+function saveAchvSeen() {
+  try {
+    const arr = [...state.achvSeen].slice(-300);
+    localStorage.setItem('xd_achv_seen', JSON.stringify(arr));
+  } catch (e) { /* 隐私模式忽略 */ }
+}
+
+function pushAchvToast(item) {
+  const layer = $('#achvToastLayer');
+  if (!layer || !item) return;
+  const tone = ['theme', 'value', 'dragon'].includes(item.tone) ? item.tone : 'theme';
+  const el = document.createElement('div');
+  el.className = `achv-toast tone-${tone}`;
+  el.innerHTML = `
+    <span class="achv-toast-emoji">${item.emoji || '🏅'}</span>
+    <span class="achv-toast-main">
+      <span class="achv-toast-label">${ACHV_TONE_LABEL[tone] || '成就达成'}</span>
+      <span class="achv-toast-name">${escapeHtml(item.name || '')}</span>
+    </span>
+    <button class="achv-toast-close" type="button" aria-label="关闭">×</button>`;
+  layer.appendChild(el);
+  const close = () => {
+    el.classList.add('hide');
+    setTimeout(() => el.remove(), 260);
+  };
+  el.querySelector('.achv-toast-close')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    close();
+  });
+  // 点主体 → 去成就页
+  el.addEventListener('click', () => {
+    close();
+    switchView('achv');
+  });
+  setTimeout(close, 5200);
+}
+
+/**
+ * 每轮比对一次「已解锁清单」：
+ *   第一次拿到快照 → 只登记不弹（避免登录瞬间把历史成就全弹一遍）
+ *   之后出现新的 id → 弹一个
+ */
+function maybeAchvToasts(achv) {
+  const list = Array.isArray(achv?.unlocked) ? achv.unlocked : null;
+  if (!list) return;
+  if (!state.achvPrimed) {
+    for (const it of list) state.achvSeen.add(it.id);
+    saveAchvSeen();
+    state.achvPrimed = true;
+    return;
+  }
+  let changed = false;
+  for (const it of list) {
+    if (state.achvSeen.has(it.id)) continue;
+    state.achvSeen.add(it.id);
+    changed = true;
+    pushAchvToast(it);
+  }
+  if (changed) saveAchvSeen();
+}
+
 async function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
   if (state.token) headers.Authorization = 'Bearer ' + state.token;
@@ -267,6 +346,7 @@ async function refreshMarket() {
   const d = await api('/api/market');
   state.market = d;
   state.me = d.me;
+  maybeAchvToasts(d.me?.achv);
   syncThemeFromServer();
   syncBackgroundFromServer();
   renderTopbar();
@@ -3466,6 +3546,7 @@ function onTick(d) {
   if (d.me) {
     m.me = { ...m.me, ...d.me };
     state.me = m.me;
+    maybeAchvToasts(m.me.achv);
   }
 
   renderTopbar();
@@ -5872,7 +5953,7 @@ function bind() {
 }
 
 // 调试用：把 state 挂到 window，方便排查问题（不含任何服务端秘密）
-try { window.__xd = { state, priceAtY, updateLimitLine, autoLimitPrice, setLimitPrice }; window.__xdState = state; } catch { /* ignore */ }
+try { window.__xd = { state, priceAtY, updateLimitLine, autoLimitPrice, setLimitPrice, pushAchvToast, maybeAchvToasts }; window.__xdState = state; } catch { /* ignore */ }
 
 // ---------------- 启动 ----------------
 async function boot() {

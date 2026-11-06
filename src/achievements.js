@@ -135,6 +135,7 @@ export const GLOBAL_ACHIEVEMENTS = [
     id: 'value_invest',
     name: '价值投资',
     emoji: '🏛️',
+    tone: 'value',          // 弹窗配色：紫
     tier: 'global',
     desc: '在价格远离价值时下注，等它自己走回来',
     tasks: [
@@ -158,6 +159,7 @@ export const GLOBAL_ACHIEVEMENTS = [
     id: 'dragon_rush',
     name: '短线擒龙',
     emoji: '🐉',
+    tone: 'dragon',         // 弹窗配色：橙红
     tier: 'global',
     desc: '快进快出，只吃最猛的那一段',
     tasks: [
@@ -498,19 +500,40 @@ export function achvPayload(db, player) {
       canEvolve: canEvolve(db, me, t),
       list: list.map((x) => ({
         id: x.id, name: x.name, desc: x.desc, emoji: x.emoji, got: x.got,
+        at: x.at, tone: 'theme', kind: 'theme',
         progress: x.progress, target: achvTarget(db?.config, x.targetKey)
       }))
     };
   }
   const global = globalAchvProgress(db, me).map((g) => ({
     id: g.id, name: g.name, emoji: g.emoji, desc: g.desc, got: g.got, at: g.at,
+    tone: GLOBAL_BY_ID[g.id]?.tone || 'global', kind: 'global',
     requireAll: Number((db?.config || {}).achvGlobalRequireAll) === 1,
     tasks: g.tasks
   }));
+  // 所有「已解锁」的成就拍平成一个列表：前端用它做「新解锁 → 顶部弹窗」的差异判断
+  const unlocked = [];
+  for (const t of THEMES) {
+    for (const x of themes[t].list) {
+      if (!x.got) continue;
+      unlocked.push({
+        id: x.id, name: x.name, emoji: x.emoji, desc: x.desc,
+        tone: 'theme', kind: 'theme', tier: themes[t].tier, at: Number(x.at) || 0
+      });
+    }
+  }
+  for (const g of global) {
+    if (!g.got) continue;
+    unlocked.push({
+      id: g.id, name: g.name, emoji: g.emoji, desc: g.desc,
+      tone: g.tone, kind: 'global', at: Number(g.at) || 0
+    });
+  }
   return {
     points: Number(me.achvPoints) || 0,
     themes,
     global,
+    unlocked,
     emojis: themeEmojiList(me)
   };
 }

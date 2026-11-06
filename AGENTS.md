@@ -22,7 +22,7 @@ node tests/theme-split.mjs           # 主题=外观+技能（改商城必跑，
 node tests/shop-gate.mjs             # 商城等级门槛（改商城必跑，30 条断言）
 node tests/theme-evolution.mjs       # 主题成就 + 主题进化（改成就/技能必跑，69 条断言）
 node tests/imports.mjs               # 静态体检：跨模块「用了但没 import」（改 server/api 必跑，17 条）
-node tests/global-achievements.mjs   # 全局成就 价值投资/短线擒龙（改成就必跑，36 条）
+node tests/global-achievements.mjs   # 全局成就 价值投资/短线擒龙（改成就必跑，46 条）
 ```
 
 ## 铁律

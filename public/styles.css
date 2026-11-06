@@ -3961,3 +3961,86 @@ body[data-theme="bear"] .brand-logo {
 @media (max-width: 760px) {
   .achv-global-head { font-size: 12px; margin: 13px 0 8px; }
 }
+
+/* ================= 成就完成弹窗（从上方滑下） ================= */
+.achv-toast-layer {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 210;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  pointer-events: none;
+  width: min(420px, 92vw);
+}
+.achv-toast {
+  pointer-events: auto;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px 10px 14px;
+  border-radius: 15px;
+  color: #fff;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .22), 0 2px 6px rgba(0, 0, 0, .14);
+  border: 1px solid rgba(255, 255, 255, .28);
+  animation: achv-drop .46s cubic-bezier(.18, .89, .32, 1.15);
+  cursor: pointer;
+  overflow: hidden;
+  position: relative;
+}
+/* 顶部一条高光，让「从上面掉下来」的感觉更明显 */
+.achv-toast::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: rgba(255, 255, 255, .55);
+}
+.achv-toast.hide { animation: achv-rise .26s ease-in forwards; }
+
+.achv-toast-emoji {
+  flex: none;
+  font-size: 22px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .28));
+}
+.achv-toast-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.achv-toast-label { font-size: 10.5px; letter-spacing: .6px; opacity: .85; }
+.achv-toast-name { font-size: 14.5px; font-weight: 800; }
+.achv-toast-close {
+  flex: none;
+  border: 0;
+  background: rgba(255, 255, 255, .18);
+  color: #fff;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.achv-toast-close:hover { background: rgba(255, 255, 255, .32); }
+
+/* 类型配色 */
+.achv-toast.tone-theme { background: linear-gradient(135deg, #0f8b7e, #17b8a6); }
+.achv-toast.tone-value { background: linear-gradient(135deg, #6d4aff, #9b7bff); }
+.achv-toast.tone-dragon { background: linear-gradient(135deg, #f97316, #ef4444); }
+
+@keyframes achv-drop {
+  0% { opacity: 0; transform: translateY(-130%) scale(.96); }
+  60% { opacity: 1; transform: translateY(3px) scale(1.01); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes achv-rise {
+  to { opacity: 0; transform: translateY(-120%); }
+}
+
+@media (max-width: 760px) {
+  .achv-toast-layer { top: 8px; width: min(360px, 94vw); }
+  .achv-toast { padding: 9px 10px 9px 12px; border-radius: 13px; }
+  .achv-toast-name { font-size: 13.5px; }
+  .achv-toast-emoji { font-size: 19px; }
+}

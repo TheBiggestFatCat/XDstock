@@ -9,7 +9,7 @@ import { DEFAULT_CONFIG } from '../src/config.js';
 import { openPosition, closePosition } from '../src/trading.js';
 import {
   GLOBAL_ACHIEVEMENTS, globalAchvProgress, refreshGlobals, bumpGlobal,
-  achvPayload, achvEmojiList, themeEmojiList, ensureAchvState
+  achvPayload, achvEmojiList, themeEmojiList, ensureAchvState, grantAchv
 } from '../src/achievements.js';
 import { leaderboardRows } from '../src/api.js';
 
@@ -231,12 +231,39 @@ log('=== 8 排行榜图标 + payload ===');
   check('排行榜行 achvEmojis = 🏛️🐉', (row.achvEmojis || []).join('') === '🏛️🐉',
     JSON.stringify(row.achvEmojis));
   check('全局成就不发结晶', Object.values(p.shards || {}).every((v) => !v));
+
+  // ---- 弹窗用的 unlocked 清单 ----
+  const u = payload.unlocked;
+  check('unlocked 是数组', Array.isArray(u) && u.length === 2, String(u && u.length));
+  const gDragon = u.find((x) => x.id === 'dragon_rush');
+  check('unlocked 带 tone=dragon（短线擒龙用橙红）', gDragon?.tone === 'dragon', JSON.stringify(gDragon));
+  check('unlocked 带 kind=global', gDragon?.kind === 'global');
+  check('unlocked 带 emoji', gDragon?.emoji === '🐉', gDragon?.emoji);
+  check('unlocked 带 at（去重用）', typeof gDragon?.at === 'number', String(gDragon?.at));
   check('成就点 +40/条', p.achvPoints === 80, String(p.achvPoints));
+}
+
+// ---------------------------------------------------------------- 8.5
+log('');
+log('=== 8.5 弹窗清单：主题成就也带 tone，未解锁的不出现 ===');
+{
+  const db = newDb();
+  const p = mkPlayer(db, 'win');
+  grantAchv(db, p, 'hermit_lone');          // 只解一条主题成就
+  bumpGlobal(db, p, 'dragonNextTick', 1);   // 只解短线擒龙
+  const u = achvPayload(db, p).unlocked;
+  const themeOne = u.find((x) => x.id === 'hermit_lone');
+  check('主题成就在 unlocked 里', !!themeOne, JSON.stringify(u.map((x) => x.id)));
+  check('主题成就 tone=theme', themeOne?.tone === 'theme', themeOne?.tone);
+  check('主题成就 kind=theme', themeOne?.kind === 'theme');
+  check('每条都有 at', u.every((x) => typeof x.at === 'number'));
+  check('未解锁的不出现（价值投资）', !u.some((x) => x.id === 'value_invest'));
 }
 
 // ---------------------------------------------------------------- 9
 log('');
 log('=== 9 幂等：重复结算不会重复加成就点 ===');
+
 {
   const db = newDb();
   const p = mkPlayer(db, 'idem');
