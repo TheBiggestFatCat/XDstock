@@ -240,10 +240,31 @@ export function cancelOrder(db, player, orderId, reason = '手动撤单') {
   if (order.reserve > 0) {
     player.cash = num(player.cash, 0) + order.reserve;
   }
-  // 自动止盈止损单被撤掉后，持仓不再是「平仓中」
+  // 自动止盈止损单被撤掉：持仓不再是「平仓中」，并且**把条件重新武装**。
+  // 不重新武装的话，一次超时 / 手动撤单 / 连续成交失败就会让这条止盈止损永久失效。
   if (order.auto) {
     const pos = player.positions?.[order.code];
-    if (pos) pos.closing = null;
+    if (pos && pos.side === order.side && Array.isArray(pos.tpsl)) {
+      pos.closing = null;
+      const ids = Array.isArray(order.tpslIds) ? order.tpslIds : [];
+      // 已经成交掉多少（部分成交后撤单的情况）
+      const done = Math.max(0, num(order.tpslOrigQty, order.qty) - num(order.qty, 0));
+      for (const id of ids) {
+        const cond = pos.tpsl.find((x) => x.id === id);
+        if (!cond) continue;
+        cond.fired = false;
+        // 预设数量的话，把已经平掉的部分扣掉，避免重复多平
+        if (Number(cond.qty) > 0 && done > 0) {
+          cond.qty = Math.max(1, Math.floor(Number(cond.qty) - done));
+        }
+      }
+      const firstTp = pos.tpsl.find((x) => x.kind === 'tp' && !x.fired);
+      const firstSl = pos.tpsl.find((x) => x.kind === 'sl' && !x.fired);
+      pos.tp = firstTp ? firstTp.price : null;
+      pos.sl = firstSl ? firstSl.price : null;
+    } else if (pos) {
+      pos.closing = null;
+    }
   }
   return { ok: true, order, reason };
 }

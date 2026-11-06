@@ -670,8 +670,30 @@ export function checkPositions(db) {
         createdTick: db.tick,
         // 风控单给双倍时长，而且 expireTick 必须和撮合里的实际口径一致
         expireTick: db.tick + ttl * 2,
-        auto: hit            // tp / sl，撮合时按「必须成交」处理
+        auto: hit,           // tp / sl，撮合时按「必须成交」处理
+        // 记住「这张单是谁触发的」：万一它被撤掉（超时 / 手动撤 / 成交失败），
+        // cancelOrder 要把这些条件重新武装，否则止盈止损会被永久吃掉
+        tpslIds: hits.map((h) => h.id),
+        tpslOrigQty: orderQty
       });
+
+      // 风控单一旦触发，这只票**还没成交完的开仓单必须撤掉**：
+      // 否则它会继续把仓位加上去，而止盈止损只按触发那一刻的数量平，
+      // 结果是「止损成交了、仓位反而更大、而且再也没有止损保护」。
+      {
+        const opens = (player.orders || []).filter(
+          (o) => o && o.code === code && o.action === 'open'
+        );
+        for (const o of opens) {
+          const i = player.orders.indexOf(o);
+          if (i >= 0) player.orders.splice(i, 1);
+          if (Number(o.reserve) > 0) player.cash += Number(o.reserve);
+          results.push({
+            playerId: player.id, ok: true, code, side: o.side, qty: 0,
+            canceledOpen: true, reason: '止盈止损触发，撤销未成交的开仓单'
+          });
+        }
+      }
 
       // 止盈止损已转化成挂单，持仓上的条件清掉，避免重复触发
       for (const h of hits) h.fired = true;

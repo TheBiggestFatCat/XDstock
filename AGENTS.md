@@ -25,6 +25,7 @@ node tests/imports.mjs               # 静态体检：跨模块「用了但没 i
 node tests/global-achievements.mjs   # 全局成就 价值投资/短线擒龙（改成就必跑，53 条）
 node tests/gold-stock.mjs            # 矿工银行 MB 金价驱动 + 退市清理（改新股必跑，58 条）
 node tests/kfc-stock.mjs             # 肯德基 反向跟随 + 疯狂星期四（改新股必跑，48 条）
+node tests/tpsl.mjs                  # 止盈止损全流程（改平仓/委托必跑，75 条）
 ```
 
 ## 铁律

@@ -138,7 +138,12 @@ log('=== 4 新模型：零期望随机偏移，没有「体质」也没有中枢
   const mean = growths.reduce((a, b) => a + b, 0) / growths.length;
   const sorted = [...growths].sort((a, b) => a - b);
   const median = sorted[Math.floor(sorted.length / 2)];
-  check('4000 期平均增速 ≈ 0（原地踏步）', Math.abs(mean) < 0.006, (mean * 100).toFixed(3) + '%');
+  // 对数空间零均值 → 算术期望是 e^(σ²/2)−1（σ 越大这个「凸性项」越明显），
+  // 小盘票 σ 顶到 10% 时理论均值约 +0.5%/期，这是对数正态的固有性质
+  const sigma = Math.min(0.1, Math.max(0.01, 0.05 * Math.sqrt(1e11 / (10 * 1e8))));
+  const theory = Math.exp((sigma * sigma) / 2) - 1;
+  check('4000 期平均增速 = 对数正态的理论值（原地踏步）',
+    Math.abs(mean - theory) < 0.004, `${(mean * 100).toFixed(3)}% vs 理论 ${(theory * 100).toFixed(3)}%`);
   check('中位数也 ≈ 0', Math.abs(median) < 0.01, (median * 100).toFixed(2) + '%');
   check('正负各一半（没有方向偏好）',
     Math.abs(growths.filter((g) => g > 0).length / growths.length - 0.5) < 0.03,
