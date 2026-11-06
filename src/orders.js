@@ -260,6 +260,12 @@ function removeOrder(player, order) {
  *   基础 maxFillNotionalPerTick
  *   + 商城「交易专属通道」等级 × shopChannelStep
  *   + 账号等级 × levelFillBonus（每个等级 +100 万，Lv.1 就有一份）
+ *   + **只要买过通道**（channelLevel ≥ 1）：账号等级 × levelChannelBonus（默认 +10 万/级）
+ *
+ * 最后一条是 2026-11 加强的「通道随等级成长」：买过通道的人等级越高这条越大，
+ * 没买通道的不吃这条（它挂在通道上，不是白送的等级加成）。
+ * 这里每次都按玩家当前的 level / channelLevel 现算，所以老玩家升级后**下一轮就生效**，
+ * 不需要迁移或重置任何数据。
  */
 export function fillCapFor(db, player) {
   const cfg = (db && db.config) || {};
@@ -268,7 +274,9 @@ export function fillCapFor(db, player) {
   const chStep = Math.max(0, num(cfg.shopChannelStep, 100000));
   const lv = Math.max(1, Math.floor(num(player && player.level, 1)));
   const lvBonus = Math.max(0, num(cfg.levelFillBonus, 1000000));
-  return base + chLevel * chStep + lv * lvBonus;
+  const lvChannel = Math.max(0, num(cfg.levelChannelBonus, 100000));
+  const channelLevelBonus = chLevel > 0 ? lv * lvChannel : 0;
+  return base + chLevel * chStep + lv * lvBonus + channelLevelBonus;
 }
 
 /**

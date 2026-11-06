@@ -1923,6 +1923,8 @@ function renderShop() {
   const chStep = Math.max(0, Number(cfg.shopChannelStep ?? 100000));
   const baseCap = Math.max(1, Number(cfg.maxFillNotionalPerTick ?? 300000));
   const lvBonus = Math.max(0, Number(cfg.levelFillBonus ?? 1000000));
+  // 买过通道的玩家：账号等级再额外 +N 万（2026-11 加强）
+  const lvChannelBonus = Math.max(0, Number(cfg.levelChannelBonus ?? 100000));
   const meNow = state.market?.me || {};
   const chLevel = Math.max(0, Number(meNow.channelLevel || 0));
   const myLv = Math.max(1, Math.floor(Number(meNow.level) || 1));
@@ -1932,6 +1934,7 @@ function renderShop() {
   const capNext = capNow + chStep;
   const channelPart = chStep * chLevel;
   const levelPart = lvBonus * myLv;
+  const channelLevelPart = chLevel > 0 ? lvChannelBonus * myLv : 0;
 
   const setText = (sel, text, cls) => {
     const el = $(sel);
@@ -1951,13 +1954,17 @@ function renderShop() {
   if (bd) {
     bd.innerHTML = `基础 ${money0(baseCap)}`
       + ` ＋ 等级 Lv.${myLv} × ${money0(lvBonus)}（${money0(levelPart)}）`
-      + ` ＋ 通道 ${chLevel} 级 × ${money0(chStep)}（${money0(channelPart)}）`;
+      + ` ＋ 通道 ${chLevel} 级 × ${money0(chStep)}（${money0(channelPart)}）`
+      + (chLevel > 0 && lvChannelBonus > 0
+        ? `<br />通道随等级成长：Lv.${myLv} × ${money0(lvChannelBonus)}（${money0(channelLevelPart)}）`
+        : '');
   }
 
   // 说明文案也跟着配置走
   const chWarn = $('#channelWarn');
   if (chWarn) {
     chWarn.innerHTML = `每购买一次，<b>单笔成交上限 +${money0(chStep)}</b>，永久有效。<br />`
+      + `买过通道后，<b>账号每升 1 级再 +${money0(lvChannelBonus)}</b> 单笔上限（你现在这条是 ${money0(channelLevelPart)}）。<br />`
       + `价格每级 ×${chRatio} 递增（首级 ${money0(chBase)}），买得越多越贵。`;
   }
 
@@ -5068,7 +5075,8 @@ async function loadAdmin() {
             ['levelBaseAsset', '升级门槛基数(1000万)'],
             ['levelGrowth', '每级门槛倍数(2=翻倍)'],
             ['levelUpRatio', '升级花费比例(0.6=60%)'],
-            ['levelFillBonus', '每级成交上限加成']
+            ['levelFillBonus', '每级成交上限加成'],
+            ['levelChannelBonus', '买过通道后：每级账号额外加成']
           ]
         },
         {
@@ -5122,6 +5130,7 @@ async function loadAdmin() {
             ['shopChannelBasePrice', '通道首价'],
             ['shopChannelRatio', '通道涨价倍率'],
             ['shopChannelStep', '通道每级加成'],
+            ['levelChannelBonus', '通道随等级成长(每级账号)'],
             ['shopAutoDcaPrice', '自动定投售价'],
             ['shopAutoDcaPremium', '定投挂单溢价(0.03=+3%)']
           ]

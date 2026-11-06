@@ -337,7 +337,40 @@ log('=== 16 账号等级提供额外的单笔成交上限 ===');
   check('Lv.1 = 基础 + 1×100万', fillCapFor(db, a) === base + bonus, `${fillCapFor(db, a)}`);
   check('Lv.3 = 基础 + 3×100万', fillCapFor(db, b) === base + 3 * bonus, `${fillCapFor(db, b)}`);
   b.channelLevel = 2;
-  check('商城通道与等级加成叠加', fillCapFor(db, b) === base + 3 * bonus + 2 * step, `${fillCapFor(db, b)}`);
+  const lvChannel = Number(db.config.levelChannelBonus);
+  check('商城通道与等级加成叠加（含通道随等级成长）',
+    fillCapFor(db, b) === base + 3 * bonus + 2 * step + 3 * lvChannel,
+    `${fillCapFor(db, b)} vs ${base + 3 * bonus + 2 * step + 3 * lvChannel}`);
+
+  // ---- 通道随等级成长（2026-11 加强）----
+  const noCh = mkPlayer(db, 'no-ch', 1e7);
+  noCh.level = 3;
+  check('没买通道 → 不吃这条加成', fillCapFor(db, noCh) === base + 3 * bonus,
+    `${fillCapFor(db, noCh)}`);
+  const oneCh = mkPlayer(db, 'one-ch', 1e7);
+  oneCh.level = 3;
+  oneCh.channelLevel = 1;
+  check('买过 1 级通道 → Lv.3 额外 +3×10万',
+    fillCapFor(db, oneCh) === base + 3 * bonus + step + 3 * lvChannel,
+    `${fillCapFor(db, oneCh)}`);
+  const lv1Ch = mkPlayer(db, 'lv1-ch', 1e7);
+  lv1Ch.level = 1;
+  lv1Ch.channelLevel = 1;
+  check('Lv.1 买过通道 → 额外 +1×10万',
+    fillCapFor(db, lv1Ch) === base + bonus + step + lvChannel, `${fillCapFor(db, lv1Ch)}`);
+  check('等级差多少，这条就差多少（Lv.3 − Lv.1 = 2×10万）',
+    (fillCapFor(db, oneCh) - fillCapFor(db, lv1Ch)) === 2 * lvChannel + 2 * bonus,
+    `${fillCapFor(db, oneCh) - fillCapFor(db, lv1Ch)}`);
+
+  // 关掉这条加成时，公式退回老样子（后台可调 0）
+  const off = newDb({ levelChannelBonus: 0 });
+  const offP = mkPlayer(off, 'off', 1e7);
+  offP.level = 3;
+  offP.channelLevel = 1;
+  check('把 levelChannelBonus 调成 0 → 退回旧公式',
+    fillCapFor(off, offP) === Number(off.config.maxFillNotionalPerTick)
+      + 3 * Number(off.config.levelFillBonus) + Number(off.config.shopChannelStep),
+    `${fillCapFor(off, offP)}`);
 
   // 实际撮合：同一张 30000 股的单，等级越高一轮吃得越多
   const mk = (name, level, patch) => {
