@@ -22,6 +22,7 @@ node tests/theme-split.mjs           # 主题=外观+技能（改商城必跑，
 node tests/shop-gate.mjs             # 商城等级门槛（改商城必跑，30 条断言）
 node tests/theme-evolution.mjs       # 主题成就 + 主题进化（改成就/技能必跑，69 条断言）
 node tests/imports.mjs               # 静态体检：跨模块「用了但没 import」（改 server/api 必跑，17 条）
+node tests/global-achievements.mjs   # 全局成就 价值投资/短线擒龙（改成就必跑，36 条）
 ```
 
 ## 铁律
@@ -78,7 +79,7 @@ src/engine.js      stepMarket 主循环（顺序敏感：噪声→新闻→漂�
 src/trading.js     开平仓、保证金、爆仓、资金冲击、止盈止损触发
 src/orders.js      限价单、撮合队列（风控单优先 → 价格优先；每玩家每票每方向限额）
 src/theme.js       夜行者时间窗 / 偷钱冷却（技能判定一律读 player.skill）
-src/achievements.js 主题成就 16 条 + 结晶/进化（阈值全走 config）
+src/achievements.js 主题成就 16 条 + 全局成就 2 条 + 结晶/进化（阈值全走 config）
 src/emoji.js       表情互动（按等级解锁、每轮只留最后一个、按票隔离）
 src/bars15.js      15 分钟 K 线单独打包（48 小时）
 src/notify.js      站内通知（止盈止损/强平/被偷）

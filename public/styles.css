@@ -3926,3 +3926,38 @@ body[data-theme="bear"] .brand-logo {
   .achv-points b { font-size: 22px; }
   .achv-emoji { font-size: 19px; }
 }
+
+/* ================= 全局成就（价值投资 / 短线擒龙） ================= */
+.achv-global-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 16px 0 9px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.achv-global-tip { font-size: 11px; font-weight: 400; color: var(--ink-3); }
+.achv-global-card {
+  border-color: #cbb6ff;
+  background: linear-gradient(180deg, rgba(160, 120, 255, .09), var(--card, #fff) 62%);
+}
+.achv-global-card.is-evolved {
+  border-color: #e6c169;
+  background: linear-gradient(180deg, rgba(255, 226, 150, .2), var(--card, #fff) 62%);
+}
+.achv-badge {
+  flex: none;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ink-3);
+  background: var(--soft-3);
+}
+.achv-badge.on { color: #fff; background: var(--accent); }
+@media (max-width: 760px) {
+  .achv-global-head { font-size: 12px; margin: 13px 0 8px; }
+}

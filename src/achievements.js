@@ -124,6 +124,71 @@ export const THEME_ACHIEVEMENTS = [
   }
 ];
 
+/**
+ * 全局成就（不绑主题、不产出结晶、不能进化）。
+ * 每条由若干「小任务」组成：默认**任一**小任务完成就算这条成就完成，
+ * 把 `db.config.achvGlobalRequireAll` 设成 1 就变成「所有小任务都要完成」。
+ * 完成后面板会显示对应 emoji，排行榜名字旁边也会挂上。
+ */
+export const GLOBAL_ACHIEVEMENTS = [
+  {
+    id: 'value_invest',
+    name: '价值投资',
+    emoji: '🏛️',
+    tier: 'global',
+    desc: '在价格远离价值时下注，等它自己走回来',
+    tasks: [
+      {
+        id: 'value_cross',
+        name: '价值回归',
+        desc: '价格偏离价值线 ≥30% 时单笔建仓 ≥500 万，等价格穿到价值线另一头再平仓',
+        counter: 'valueCrossClose',
+        targetKey: 'achvValueCrossTarget'
+      },
+      {
+        id: 'value_hold',
+        name: '长线价值',
+        desc: '单笔建仓 >500 万，持有 >24 小时后平仓，这笔收益率 ≥100%',
+        counter: 'valueHoldProfit',
+        targetKey: 'achvValueHoldTarget'
+      }
+    ]
+  },
+  {
+    id: 'dragon_rush',
+    name: '短线擒龙',
+    emoji: '🐉',
+    tier: 'global',
+    desc: '快进快出，只吃最猛的那一段',
+    tasks: [
+      {
+        id: 'dragon_next',
+        name: '一击即走',
+        desc: '建仓 ≥100 万，下一轮就平掉，这笔收益率 ≥20%',
+        counter: 'dragonNextTick',
+        targetKey: 'achvDragonNextTarget'
+      },
+      {
+        id: 'dragon_fast',
+        name: '十分钟翻倍',
+        desc: '建仓 ≥100 万，10 分钟内平仓，这笔收益率 ≥100%',
+        counter: 'dragonFast100',
+        targetKey: 'achvDragonFastTarget'
+      }
+    ]
+  }
+];
+
+export const GLOBAL_BY_ID = Object.fromEntries(GLOBAL_ACHIEVEMENTS.map((a) => [a.id, a]));
+/** 全局成就的小任务：counter → [{ achv, task }] */
+export const GLOBAL_TASK_BY_COUNTER = (() => {
+  const map = {};
+  for (const a of GLOBAL_ACHIEVEMENTS) {
+    for (const t of a.tasks) (map[t.counter] ||= []).push({ achv: a, task: t });
+  }
+  return map;
+})();
+
 /** id → 定义 */
 export const ACHV_BY_ID = Object.fromEntries(THEME_ACHIEVEMENTS.map((a) => [a.id, a]));
 /** counter → 定义[]（判定时只查相关的几条，不遍历全表） */
@@ -135,11 +200,16 @@ export const ACHV_BY_COUNTER = (() => {
   return map;
 })();
 
-/** 计数器默认值（迁移时补） */
+/** 计数器默认值（迁移时补）：主题成就 + 全局成就的小任务 */
 export function defaultCounters() {
   const out = {};
   for (const a of THEME_ACHIEVEMENTS) {
     if (out[a.counter] === undefined) out[a.counter] = 0;
+  }
+  for (const g of GLOBAL_ACHIEVEMENTS) {
+    for (const t of g.tasks) {
+      if (out[t.counter] === undefined) out[t.counter] = 0;
+    }
   }
   return out;
 }
@@ -164,7 +234,23 @@ export function achvTarget(cfg, key) {
     achvMindProfitTarget: 10000000,
     achvNightBigSteal: 9500,
     achvNightStealTarget: 200,
-    achvShardPerEvolve: 2
+    achvShardPerEvolve: 2,
+    // ---- 全局成就：价值投资 ----
+    achvValueDeviation: 0.3,          // 偏离价值线多少算「远离」
+    achvValueOpenMin: 5000000,        // 单笔建仓门槛
+    achvValueHoldTicks: 17280,        // 持有 24 小时（1 轮 5 秒）
+    achvValueProfitPct: 100,          // 收益率（按保证金算）
+    achvValueCrossTarget: 1,
+    achvValueHoldTarget: 1,
+    // ---- 全局成就：短线擒龙 ----
+    achvShortOpenMin: 1000000,
+    achvShortNextPnlPct: 20,          // 下一轮就平仓要赚这么多
+    achvShortWindowTicks: 120,        // 10 分钟 = 120 轮
+    achvShortPnlPct: 100,
+    achvDragonNextTarget: 1,
+    achvDragonFastTarget: 1,
+    // 1 = 所有小任务都要完成才算达成（默认 0：任一即可）
+    achvGlobalRequireAll: 0
   };
   const v = Number((cfg || {})[key]);
   return Number.isFinite(v) && v > 0 ? v : (DEFAULTS[key] ?? 1);
@@ -243,8 +329,11 @@ export function unlockAchv(db, player, def) {
   if (player.achv[def.id]) return null;
   player.achv[def.id] = { at: Number(db?.tick) || 0, seen: false };
   player.achvPoints = (Number(player.achvPoints) || 0) + 40;
-  if (!player.shards || typeof player.shards !== 'object') player.shards = {};
-  player.shards[def.theme] = (Number(player.shards[def.theme]) || 0) + 1;
+  // 全局成就没有主题，不产结晶
+  if (def.theme) {
+    if (!player.shards || typeof player.shards !== 'object') player.shards = {};
+    player.shards[def.theme] = (Number(player.shards[def.theme]) || 0) + 1;
+  }
   return def;
 }
 
@@ -284,6 +373,60 @@ export function grantAchv(db, player, id) {
   return got ? [got] : [];
 }
 
+/** 一条全局成就的进度快照 */
+export function globalAchvProgress(db, player) {
+  const cfg = db?.config || {};
+  const requireAll = Number(cfg.achvGlobalRequireAll) === 1;
+  return GLOBAL_ACHIEVEMENTS.map((g) => {
+    const tasks = g.tasks.map((t) => {
+      const target = achvTarget(cfg, t.targetKey);
+      const progress = Math.max(0, Number(player?.achvCounters?.[t.counter]) || 0);
+      const done = progress + 1e-9 >= target;
+      return { id: t.id, name: t.name, desc: t.desc, counter: t.counter, progress, target, done };
+    });
+    const got = !!player?.achv?.[g.id];
+    const anyDone = tasks.some((t) => t.done);
+    const allDone = tasks.every((t) => t.done);
+    return {
+      id: g.id,
+      name: g.name,
+      emoji: g.emoji,
+      desc: g.desc,
+      got,
+      at: got ? Number(player.achv[g.id].at) || 0 : 0,
+      // 达成条件：任一小任务（默认）或全部小任务
+      shouldUnlock: requireAll ? allDone : anyDone,
+      tasks
+    };
+  });
+}
+
+/**
+ * 重新结算「全局成就」：只要小任务满足条件就解锁（幂等，可以随便调）。
+ * @returns 本次新解锁的成就数组
+ */
+export function refreshGlobals(db, player) {
+  if (!player) return [];
+  ensureAchvState(player);
+  const out = [];
+  for (const g of globalAchvProgress(db, player)) {
+    if (g.got || !g.shouldUnlock) continue;
+    const def = GLOBAL_BY_ID[g.id];
+    const got = unlockAchv(db, player, def);
+    if (got) out.push(got);
+  }
+  return out;
+}
+
+/** 全局成就的小任务计数 +1（然后立刻结算解锁） */
+export function bumpGlobal(db, player, counter, amount = 1) {
+  if (!player || !counter) return [];
+  if (!GLOBAL_TASK_BY_COUNTER[counter]) return [];
+  ensureAchvState(player);
+  player.achvCounters[counter] = (Number(player.achvCounters[counter]) || 0) + (Number(amount) || 0);
+  return refreshGlobals(db, player);
+}
+
 /**
  * 排行榜名字旁边显示的成就图标。
  * **一个主题的两条成就都达成才显示**（只解一条不算）。
@@ -298,8 +441,15 @@ export function themeEmojiList(player) {
     if (!allDone) continue;
     out.push(THEME_EMOJI[t]);
   }
+  // 全局成就：完成就挂图标（🏛️ 价值投资 / 🐉 短线擒龙）
+  for (const g of GLOBAL_ACHIEVEMENTS) {
+    if (player?.achv?.[g.id]) out.push(g.emoji);
+  }
   return out;
 }
+
+/** 语义更清楚的别名（排行榜 / panel 都用它） */
+export const achvEmojiList = themeEmojiList;
 
 /** 能否进化（两条全解 + 结晶够 + 还没进化） */
 export function canEvolve(db, player, theme) {
@@ -352,7 +502,17 @@ export function achvPayload(db, player) {
       }))
     };
   }
-  return { points: Number(me.achvPoints) || 0, themes, emojis: themeEmojiList(me) };
+  const global = globalAchvProgress(db, me).map((g) => ({
+    id: g.id, name: g.name, emoji: g.emoji, desc: g.desc, got: g.got, at: g.at,
+    requireAll: Number((db?.config || {}).achvGlobalRequireAll) === 1,
+    tasks: g.tasks
+  }));
+  return {
+    points: Number(me.achvPoints) || 0,
+    themes,
+    global,
+    emojis: themeEmojiList(me)
+  };
 }
 
 /** 大鳄的提前量：进化后从 20 轮变 30 轮（配置可调） */

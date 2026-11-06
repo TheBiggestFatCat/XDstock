@@ -1,7 +1,7 @@
 import { now } from './store.js';
 import {
-  bumpAchv, grantAchv, isEvolved, skillMult, achvTarget, ensureAchvState,
-  themeTier
+  bumpAchv, grantAchv, bumpGlobal, isEvolved, skillMult, achvTarget, ensureAchvState,
+  themeTier, refreshGlobals
 } from './achievements.js';
 import { isTycoonSector } from './fundamentals.js';
 
@@ -333,8 +333,30 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
     if (sl) exist.sl = num(sl);
   }
 
-  // ---- 主题成就判定（开仓侧）----
+  // ---- 全局成就：记录建仓时的「偏离价值线」与仓位规模 ----
   ensureAchvState(player);
+  {
+    const posG = player.positions[code];
+    if (posG) {
+      const fairNow = Number(st.fair) || 0;
+      // 正 = 价格高于价值线（高估），负 = 低于（低估）
+      const dev = fairNow > 0 ? price / fairNow - 1 : 0;
+      posG.openNotional = (Number(posG.openNotional) || 0) + notional;
+      posG.lastOpenNotional = notional;
+      const openMin = achvTarget(cfg, 'achvValueOpenMin');
+      const devMin = achvTarget(cfg, 'achvValueDeviation');
+      // 价值回归：单笔够大 + 偏离够远 → 记下方向，等回到价值线另一头
+      if (notional + 1e-9 >= openMin && Math.abs(dev) + 1e-9 >= devMin) {
+        posG.valueArm = { devSign: dev > 0 ? 1 : -1, at: db.tick, notional };
+      }
+      // 长线价值：单笔够大就记一笔，24 小时后看收益
+      if (notional + 1e-9 >= openMin) {
+        posG.valueHoldArm = { at: db.tick, notional };
+      }
+    }
+  }
+
+  // ---- 主题成就判定（开仓侧）----
   trackDarkAccum(db, player, code, side, notional);
   armDarkPush(db, player, code, side);
   trackHermitFollow(db, player, code);
@@ -421,8 +443,46 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
 
   player.cash += back;
 
-  // ================= 主题成就判定（平仓侧）=================
+  // ================= 全局成就判定（平仓侧）=================
   ensureAchvState(player);
+  {
+    const cfgG = db.config || {};
+    const pnlPct = Number(pos.margin) > 0 ? (pnl / Number(pos.margin)) * 100 : 0;
+    const heldTicks = Math.max(0, Number(db.tick) - Number(pos.openedTick ?? db.tick));
+    const fairNow = Number(st.fair) || 0;
+    const devNow = fairNow > 0 ? price / fairNow - 1 : 0;
+
+    // 🏛️ 价值回归：建仓时偏离 ≥30%，现在价格已经穿到价值线的另一头
+    if (pos.valueArm) {
+      const crossed = pos.valueArm.devSign > 0 ? devNow < 0 : devNow > 0;
+      if (crossed) bumpGlobal(db, player, 'valueCrossClose', 1);
+    }
+    // 🏛️ 长线价值：单笔 >500 万、持有 >24 小时、这笔收益率 ≥100%
+    if (pos.valueHoldArm) {
+      const needTicks = achvTarget(cfgG, 'achvValueHoldTicks');
+      const needPct = achvTarget(cfgG, 'achvValueProfitPct');
+      if (heldTicks + 1e-9 >= needTicks && pnlPct + 1e-9 >= needPct) {
+        bumpGlobal(db, player, 'valueHoldProfit', 1);
+      }
+    }
+    // 🐉 短线擒龙：两档都看「建仓规模 + 持有轮数 + 这笔收益率」
+    const shortMin = achvTarget(cfgG, 'achvShortOpenMin');
+    const openNotional = Number(pos.openNotional) || 0;
+    if (openNotional + 1e-9 >= shortMin) {
+      if (heldTicks <= 1 && pnlPct + 1e-9 >= achvTarget(cfgG, 'achvShortNextPnlPct')) {
+        bumpGlobal(db, player, 'dragonNextTick', 1);
+      }
+      // 注意别写成 `heldTicks + 1e-9 <= win`：刚好等于窗口时会因为加了 eps 反而判为超窗
+      if (heldTicks <= achvTarget(cfgG, 'achvShortWindowTicks') + 1e-9
+        && pnlPct + 1e-9 >= achvTarget(cfgG, 'achvShortPnlPct')) {
+        bumpGlobal(db, player, 'dragonFast100', 1);
+      }
+    }
+    // 兜底：每次平仓都结算一次（管理员改阈值后也能补上）
+    refreshGlobals(db, player);
+  }
+
+  // ================= 主题成就判定（平仓侧）=================
   const cfgA = db.config || {};
 
   // 🕶️ 黑手：暗黑大手累计够了 → 换别的技能在这只票平仓

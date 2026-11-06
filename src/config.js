@@ -137,6 +137,24 @@ export const DEFAULT_CONFIG = {
   achvNightBigSteal: 9500,         // 单次偷钱金额
   achvNightStealTarget: 200,       // 夜里偷钱成功次数
 
+  // ===== 全局成就：价值投资（不绑主题，不产结晶，完成后上排行榜）=====
+  achvValueDeviation: 0.3,         // 价格偏离价值线多少算「远离」（0.3 = 30%）
+  achvValueOpenMin: 5000000,       // 单笔建仓门槛（500 万）
+  achvValueHoldTicks: 17280,       // 长线要求持有轮数（24 小时 = 17280 轮）
+  achvValueProfitPct: 100,         // 长线要求的收益率（按保证金算，100 = 100%）
+  achvValueCrossTarget: 1,         // 价值回归任务次数
+  achvValueHoldTarget: 1,          // 长线价值任务次数
+
+  // ===== 全局成就：短线擒龙 =====
+  achvShortOpenMin: 1000000,       // 单笔建仓门槛（100 万）
+  achvShortNextPnlPct: 20,         // 「下一轮就平仓」的收益率门槛
+  achvShortWindowTicks: 120,       // 短线窗口（10 分钟 = 120 轮）
+  achvShortPnlPct: 100,            // 窗口内平仓的收益率门槛
+  achvDragonNextTarget: 1,
+  achvDragonFastTarget: 1,
+  // 1 = 所有小任务都要完成才算达成；0（默认）= 任一完成即可
+  achvGlobalRequireAll: 0,
+
   // ---- 进化后的技能数值（Lv2 才生效）----
   themeEvolveSkillMult: 1.5,       // 红牛/绿熊返现倍率（1.0 → 1.5）
   themeEvolveImpact: 1.08,         // 暗黑大手冲击倍率（1.05 → 1.08）

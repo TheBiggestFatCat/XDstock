@@ -738,6 +738,53 @@ function renderAchvPage() {
   wrap.querySelectorAll('[data-evolve]').forEach((b) => {
     b.addEventListener('click', () => evolveTheme(b.dataset.evolve, b));
   });
+
+  renderGlobalAchv(achv);
+}
+
+/**
+ * 「全局成就」区块：价值投资 / 短线擒龙。
+ * 每条成就有若干小任务；默认任一完成就算达成（配置 achvGlobalRequireAll=1 时要求全完成）。
+ */
+function renderGlobalAchv(achv) {
+  const wrap = $('#achvGlobalList');
+  if (!wrap) return;
+  const list = Array.isArray(achv?.global) ? achv.global : [];
+  if (!list.length) {
+    wrap.innerHTML = '<p class="field-hint">全局成就加载中…</p>';
+    return;
+  }
+  wrap.innerHTML = list.map((g) => {
+    const tasks = (g.tasks || []).map((t) => {
+      const target = Math.max(1, Number(t.target) || 1);
+      const cur = Math.max(0, Number(t.progress) || 0);
+      const pct = Math.min(100, (cur / target) * 100);
+      return `
+        <div class="achv-item ${t.done ? 'got' : ''}">
+          <div class="achv-item-head">
+            <span class="achv-mark">${t.done ? '✅' : '🔒'}</span>
+            <span class="achv-name">${escapeHtml(t.name)}</span>
+            <span class="achv-num">${t.done ? '已完成' : `${Math.min(cur, target).toFixed(0)} / ${target}`}</span>
+          </div>
+          <div class="achv-bar"><i style="width:${t.done ? 100 : pct}%"></i></div>
+          <p class="achv-desc">${escapeHtml(t.desc || '')}</p>
+        </div>`;
+    }).join('');
+    const doneCount = (g.tasks || []).filter((t) => t.done).length;
+    return `
+      <section class="achv-card achv-global-card ${g.got ? 'is-evolved' : ''}">
+        <header class="achv-card-head">
+          <span class="achv-emoji">${g.emoji}</span>
+          <div class="achv-title">
+            <h3>${escapeHtml(g.name)}</h3>
+            <span class="achv-sub">小任务 <b>${doneCount}/${(g.tasks || []).length}</b> · ${g.got ? '<b style="color:#0a9">已达成</b>' : (g.requireAll ? '需全部完成' : '任一完成即可')}</span>
+          </div>
+          <span class="achv-badge ${g.got ? 'on' : ''}">${g.got ? '✓' : '·'}</span>
+        </header>
+        <div class="achv-items">${tasks}</div>
+        <p class="achv-desc" style="margin-top:8px">${escapeHtml(g.desc || '')}</p>
+      </section>`;
+  }).join('');
 }
 
 /** 情绪读心：一条双向情绪条（中线 0，左绿=看空，右红=看多），不显示任何文字 */
@@ -4984,6 +5031,31 @@ async function loadAdmin() {
           fields: [
             ['achvNightBigSteal', '很会偷：单次金额门槛'],
             ['achvNightStealTarget', '趁人不备：夜里得手次数']
+          ]
+        },
+        {
+          title: '🌍 全局成就：价值投资',
+          desc: '远离价值线建仓，等它回归；或者长线拿住',
+          fields: [
+            ['achvValueDeviation', '偏离价值线门槛(0.3=30%)'],
+            ['achvValueOpenMin', '单笔建仓门槛'],
+            ['achvValueCrossTarget', '价值回归任务次数'],
+            ['achvValueHoldTicks', '长线持有轮数(17280=24h)'],
+            ['achvValueProfitPct', '长线收益率门槛(%)'],
+            ['achvValueHoldTarget', '长线价值任务次数']
+          ]
+        },
+        {
+          title: '🐉 全局成就：短线擒龙',
+          desc: '快进快出，只吃最猛的一段',
+          fields: [
+            ['achvShortOpenMin', '单笔建仓门槛'],
+            ['achvShortNextPnlPct', '下一轮平仓收益率门槛(%)'],
+            ['achvShortWindowTicks', '短线窗口轮数(120=10分钟)'],
+            ['achvShortPnlPct', '窗口内收益率门槛(%)'],
+            ['achvDragonNextTarget', '一击即走任务次数'],
+            ['achvDragonFastTarget', '十分钟翻倍任务次数'],
+            ['achvGlobalRequireAll', '全部小任务才算达成(1=是)']
           ]
         },
         {

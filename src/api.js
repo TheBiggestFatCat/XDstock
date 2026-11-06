@@ -14,7 +14,7 @@ import { placeLimitOrder, cancelOrder, orderLimitBlocked, consumeOrderSlot, fill
 import { reportPayload, dividendPerShare, dividendPayout, tycoonPreviewPayload, previewInTicks, isTycoonSector } from './fundamentals.js';
 import {
   THEMES as ACHV_THEMES, THEME_EMOJI, THEME_ACHIEVEMENTS, achvPayload, ensureAchvState,
-  themeEmojiList, themeTier, isEvolved, evolveTheme, canEvolve, bumpAchv,
+  themeEmojiList, themeTier, isEvolved, evolveTheme, canEvolve, bumpAchv, achvEmojiList,
   tycoonLeadTicks
 } from './achievements.js';
 
@@ -288,7 +288,7 @@ export function leaderboardRows(db) {
         avatar: p.avatar || null,
         cash: p.cash,
         // 名字旁边显示的成就徽章（🐂 / 🐊✦ …）
-        achvEmojis: themeEmojiList(p),
+        achvEmojis: achvEmojiList(p),
         fuzzed: !!blur,
         // equity = 交易资产（现金 + 持仓 + 冻结），偷钱上限仍按这个算
         equity: blur ? fuzz(equity) : equity,
@@ -657,6 +657,20 @@ function marketPayload(db, me) {
       investigateCooldownEvolved: db.config.investigateCooldownEvolved ?? 20,
       themeEvolveBearMarginCut: db.config.themeEvolveBearMarginCut ?? 0.2,
       themeEvolveFeeFreeRed: db.config.themeEvolveFeeFreeRed ?? 1,
+      // ---- 全局成就 ----
+      achvValueDeviation: db.config.achvValueDeviation ?? 0.3,
+      achvValueOpenMin: db.config.achvValueOpenMin ?? 5000000,
+      achvValueHoldTicks: db.config.achvValueHoldTicks ?? 17280,
+      achvValueProfitPct: db.config.achvValueProfitPct ?? 100,
+      achvValueCrossTarget: db.config.achvValueCrossTarget ?? 1,
+      achvValueHoldTarget: db.config.achvValueHoldTarget ?? 1,
+      achvShortOpenMin: db.config.achvShortOpenMin ?? 1000000,
+      achvShortNextPnlPct: db.config.achvShortNextPnlPct ?? 20,
+      achvShortWindowTicks: db.config.achvShortWindowTicks ?? 120,
+      achvShortPnlPct: db.config.achvShortPnlPct ?? 100,
+      achvDragonNextTarget: db.config.achvDragonNextTarget ?? 1,
+      achvDragonFastTarget: db.config.achvDragonFastTarget ?? 1,
+      achvGlobalRequireAll: db.config.achvGlobalRequireAll ?? 0,
       // 表情互动的目录（前端拼 /assets/<dir>/<file>）
       emojiDirs: { 1: 'emo_lv1' },
       // 道具/其他的等级门槛：前端照这个渲染「Lv.N 解锁」，服务端照这个拦
@@ -1212,6 +1226,10 @@ export async function handleApi(ctx) {
       'achvProbeWeakTarget', 'achvProbeWindowTicks', 'achvProbeTarget',
       'achvMindReadTarget', 'achvMindExtreme', 'achvMindProfitTarget',
       'achvNightBigSteal', 'achvNightStealTarget',
+      'achvValueDeviation', 'achvValueOpenMin', 'achvValueHoldTicks', 'achvValueProfitPct',
+      'achvValueCrossTarget', 'achvValueHoldTarget',
+      'achvShortOpenMin', 'achvShortNextPnlPct', 'achvShortWindowTicks', 'achvShortPnlPct',
+      'achvDragonNextTarget', 'achvDragonFastTarget', 'achvGlobalRequireAll',
       'themeEvolveSkillMult', 'themeEvolveImpact', 'themeEvolveImpactRefund',
       'tycoonLeadTicks', 'tycoonLeadTicksEvolved',
       'hermitHideChance', 'hermitHideChanceEvolved',
