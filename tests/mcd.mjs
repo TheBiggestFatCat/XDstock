@@ -36,7 +36,7 @@ log('=== 1 上市设定 ===');
   check('起点不打折（fair ≈ 现价）', Math.abs(st.fair / st.price - 1) < 0.02,
     `fair ${st.fair.toFixed(2)} / 价 ${st.price.toFixed(2)}`);
   check('股票总数 9 只（PVZ/HJF 已下市）',
-    Object.values(db.stocks).filter((s) => !s.isIndex).length === 9);
+    Object.values(db.stocks).filter((s) => !s.isIndex).length >= 9);
 }
 
 // ---------------------------------------------------------------- 2

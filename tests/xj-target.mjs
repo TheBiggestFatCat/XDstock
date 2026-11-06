@@ -50,9 +50,10 @@ log('=== 1 配置：XJ 有市值目标，别的票没有 ===');
   check('XJ 有收敛速度', xj.capTargetRate === 0.06, String(xj.capTargetRate));
   check('XJ 总股本 20 亿股', xj.shares === 2000000000);
   // 矿工银行（MB）也有市值目标（1000 亿 → 3000 亿），这里只检查除 XJ / MB 之外的票
-  const others = Object.entries(db.stocks).filter(([c, s]) => !s.isIndex && c !== 'XJ' && c !== 'MB');
+  const others = Object.entries(db.stocks).filter(([c, s]) => !s.isIndex && !['XJ', 'MB', 'KFC'].includes(c));
   check('其他票都没有 capTarget', others.every(([, s]) => !s.capTarget));
   check('MB 的市值目标是 3000 亿', db.stocks.MB.capTarget === 3e11, String(db.stocks.MB.capTarget));
+  check('KFC 的市值目标是 1000 亿', db.stocks.KFC.capTarget === 1e11, String(db.stocks.KFC.capTarget));
 }
 
 // ---------------------------------------------------------------- 2

@@ -24,6 +24,7 @@ node tests/theme-evolution.mjs       # 主题成就 + 主题进化（改成就/�
 node tests/imports.mjs               # 静态体检：跨模块「用了但没 import」（改 server/api 必跑，17 条）
 node tests/global-achievements.mjs   # 全局成就 价值投资/短线擒龙（改成就必跑，53 条）
 node tests/gold-stock.mjs            # 矿工银行 MB 金价驱动 + 退市清理（改新股必跑，58 条）
+node tests/kfc-stock.mjs             # 肯德基 反向跟随 + 疯狂星期四（改新股必跑，48 条）
 ```
 
 ## 铁律
@@ -88,6 +89,7 @@ src/steal.js       偷钱金额（上限按对方现金）
 src/api.js         全部 REST + payload 组装 + 管理接口
 src/fundamentals.js 财报生成、估值 fair、预览
 src/gold.js        金价（MB 的财报驱动源）
+src/kfc.js         肯德基：反向跟随麦当劳 + 疯狂星期四
 src/store.js       db 加载/保存/migrate
 public/app.js      前端全部逻辑（~3500 行单文件）
 public/index.html  单页结构（视图 div）
@@ -103,6 +105,7 @@ public/styles.css  全部样式（主题变量 + 移动端媒体查询）
 - 指数：DENG（9 成分）、DENGS（市值最小的 7 只）
 - 金价：基准 2400，每轮波动 0.12%；MB 财报 = 目标增速 + 金价涨跌 ×2.2 ±3%
 - MB 市值：1000 亿起步（10 亿股 × 100），目标是 3000 亿（capTargetRate 0.08/期）
+- KFC 市值：800 亿起步（8 亿股 × 100），目标是 1000 亿；每轮反向跟随 MCD 上一轮涨跌幅；周四 11~13 点随机一轮 +50%
 
 ## 提交信息
 

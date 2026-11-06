@@ -5,6 +5,8 @@ export { TYCOON_LEAD_TICKS };
 import { genMarketTrades } from './marketTrades.js';
 import { logTrade } from './trading.js';
 import { maskSentiment } from './mind.js';
+import { kfcRallyStep, kfcRallyInfo } from './kfc.js';
+
 import { stepGold, goldReturnSinceReport, ensureGold } from './gold.js';
 import { now } from './store.js';
 
@@ -307,6 +309,16 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
     logRet += evImpact * (cfg.eventImpactScale ?? 1) * (t.eventMult ?? 1);
   }
 
+  // 反向跟随（肯德基）：读上一轮麦当劳的涨跌幅，叠加一个反向的加成
+  if (t.id === 'mirror') {
+    const src = String(t.mirrorCode || 'MCD');
+    const coef = Number.isFinite(Number(t.mirrorCoef)) ? Number(t.mirrorCoef) : 1;
+    const prevRet = Number(db?.prevReturns?.[src]) || 0;
+    // 限制一下，别让一次暴动把它甩飞
+    logRet += -Math.max(-0.2, Math.min(0.2, prevRet)) * coef;
+    st.kfcMirrorFrom = { code: src, ret: prevRet, coef };
+  }
+
   // 券商：全市场成交活跃度
   if (t.id === 'broker' && brokerDrift) logRet += brokerDrift;
 
@@ -450,6 +462,30 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
     p *= 1 + boost;
   }
 
+  // 疯狂星期四（肯德基）：周四 11:00~13:00 里随机某一轮 +50%
+  if (t.id === 'mirror') {
+    const nowMs = Date.now();
+    const tickMs = Math.max(1000, Number(cfg.tickMs) || 5000);
+    const step = kfcRallyStep(st, nowMs, tickMs, {
+      weekday: Number(t.rallyWeekday ?? 4),
+      from: Number(t.rallyFrom ?? 11),
+      to: Number(t.rallyTo ?? 13),
+      boost: Number(t.rallyBoost ?? 0.5)
+    });
+    if (step.fire) {
+      p *= 1 + step.boost;
+      if (db) {
+        pushNotice(db, `🍗 肯德基疯狂星期四：这一轮直接拉 ${(step.boost * 100).toFixed(0)}%`, 24);
+      }
+      console.log(`[KFC] 疯狂星期四触发：+${(step.boost * 100).toFixed(0)}%（tick ${db?.tick ?? "?"}）`);
+    }
+    st.kfcRallyInfo = kfcRallyInfo(st, nowMs, tickMs, {
+      weekday: Number(t.rallyWeekday ?? 4),
+      from: Number(t.rallyFrom ?? 11),
+      to: Number(t.rallyTo ?? 13)
+    });
+  }
+
   // 市值天花板：price × 总股本 不允许超过 capCeiling（如麦当劳 10000 亿）
   const capCeiling = Number(st.capCeiling) || 0;
   const sharesForCap = Number(st.shares) || 0;
@@ -467,6 +503,7 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
     else st.streak = 0;
   }
 
+  st.lastRet = prev > 0 ? p / prev - 1 : 0;
   st.price = p;
 
   // ST 判定：连续低于阈值就戴帽，回到阈值上方自动摘帽
@@ -603,6 +640,10 @@ export function stepMarket(db) {
       Math.min(cfg.brokerCap ?? 0.01, (cfg.brokerSensitivity ?? 0.02) * Math.log(ratio))
     );
   }
+
+  // 上一轮各票的涨跌幅快照（反向跟随类特性要用，避免遍历顺序影响结果）
+  db.prevReturns = {};
+  for (const st of stocks) db.prevReturns[st.code] = Number(st.lastRet) || 0;
 
   // 3. 每只票走一步
   for (const st of stocks) {

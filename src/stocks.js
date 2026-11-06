@@ -144,6 +144,34 @@ export const STOCK_SEED = {
       // （特性对外隐藏，玩家能看到的只有财报本身）
     }
   },
+  KFC: {
+    code: 'KFC',
+    name: '肯德基',
+    icon: '/assets/stocks/KFC.png',
+    industry: '消费娱乐',
+    shares: 800000000,   // 总股本 8 亿股 → 100 × 8 亿 = 800 亿
+    freeFloat: 0.45,
+    desc: '快餐连锁、炸鸡、疯狂星期四',
+    initialPrice: 100,
+    // 市值目标 1000 亿：上市时 800 亿，慢慢往 1000 亿靠
+    capTarget: 100000000000,
+    capTargetRate: 0.08,
+    trait: {
+      id: 'mirror',
+      name: '反向跟随',
+      desc: '盯着麦当劳的涨跌做反向对冲：麦当劳涨它就跌，麦当劳跌它就涨；每周四中午还有一轮暴拉',
+      volMult: 0.9,
+      revMult: 1.0,
+      // 反向加成的来源与倍数：logRet += -(对方这一轮涨跌幅) × 系数
+      mirrorCode: 'MCD',
+      mirrorCoef: 1,
+      // 疯狂星期四：周四 11:00~13:00 之间随机一轮固定 +50%
+      rallyWeekday: 4,
+      rallyFrom: 11,
+      rallyTo: 13,
+      rallyBoost: 0.5
+    }
+  },
   XD: {
     code: 'XD',
     name: '小灯证券',
