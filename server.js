@@ -231,7 +231,7 @@ function tickPayload(forPlayerId) {
     }
     // 情绪读心：只有这个主题能看到当前情绪
     if (isMind && !st.isIndex) {
-      stocks[code].sent = sentimentView(st, d);
+      stocks[code].sent = sentimentView(st, d, tp);
     }
   }
   let me = null;

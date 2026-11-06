@@ -95,6 +95,8 @@ export const DEFAULT_CONFIG = {
   mindThemePrice: 5000000,     // 「情绪读心」主题售价（Lv.2 商店）
   // 「情绪读心」看到假值的概率：0 = 永远准，0.5 = 一半是假的，1 = 全假
   mindFakeChance: 0.5,
+  // Ⅱ 阶（进化后）看到真值的概率：0.7 = 70% 准。进化只有这一条效果，没有别的
+  mindAccurateChanceEvolved: 0.7,
 
   // ---- 夜行者主题（Lv.2）----
   nightStartHour: 18,      // 现实时间几点开始算夜里（服务器本地时间）

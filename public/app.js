@@ -886,15 +886,7 @@ function renderMind() {
     + `<i class="mind-fill ${side}" style="${v >= 0 ? 'left:50%' : 'right:50%'};width:${width}%"></i>`
     + '<span class="mind-mid"></span>'
     + '</div>';
-  // 进化到 Ⅱ 阶：额外给「重掷倒计时 + 方向分量」（信息优势）
-  const tier = Number(state.market?.me?.achv?.themes?.mind?.tier) || 1;
-  if (tier >= 2) {
-    const rollIn = Math.max(0, Number(st.sent.rollIn) || 0);
-    const applyIn = Math.max(0, Number(st.sent.applyIn) || 0);
-    const drift = Number(st.sent.drift) || 0;
-    el.insertAdjacentHTML('beforeend',
-      `<div class="mind-extra">情绪 ${(v * 100).toFixed(0)}% · 重掷 ${rollIn} 轮 · 生效 ${applyIn} 轮 · 方向分量 ${(drift * 100).toFixed(0)}%</div>`);
-  }
+  // Ⅱ 阶只把「看到真值」的概率提到 70%，不再额外展示任何信息
 }
 
 /**
@@ -5290,6 +5282,7 @@ async function loadAdmin() {
             ['shopThemePrice', '主题售价'],
             ['mindThemePrice', '情绪读心售价'],
             ['mindFakeChance', '读心假值概率(0~1)'],
+          ['mindAccurateChanceEvolved', '读心 Ⅱ 阶准确率(0.7=70%)'],
             ['nightStartHour', '夜行者开始(点)'],
             ['nightEndHour', '夜行者结束(点)'],
             ['nightStealCooldown', '夜里偷钱CD(轮)'],

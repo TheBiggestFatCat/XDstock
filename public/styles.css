@@ -3737,14 +3737,6 @@ body[data-theme="bear"] .brand-logo {
   filter: drop-shadow(0 1px 0 rgba(0, 0, 0, .08));
 }
 
-/* 情绪读心 Ⅱ 阶的附加信息 */
-.mind-extra {
-  margin-top: 5px;
-  font-size: 10.5px;
-  color: var(--ink-3);
-  font-variant-numeric: tabular-nums;
-}
-
 .spy-evo { color: #7a4a00; font-weight: 700; }
 
 @media (max-width: 760px) {

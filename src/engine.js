@@ -4,6 +4,7 @@ import { TYCOON_LEAD_TICKS, isTycoonSector, genNextReport, fairFromReport, impac
 export { TYCOON_LEAD_TICKS };
 import { genMarketTrades } from './marketTrades.js';
 import { logTrade } from './trading.js';
+import { maskSentiment } from './mind.js';
 import { now } from './store.js';
 
 /** 公告最多留几条（超出就丢最老的） */
@@ -120,14 +121,16 @@ export function sentimentRollInterval(db, st) {
  * 「情绪读心」主题用的情绪视图：当前情绪、还有多久换方向、多久推一次、方向分量。
  * 注意：情绪是引擎内部状态，只有在 me.theme === 'mind' 时才下发。
  */
-export function sentimentView(st, db) {
+export function sentimentView(st, db, player) {
   const s = (st && st.sentiment) || {};
   const tick = Number(db && db.tick) || 0;
   const cfg = (db && db.config) || {};
   const t = (st && st.trait) || {};
+  // 看到的可能是假值：按这个玩家自己的准确率决定（见 src/mind.js）
+  const masked = maskSentiment(st, db, player);
   return {
-    // 看到的可能是假值（「情绪读心」的限制），没记录过就退回真值
-    v: Number(Number.isFinite(Number(s.viewV)) ? s.viewV : s.v) || 0,
+    v: Number(masked.v) || 0,
+    fake: !!masked.fake,
     rollIn: Math.max(0, (Number(s.nextRoll) || 0) - tick),
     applyIn: Math.max(0, (Number(s.nextApply) || 0) - tick),
     every: Math.max(1, Math.floor(Number(t.sentTicks ?? cfg.sentimentTicks ?? 12))),
@@ -183,19 +186,6 @@ export function rollSentimentV(hard = DEFAULT_SENT_EDGE) {
   const t = 1 - Math.abs(r);
   const mapped = 1 - Math.log(1 + k * t) / Math.log(1 + k);
   return (r < 0 ? -1 : 1) * Math.max(0, Math.min(1, mapped));
-}
-
-/**
- * 「情绪读心」看到的值：有 `chance` 概率给一个**假的**（按同一套公式重抽一个），
- * 否则给真值。假值一旦定了就撑到下一次重掷，不会每轮跳来跳去。
- *
- * 返回 { viewV, fake }，真正的价格推力永远用的是真的 `st.sentiment.v`。
- */
-export function rollMindView(realV, edge, chance) {
-  const p = Math.max(0, Math.min(1, Number(chance)));
-  if (!(p > 0)) return { viewV: realV, fake: false };
-  if (Math.random() >= p) return { viewV: realV, fake: false };
-  return { viewV: rollSentimentV(edge), fake: true };
 }
 
 /** 整点拉升的触发窗口（分钟）：只在整点后这么多分钟内触发，错过就跳过 */
@@ -394,12 +384,13 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
       // 每次重掷都重新抽一个周期，不再固定
       const rollEvery = sentimentRollInterval(db, st);
       const realV = rollSentimentV(edge);
-      // 「情绪读心」有概率看到假值：换一个同分布的值，撑到下一次重掷
-      const mind = rollMindView(realV, edge, Number(cfg.mindFakeChance ?? DEFAULT_MIND_FAKE));
+      // 「情绪读心」看到的假读数：每次重掷都抽一个同分布的备用值，
+      // 至于谁看到它，由每个玩家自己的准确率决定（src/mind.js）
+      const fakeV = rollSentimentV(edge);
       st.sentiment = {
         v: realV,
-        viewV: mind.viewV,
-        viewFake: mind.fake,
+        viewV: fakeV,
+        viewFake: false,
         nextRoll: db.tick + rollEvery,
         nextApply: db.tick,
         rollEvery,

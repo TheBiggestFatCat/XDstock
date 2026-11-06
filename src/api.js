@@ -476,7 +476,7 @@ function marketPayload(db, me) {
         ? tycoonPreviewPayload(st, db.tick, tycoonLeadTicks(db, me))
         : null,
       // 情绪读心：只有这个主题能看到每只票当前的情绪（v / 剩余轮数 / 方向分量）
-      sent: (me && me.skill === 'mind') ? sentimentView(st, db) : null,
+      sent: (me && me.skill === 'mind') ? sentimentView(st, db, me) : null,
       // 按各 K 线周期算涨跌幅（前端跟着当前周期显示）
       changes: changesFor(st.series, TIMEFRAMES),
       changePct: prev ? ((st.price - prev) / prev) * 100 : 0,
@@ -618,6 +618,7 @@ function marketPayload(db, me) {
       shopThemePrice: db.config.shopThemePrice ?? 2000000,
       mindThemePrice: db.config.mindThemePrice ?? 5000000,
       mindFakeChance: db.config.mindFakeChance ?? 0.5,
+      mindAccurateChanceEvolved: db.config.mindAccurateChanceEvolved ?? 0.7,
       nightStartHour: db.config.nightStartHour ?? 18,
       nightEndHour: db.config.nightEndHour ?? 4,
       nightStealCooldown: db.config.nightStealCooldown ?? 5,
@@ -1195,6 +1196,7 @@ export async function handleApi(ctx) {
       'equitySampleTicks', 'equityMaxPoints',
       'shopFakeNewsPrice', 'shopFakeNewsChance', 'shopFakeNewsCooldown',
       'shopBodyguardPrice', 'shopBodyguardTicks', 'shopThemePrice', 'mindThemePrice', 'mindFakeChance',
+      'mindAccurateChanceEvolved',
       'nightStartHour', 'nightEndHour', 'nightStealCooldown',
       'shopChannelBasePrice', 'shopChannelRatio', 'shopChannelStep',
       'shopAutoDcaPrice', 'shopAutoDcaPremium',

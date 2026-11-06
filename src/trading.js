@@ -4,6 +4,7 @@ import {
   themeTier, refreshGlobals
 } from './achievements.js';
 import { isTycoonSector } from './fundamentals.js';
+import { maskSentiment } from './mind.js';
 
 const TRADE_LOG_MAX = 4000;
 
@@ -521,8 +522,8 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
 
   // 🧠 读心 / 情绪交易员
   if (player.skill === 'mind') {
-    const sv = st?.sentiment || {};
-    const v = Number(Number.isFinite(Number(sv.viewV)) ? sv.viewV : sv.v) || 0;
+    // 用「这个玩家自己看到的读数」判定，而不是全局那份
+    const v = Number(maskSentiment(st, db, player).v) || 0;
     const extreme = Math.max(0.1, Math.min(1, Number(cfgA.achvMindExtreme ?? 0.8)));
     const rightWay = sideNow === 'long' ? v >= extreme : v <= -extreme;
     if (pnl > 0 && rightWay) bumpAchv(db, player, 'mindRead', 1);
