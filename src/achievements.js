@@ -285,8 +285,9 @@ export function grantAchv(db, player, id) {
 }
 
 /**
- * 排行榜名字旁边显示的成就 emoji。
- * **一个主题的两条成就都达成才显示**（只解一条不算；进化后带 ✦）。
+ * 排行榜名字旁边显示的成就图标。
+ * **一个主题的两条成就都达成才显示**（只解一条不算）。
+ * 只给主题图标，不带 ✦ 之类的进化标记 —— 进化状态在成就页看。
  */
 export function themeEmojiList(player) {
   const out = [];
@@ -295,7 +296,7 @@ export function themeEmojiList(player) {
     if (!defs.length) continue;
     const allDone = defs.every((a) => player?.achv?.[a.id]);
     if (!allDone) continue;
-    out.push(isEvolved(player, t) ? `${THEME_EMOJI[t]}✦` : THEME_EMOJI[t]);
+    out.push(THEME_EMOJI[t]);
   }
   return out;
 }

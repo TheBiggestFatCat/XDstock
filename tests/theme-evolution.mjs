@@ -395,7 +395,8 @@ log('=== 16 排行榜徽章 + 隐世 Ⅱ 阶模糊 ===');
   grantAchv(db, p, 'hermit_follow');
   check('两条都解 → 出现 🧙', themeEmojiList(p).includes('🧙'), JSON.stringify(themeEmojiList(p)));
   evolveTheme(db, p, 'hermit');
-  check('进化后徽章带 ✦', themeEmojiList(p).includes('🧙✦'), JSON.stringify(themeEmojiList(p)));
+  check('进化后徽章还是 🧙（排行榜不带 ✦）',
+    themeEmojiList(p).join(',') === '🧙', JSON.stringify(themeEmojiList(p)));
 
   const multi = mkPlayer(db, 'm', 1e9, 'red');
   grantAchv(db, multi, 'red_trend');
