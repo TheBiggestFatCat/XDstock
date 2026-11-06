@@ -258,13 +258,14 @@ function removeOrder(player, order) {
 /**
  * 每个玩家的「每轮单笔成交上限」（金额）：
  *   基础 maxFillNotionalPerTick
- *   + 商城「交易专属通道」等级 × shopChannelStep
+ *   + 通道等级 × (shopChannelStep × 账号等级)   ← 通道每级加成按等级放大
  *   + 账号等级 × levelFillBonus（每个等级 +100 万，Lv.1 就有一份）
- *   + **只要买过通道**（channelLevel ≥ 1）：账号等级 × levelChannelBonus（默认 +10 万/级）
  *
- * 最后一条是 2026-11 加强的「通道随等级成长」：买过通道的人等级越高这条越大，
- * 没买通道的不吃这条（它挂在通道上，不是白送的等级加成）。
- * 这里每次都按玩家当前的 level / channelLevel 现算，所以老玩家升级后**下一轮就生效**，
+ * 通道那条是 2026-11 改的：**每买 1 级通道的增量 = shopChannelStep × 玩家等级**。
+ *   Lv.1 买 1 级 → +10 万（默认 shopChannelStep）
+ *   Lv.3 买 1 级 → +30 万
+ * 所以等级越高，通道越值钱；反过来买过通道的人升级时，通道那份也会同步变大。
+ * 这里每次都按玩家当前 level / channelLevel 现算，老玩家升级后**下一轮直接生效**，
  * 不需要迁移或重置任何数据。
  */
 export function fillCapFor(db, player) {
@@ -274,9 +275,16 @@ export function fillCapFor(db, player) {
   const chStep = Math.max(0, num(cfg.shopChannelStep, 100000));
   const lv = Math.max(1, Math.floor(num(player && player.level, 1)));
   const lvBonus = Math.max(0, num(cfg.levelFillBonus, 1000000));
-  const lvChannel = Math.max(0, num(cfg.levelChannelBonus, 100000));
-  const channelLevelBonus = chLevel > 0 ? lv * lvChannel : 0;
-  return base + chLevel * chStep + lv * lvBonus + channelLevelBonus;
+  const channelPart = chLevel * chStep * lv;
+  return base + channelPart + lv * lvBonus;
+}
+
+/** 通道每买 1 级能涨多少（按这个玩家的等级算），前端展示用 */
+export function channelStepFor(db, player) {
+  const cfg = (db && db.config) || {};
+  const chStep = Math.max(0, num(cfg.shopChannelStep, 100000));
+  const lv = Math.max(1, Math.floor(num(player && player.level, 1)));
+  return chStep * lv;
 }
 
 /**
