@@ -2267,6 +2267,7 @@ body[data-theme="dark"] .fee-bonus { color: var(--down); }
   color: #fff;
 }
 .cs-sep { color: var(--ink-3); }
+
 .cs-warn { color: #b45309; }
 
 /* ---------- 管理面板：个股股价输入 ---------- */

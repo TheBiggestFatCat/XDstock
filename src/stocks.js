@@ -118,27 +118,30 @@ export const STOCK_SEED = {
       floorBoost: 0.025
     }
   },
-  LMFX: {
-    code: 'LMFX',
-    name: '留美外汇',
-    icon: '/assets/stocks/LMFX.jpeg',
+  MB: {
+    code: 'MB',
+    name: '矿工银行',
+    icon: '/assets/stocks/MB.png',
     industry: '金融',
-    shares: 200000000,   // 总股本 2 亿股
+    shares: 1000000000,  // 总股本 10 亿股 → 100 × 10 亿 = 1000 亿
     freeFloat: 0.45,          // 流通比例
-    desc: '外汇自营、套息交易、高杠杆',
+    desc: '矿业融资、贵金属交易、金库业务',
+    // 市值目标 3000 亿：上市时 1000 亿，随着业务扩张一路往 3000 亿靠，越靠越慢
+    // rate 0.08 ≈ 每期收掉 8% 的差距：首期 +16%，20 期到 2700 亿，30 期到 2900 亿
+    capTarget: 300000000000,
+    capTargetRate: 0.08,
+    // 特性对外隐藏：前端/接口里看不到「金价驱动」这个名字和说明，
+    // 玩家只能自己从「金价涨→财报好」的规律里去发现
+    traitHidden: true,
     initialPrice: 100,
     trait: {
-      id: 'fx',
-      name: '汇率杠杆',
-      desc: '拿自营盘加杠杆押注澳元兑日元，汇率一动它就剧烈反应',
-      volMult: 0.35,
-      revMult: 0,
-      // 股价 = 初始价 × (1 + 汇率涨跌 × 系数 × 杠杆)
-      coef: 1,
-      lev: 8,
-      fxEnabled: 1,     // 1=由汇率驱动 0=纯随机
-      refreshMs: 60000, // 多久抓一次汇率
-      track: 0.06       // 每轮向目标价靠拢的比例
+      id: 'gold',
+      name: '金价驱动',
+      desc: '财报跟着金价走：金价涨它就赚、跌就亏，另外每期还有一点随机浮动',
+      volMult: 0.9,
+      revMult: 1.0
+      // 金价系数 / 随机浮动不写在这里：走全局配置 goldCoef / goldJitter
+      // （特性对外隐藏，玩家能看到的只有财报本身）
     }
   },
   XD: {

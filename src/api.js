@@ -439,7 +439,7 @@ function adminAuth(ctx) {
   return true;
 }
 
-function marketPayload(db, me) {
+export function marketPayload(db, me) {
   const stocks = {};
   // 指数排在最前面
   const ordered = Object.values(db.stocks).sort((a, b) => (b.isIndex ? 1 : 0) - (a.isIndex ? 1 : 0));
@@ -484,8 +484,11 @@ function marketPayload(db, me) {
       status: st.status,
       initialPrice: st.initialPrice,
       // 标的性格（涨跌特征），前端用来显示特质说明
-      trait: st.trait || {},
-      traitName: st.trait?.name || '',
+      // traitHidden 的标的（矿工银行）对外只留 id 和波动参数，不给名字/说明/驱动系数
+      trait: st.traitHidden
+        ? { id: st.trait?.id, volMult: st.trait?.volMult, revMult: st.trait?.revMult }
+        : (st.trait || {}),
+      traitName: st.traitHidden ? '' : (st.trait?.name || ''),
       st: !!st.st,
       stTicks: st.stTicks || 0,
       fxTarget: st.fxTarget || 0,
@@ -619,6 +622,12 @@ function marketPayload(db, me) {
       mindThemePrice: db.config.mindThemePrice ?? 5000000,
       mindFakeChance: db.config.mindFakeChance ?? 0.5,
       mindAccurateChanceEvolved: db.config.mindAccurateChanceEvolved ?? 0.7,
+      // 金价（矿工银行的财报驱动源）
+      goldBase: db.config.goldBase ?? 2400,
+      goldVol: db.config.goldVol ?? 0.0012,
+      goldRev: db.config.goldRev ?? 0.002,
+      goldCoef: db.config.goldCoef ?? 2.2,
+      goldJitter: db.config.goldJitter ?? 0.03,
       nightStartHour: db.config.nightStartHour ?? 18,
       nightEndHour: db.config.nightEndHour ?? 4,
       nightStealCooldown: db.config.nightStealCooldown ?? 5,
@@ -1197,6 +1206,7 @@ export async function handleApi(ctx) {
       'shopFakeNewsPrice', 'shopFakeNewsChance', 'shopFakeNewsCooldown',
       'shopBodyguardPrice', 'shopBodyguardTicks', 'shopThemePrice', 'mindThemePrice', 'mindFakeChance',
       'mindAccurateChanceEvolved',
+      'goldBase', 'goldVol', 'goldRev', 'goldCoef', 'goldJitter',
       'nightStartHour', 'nightEndHour', 'nightStealCooldown',
       'shopChannelBasePrice', 'shopChannelRatio', 'shopChannelStep',
       'shopAutoDcaPrice', 'shopAutoDcaPremium',

@@ -28,6 +28,7 @@ const TRAIT_BIAS = {
   backstop: -0.025,    // 护盘：稳，但增长很慢
   fx: 0.0,
   broker: 0.0,
+  gold: 0.0,           // 矿工银行：没有长期体质，全看金价
 };
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -195,6 +196,8 @@ export function backDerive(st, targetFair) {
     roe,
     margin,
     growth,
+    // 刚上市这一期「按预期」：不然大鳄预览会算成「超预期 +6pp」
+    expectedGrowth: growth,
     debt: rand(0.25, 0.6),
     dividendRate: rand(0.1, 0.4),
     reportAt: Date.now(),
@@ -272,6 +275,8 @@ export function genNextReport(st, ctx = {}) {
    */
   const capTargetNow = Math.max(0, Number(st.capTarget) || Number(ctx.capTarget) || 0);
   let tgtMarginRef = 0;
+  // 目标市值带来的「基础增速」：矿工银行要把它和金价波动叠在一起
+  let capTargetGrowth = null;
   if (capTargetNow > 0) {
     const tgtPrice = capTargetNow / shares;
     const tgtEps = tgtPrice / Math.max(1, ind.pe);
@@ -281,7 +286,8 @@ export function genNextReport(st, ctx = {}) {
     const tgtRev = Math.max(1, (tgtEps * shares) / Math.max(0.02, tgtMarginRef));
     const rate = clamp(Number(st.capTargetRate ?? ctx.capTargetRate ?? 0.06), 0.005, 0.5);
     // 每期只走「差距的 rate」，所以越接近目标越慢
-    growth = clamp((tgtRev / Math.max(1, Number(f.revenue) || baseRev) - 1) * rate, -0.5, 0.5);
+    capTargetGrowth = clamp((tgtRev / Math.max(1, Number(f.revenue) || baseRev) - 1) * rate, -0.5, 0.5);
+    growth = capTargetGrowth;
     bias = 0;
   }
 
@@ -291,6 +297,21 @@ export function genNextReport(st, ctx = {}) {
     const swing = Math.max(0.1, Number(st.trait?.swing) || 0.5);
     // 天气决定增速，但仍然要吃规模衰减：大公司涨不快，也跌不快
     growth = w * swing * decay;
+  }
+
+  // 金价驱动（矿工银行）：增速 = 金价涨跌 × 系数（可预期）+ 随机浮动（不可预期）
+  let goldExpected = null;
+  let goldJitterAmp = 0;
+  if (trait === 'gold') {
+    const gr = clamp(Number(ctx.goldReturn) || 0, -0.3, 0.3);
+    // 顺序：ctx（引擎下发的全局配置）→ 个股 trait（手工覆盖）→ 出厂值
+    const coef = Math.max(0, Number(ctx.goldCoef ?? st.trait?.goldCoef ?? 2.2));
+    const jitter = Number(ctx.goldJitter ?? st.trait?.goldJitter ?? 0.03);
+    goldJitterAmp = clamp(Number.isFinite(jitter) ? jitter : 0.03, 0, 0.2);
+    goldExpected = gr * coef * decay;      // 也吃规模衰减：越大越涨不动
+    // 有市值目标（矿工银行 1000 亿 → 3000 亿）：目标增速是主干，金价是叠加的波动
+    growth = (capTargetGrowth ?? 0) + goldExpected + rand(-goldJitterAmp, goldJitterAmp);
+    bias = 0;
   }
 
   // 规模天花板：营收只能「无限接近」baseRev × growthCeiling，永远不超过。
@@ -305,11 +326,16 @@ export function genNextReport(st, ctx = {}) {
   // ⚠️ 必须也吃掉天花板剩余空间：否则营收已经 6 倍多的票，
   // 预期 2% 而实际被压到 0.4%，每期都白挨一次「不及预期」的价格下杀。
   // 负增长不吃 room（该萎缩就萎缩，天花板只管往上）。
-  const expectedGrowth = clamp(growth > 0 ? growth * ceilRoom : growth, -0.35, 0.9);
+  const goldTotal = goldExpected !== null ? (capTargetGrowth ?? 0) + goldExpected : null;
+  const expectedGrowth = goldTotal !== null
+    ? clamp(goldTotal > 0 ? goldTotal * ceilRoom : goldTotal, -0.35, 0.9)
+    : clamp(growth > 0 ? growth * ceilRoom : growth, -0.35, 0.9);
 
   // 稳步增长 / 有市值目标的票：财报不抖（它们的走势是「慢慢走」，不该被随机噪声带跑）
   const smoothReport = trait === 'steady' || capTargetNow > 0;
-  growth += smoothReport ? rand(-0.0025, 0.0025) : rand(-0.08, 0.08);
+  // 金价股：随机浮动已经按 goldJitter 加过了，这里只补一点点，别把因果淹掉
+  if (trait === 'gold') growth += rand(-0.002, 0.002);
+  else growth += smoothReport ? rand(-0.0025, 0.0025) : rand(-0.08, 0.08);
 
   // ----- 业务联动 -----
   // 券商：全市场成交越活跃，佣金收入越高，增速越快
@@ -333,6 +359,11 @@ export function genNextReport(st, ctx = {}) {
   if (smoothReport) {
     const midMargin = (ind.margin[0] + ind.margin[1]) / 2;
     margin = (Number(f.margin) || midMargin) * 0.88 + midMargin * 0.12 + rand(-0.001, 0.001);
+  }
+  // 金价高 → 矿业融资和贵金属交易的利差都更肥
+  if (trait === 'gold') {
+    const gr = clamp(Number(ctx.goldReturn) || 0, -0.3, 0.3);
+    margin += clamp(gr * 0.1, -0.03, 0.03);
   }
   // 券商成交火爆时净利率也会抬一点
   if (trait === 'broker') {

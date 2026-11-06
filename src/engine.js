@@ -5,6 +5,7 @@ export { TYCOON_LEAD_TICKS };
 import { genMarketTrades } from './marketTrades.js';
 import { logTrade } from './trading.js';
 import { maskSentiment } from './mind.js';
+import { stepGold, goldReturnSinceReport, ensureGold } from './gold.js';
 import { now } from './store.js';
 
 /** 公告最多留几条（超出就丢最老的） */
@@ -577,6 +578,9 @@ export function stepMarket(db) {
   // 成交活跃度 EMA（给券商的财报用）
   const alphaV = 0.02;
   db.volumeAvg = (db.volumeAvg || trades) * (1 - alphaV) + trades * alphaV;
+  // 金价：每轮随机游走一次（矿工银行的财报驱动源）
+  stepGold(db);
+
   // 汇率波动 EMA（给外汇的财报用）
   {
     const fx = db.fx || {};
@@ -956,6 +960,9 @@ export function runReports(db) {
         // ⚠️ 天气也要带进来：现在所有票都提前算 pendingReport，
         // 少了这一项天气股的增速会恒为 0（发报时直接用 pendingReport，不会再重算）
         weather: Number(st.weather?.score) || 0,
+        goldReturn: goldReturnSinceReport(db),
+        goldCoef: cfg.goldCoef,
+        goldJitter: cfg.goldJitter,
         growthCeiling: cfg.growthCeiling
       };
       st.pendingReport = genNextReport(st, ctxP);
@@ -970,12 +977,15 @@ export function runReports(db) {
     const fxNow = Number(db.fx?.rate) || 0;
     const fxBase = Number(db.fx?.reportBase) || fxNow;
     const fxReturn = fxBase > 0 ? fxNow / fxBase - 1 : 0;
+    const goldReturn = goldReturnSinceReport(db);
     st.fundamentals = st.pendingReport || genNextReport(st, {
       volumeFactor, fxFactor, fxReturn, weather: st.weather?.score || 0,
+      goldReturn, goldCoef: cfg.goldCoef, goldJitter: cfg.goldJitter,
       growthCeiling: cfg.growthCeiling
     });
-    // 这一期结束后，汇率基准往前推
+    // 这一期结束后，汇率 / 金价基准往前推
     if (db.fx) db.fx.reportBase = fxNow;
+    if (db.gold) db.gold.reportBase = Number(db.gold.price) || 0;
     st.pendingReport = null;
 
     // 合理价：新财报算出来的值 70% + 上期 30%，避免一次财报把线拉到天上

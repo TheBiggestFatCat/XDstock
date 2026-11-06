@@ -62,8 +62,8 @@ log('=== 1 只有金融板块（券商/外汇）提前生成 pendingReport ===')
   check('非金融票没有 pendingReport',
     stocks(db).filter((st) => !isTycoonSector(st)).every((st) => !st.pendingReport),
     stocks(db).filter((st) => !isTycoonSector(st)).map((st) => st.code).join(','));
-  check('判定覆盖小灯证券（broker）与留美外汇（fx）',
-    isTycoonSector(db.stocks.XD) && isTycoonSector(db.stocks.LMFX));
+  check('判定覆盖小灯证券（broker）与矿工银行（金融板块）',
+    isTycoonSector(db.stocks.XD) && isTycoonSector(db.stocks.MB));
   check('判定排除消费/科技票',
     !isTycoonSector(db.stocks.TGW) && !isTycoonSector(db.stocks.MAMA));
 }

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_CONFIG } from './config.js';
 import { STOCK_SEED, STOCK_CODES, INDEX_BASE, INDEX_STOCK, SMALL_INDEX_STOCK } from './stocks.js';
+import { ensureGold } from './gold.js';
 import { backDerive, fairFromReport } from './fundamentals.js';
 import { seedBars15, seedVolFromConfig, BAR15_MAX, BAR15_SEED_VER } from './bars15.js';
 import { ensureAchvState, GLOBAL_ACHIEVEMENTS, achvTarget } from './achievements.js';
@@ -35,6 +36,7 @@ function freshStock(code) {
     capTargetRate: Number(seed.capTargetRate) || 0,
     growthCeiling: Number(seed.growthCeiling) || 0,
     rallyHours: Array.isArray(seed.rallyHours) ? [...seed.rallyHours] : [],
+    traitHidden: !!seed.traitHidden,
     price: seed.initialPrice,
     fair: seed.initialPrice,
     flow: 0,          // 玩家资金冲击累积（正=净买入，负=净卖出）
@@ -112,7 +114,9 @@ export function loadDb() {
   }
 
   if (!parsed) {
-    db = createDb();
+    // 全新存档也要过一遍 migrate：freshStock 只给骨架，
+    // 股本 / 基本面 / 合理价 / K 线都是在 migrate 里补的
+    db = migrate(createDb());
     saveDb(true);
     return db;
   }
@@ -270,6 +274,7 @@ export function migrate(d) {
       st.capTargetRate = Number(seed.capTargetRate) || 0;
       st.growthCeiling = Number(seed.growthCeiling) || 0;
       st.rallyHours = Array.isArray(seed.rallyHours) ? [...seed.rallyHours] : [];
+      st.traitHidden = !!seed.traitHidden;
     }
     if (!st.fundamentals) {
       st.fundamentals = backDerive(st, Math.max(0.01, Number(st.price) || Number(st.initialPrice) || 1));
@@ -364,6 +369,46 @@ export function migrate(d) {
     idxStock.series = idxSeries.slice(-(merged.config?.historyTicks || 3600));
   }
   idxStock.price = merged.index?.value ?? idxStock.price;
+
+  // 清理「代码里已经删掉」的标的（这次是退市的 LMFX）：
+  // 先把玩家的持仓按最后价格平掉、现金退回，再把挂单撤掉，最后删掉行情。
+  // 不加这一步的话，持仓会挂在半空中（前端查不到 stock 直接报错）。
+  {
+    const keep = new Set([...STOCK_CODES, INDEX_STOCK.code, SMALL_INDEX_STOCK.code]);
+    const dropped = Object.keys(merged.stocks).filter((c) => !keep.has(c));
+    for (const code of dropped) {
+      const st = merged.stocks[code] || {};
+      const last = Math.max(0.01, Number(st.price) || 0);
+      let settled = 0;
+      for (const p of Object.values(merged.players || {})) {
+        const pos = p.positions && p.positions[code];
+        if (pos) {
+          const qty = Number(pos.qty) || 0;
+          const entry = Number(pos.entry) || last;
+          const dir = pos.side === 'short' ? -1 : 1;
+          const pnl = (last - entry) * qty * dir;
+          p.cash = (Number(p.cash) || 0) + (Number(pos.margin) || 0) + pnl;
+          delete p.positions[code];
+          settled += 1;
+        }
+        // 挂单：同票的全部撤掉，押金按「市价成交」退回
+        if (Array.isArray(p.orders)) {
+          const keepOrders = [];
+          for (const o of p.orders) {
+            if (o.code !== code) { keepOrders.push(o); continue; }
+            p.cash = (Number(p.cash) || 0) + (Number(o.reserve) || 0);
+          }
+          p.orders = keepOrders.filter(Boolean);
+        }
+      }
+      delete merged.stocks[code];
+      console.log(`  清理已退市标的 ${code}${st.name ? `（${st.name}）` : ''}` +
+        (settled ? `，结算了 ${settled} 个持仓` : ''));
+    }
+  }
+
+  // 金价状态（矿工银行的财报驱动源）
+  ensureGold(merged);
 
   // 补齐新增标的 / 补字段
   for (const code of STOCK_CODES) {
