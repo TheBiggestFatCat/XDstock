@@ -152,8 +152,8 @@ export const DEFAULT_CONFIG = {
   achvShortPnlPct: 100,            // 窗口内平仓的收益率门槛
   achvDragonNextTarget: 1,
   achvDragonFastTarget: 1,
-  // 1 = 所有小任务都要完成才算达成；0（默认）= 任一完成即可
-  achvGlobalRequireAll: 0,
+  // 1（默认）= 两个小任务都完成才发放成就；0 = 任一完成即可
+  achvGlobalRequireAll: 1,
 
   // ---- 进化后的技能数值（Lv2 才生效）----
   themeEvolveSkillMult: 1.5,       // 红牛/绿熊返现倍率（1.0 → 1.5）

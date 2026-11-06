@@ -670,7 +670,7 @@ function marketPayload(db, me) {
       achvShortPnlPct: db.config.achvShortPnlPct ?? 100,
       achvDragonNextTarget: db.config.achvDragonNextTarget ?? 1,
       achvDragonFastTarget: db.config.achvDragonFastTarget ?? 1,
-      achvGlobalRequireAll: db.config.achvGlobalRequireAll ?? 0,
+      achvGlobalRequireAll: db.config.achvGlobalRequireAll ?? 1,
       // 表情互动的目录（前端拼 /assets/<dir>/<file>）
       emojiDirs: { 1: 'emo_lv1' },
       // 道具/其他的等级门槛：前端照这个渲染「Lv.N 解锁」，服务端照这个拦

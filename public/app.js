@@ -5136,7 +5136,7 @@ async function loadAdmin() {
             ['achvShortPnlPct', '窗口内收益率门槛(%)'],
             ['achvDragonNextTarget', '一击即走任务次数'],
             ['achvDragonFastTarget', '十分钟翻倍任务次数'],
-            ['achvGlobalRequireAll', '全部小任务才算达成(1=是)']
+            ['achvGlobalRequireAll', '两个任务都完成才发放(0=任一即可)']
           ]
         },
         {

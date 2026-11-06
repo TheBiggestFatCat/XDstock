@@ -126,8 +126,8 @@ export const THEME_ACHIEVEMENTS = [
 
 /**
  * 全局成就（不绑主题、不产出结晶、不能进化）。
- * 每条由若干「小任务」组成：默认**任一**小任务完成就算这条成就完成，
- * 把 `db.config.achvGlobalRequireAll` 设成 1 就变成「所有小任务都要完成」。
+ * 每条由若干「小任务」组成：**默认所有小任务都完成才发放**，
+ * 把 `db.config.achvGlobalRequireAll` 设成 0 才会变成「任一完成即可」。
  * 完成后面板会显示对应 emoji，排行榜名字旁边也会挂上。
  */
 export const GLOBAL_ACHIEVEMENTS = [
@@ -378,7 +378,8 @@ export function grantAchv(db, player, id) {
 /** 一条全局成就的进度快照 */
 export function globalAchvProgress(db, player) {
   const cfg = db?.config || {};
-  const requireAll = Number(cfg.achvGlobalRequireAll) === 1;
+  // 缺键 / null 一律按「全部完成」处理，避免老存档因为没这个字段退化成「任一」
+  const requireAll = Number(cfg.achvGlobalRequireAll ?? 1) !== 0;
   return GLOBAL_ACHIEVEMENTS.map((g) => {
     const tasks = g.tasks.map((t) => {
       const target = achvTarget(cfg, t.targetKey);
@@ -508,7 +509,7 @@ export function achvPayload(db, player) {
   const global = globalAchvProgress(db, me).map((g) => ({
     id: g.id, name: g.name, emoji: g.emoji, desc: g.desc, got: g.got, at: g.at,
     tone: GLOBAL_BY_ID[g.id]?.tone || 'global', kind: 'global',
-    requireAll: Number((db?.config || {}).achvGlobalRequireAll) === 1,
+    requireAll: Number((db?.config || {}).achvGlobalRequireAll ?? 1) !== 0,
     tasks: g.tasks
   }));
   // 所有「已解锁」的成就拍平成一个列表：前端用它做「新解锁 → 顶部弹窗」的差异判断
