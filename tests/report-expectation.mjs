@@ -1,7 +1,15 @@
-// 市场预期要吃「天花板剩余空间」：贴着天花板的票不能每期都白挨一刀
+// 新财报模型：零期望随机偏移 + 体量越大偏移越小
 //   node tests/report-expectation.mjs
+//
+// 规则：
+//   - 每期财报 = 上一期营收 × (1 + 偏移)，偏移在**对数空间取零均值**
+//     （中位数原地踏步，不会整体慢慢缩水）
+//   - 偏移的标准差由体量决定：σ = reportVol × √(基准体量 / 当前市值)，
+//     夹在 [reportVolMin, reportVolMax] 之间 → 体量越大越稳
+//   - 纯随机路径的「市场预期」= 0，所以意外 = 实际偏移
+//   - 特质驱动的票（稳步增长 / 市值目标 / 金价 / 天气）仍然走各自的确定性路径
 
-import { genNextReport, INDUSTRY } from '../src/fundamentals.js';
+import { genNextReport, reportVolFor, INDUSTRY } from '../src/fundamentals.js';
 
 let fails = 0;
 let passes = 0;
@@ -12,38 +20,14 @@ function check(label, cond, detail = '') {
   log(`${cond ? 'PASS' : 'FAIL'}  ${label}${detail ? '  ' + detail : ''}`);
 }
 
+const realRandom = Math.random;
 function fixRandom(v) { Math.random = () => v; }
-const origRandom = Math.random;
 
-/** 科技行业增速中枢：(−6% + 42%) / 2 = 18% */
-const MIDG_TECH = (INDUSTRY.科技.growth[0] + INDUSTRY.科技.growth[1]) / 2;
-/** 和 src/fundamentals.js 的 TRAIT_BIAS 保持一致 */
-const TRAIT_BIAS = {
-  old_money: -0.035, casino: 0.06, hype: 0.025, reversal: 0, meme: -0.05,
-  backstop: -0.025, fx: 0, broker: 0
-};
-const BIAS_REVERT = 0.15;
-
-/** 复刻代码里的 bias：每期向「行业性格」回归 15% */
-function biasOf(trait, stored = 0) {
-  const base = TRAIT_BIAS[trait] ?? 0;
-  return base + (stored - base) * (1 - BIAS_REVERT);
-}
-
-/** 手算「预期」：基础增速(+bias) → 规模衰减 → 天花板剩余空间 */
-function expectByHand(multiple, growth, { trait = 'hype', ceilMult = 8 } = {}) {
-  const base = 0.5 * growth + 0.5 * MIDG_TECH + biasOf(trait);
-  const decay = 1 / (1 + Math.max(0, multiple - 1) * 1.5);
-  const g = base * decay;
-  const room = Math.max(0, 1 - multiple / ceilMult);
-  return { base, g, room, expected: g > 0 ? g * room : g };
-}
-
-function mkStock({ multiple = 1, growth = 0.05, trait = 'hype', extra = {} } = {}) {
+function mkStock({ multiple = 1, growth = 0.05, trait = 'reversal', shares = 1e9, price = 100, extra = {} } = {}) {
   const baseRev = 1e9;
   return {
     code: 'TST', name: '测试股', industry: '科技',
-    shares: 1e9, freeFloat: 0.45,
+    shares, freeFloat: 0.45,
     trait: { id: trait, name: trait, swing: 0.5, steadyGrowth: 0.035 },
     fundamentals: {
       period: 10,
@@ -52,111 +36,152 @@ function mkStock({ multiple = 1, growth = 0.05, trait = 'hype', extra = {} } = {
       netProfit: baseRev * multiple * 0.2,
       eps: 1, bps: 5, roe: 0.2, margin: 0.2,
       growth, debt: 0.4, dividendRate: 0.2,
-      reportAt: Date.now(), bias: 0, expectedGrowth: 0.02
+      reportAt: Date.now(), expectedGrowth: 0.02
     },
+    price,
+    fair: price,
     ...extra
   };
 }
+const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+const sd = (a) => {
+  const m = mean(a);
+  return Math.sqrt(mean(a.map((x) => (x - m) ** 2)));
+};
+/** 用固定的随机数把高斯值钉死：0.25 → z=0；0.5 → z<0；1e-4/0.999 交替 → z 很大且为正 */
+function withFixedRandom(fn, mode) {
+  const orig = Math.random;
+  try {
+    if (mode === 'zero') { Math.random = () => 0.25; }        // cos(π/2)=0
+    else if (mode === 'neg') { Math.random = () => 0.5; }     // cos(π)=−1
+    else if (mode === 'pos') {
+      let k = 0;
+      Math.random = () => (k++ % 2 === 0 ? 1e-4 : 0.999);
+    } else if (typeof mode === 'function') { Math.random = mode; }
+    return fn();
+  } finally {
+    Math.random = orig;
+  }
+}
 
 // ---------------------------------------------------------------- 1
-log('=== 1 高倍数票（6.3×）：预期要乘剩余空间 ===');
+log('=== 1 偏移量随体量缩小（平方根缩放）===');
 {
-  fixRandom(0.5);   // 噪声 = 0
-  const rep = genNextReport(mkStock({ multiple: 6.3 }), { growthCeiling: 8 });
-  const hand = expectByHand(6.3, 0.05);
-
-  check('剩余空间算对（1 − 6.3/8 = 21.25%）', Math.abs(hand.room - 0.2125) < 1e-6, hand.room.toFixed(4));
-  check('预期 = 基础增速 × 剩余空间', Math.abs(rep.expectedGrowth - hand.expected) < 1e-6,
-    `${rep.expectedGrowth.toFixed(5)} vs ${hand.expected.toFixed(5)}`);
-  check('预期比「不吃空间」的旧值小一半以上', rep.expectedGrowth < hand.g * 0.5,
-    `${(rep.expectedGrowth * 100).toFixed(2)}% vs 旧 ${(hand.g * 100).toFixed(2)}%`);
-  check('无噪声时实际 ≈ 预期（不再必挨刀）',
-    Math.abs(rep.growth - rep.expectedGrowth) < 1e-9,
-    `${(rep.growth * 100).toFixed(3)}% / ${(rep.expectedGrowth * 100).toFixed(3)}%`);
+  const cfg = { reportVol: 0.05, reportRefCap: 1e11, reportVolMin: 0.01, reportVolMax: 0.1 };
+  const at = (cap) => reportVolFor(cap, cfg);
+  check('基准体量 1000 亿 → 5%', Math.abs(at(1e11) - 0.05) < 1e-9, (at(1e11) * 100).toFixed(2) + '%');
+  check('体量 4 倍 → 偏移减半', Math.abs(at(4e11) - 0.025) < 1e-9, (at(4e11) * 100).toFixed(2) + '%');
+  check('体量 1/4 → 偏移翻倍', Math.abs(at(2.5e10) - 0.1) < 1e-9, (at(2.5e10) * 100).toFixed(2) + '%');
+  check('巨无霸到下限', Math.abs(at(1e14) - 0.01) < 1e-9, (at(1e14) * 100).toFixed(2) + '%');
+  check('小公司到上限', Math.abs(at(1e8) - 0.1) < 1e-9, (at(1e8) * 100).toFixed(2) + '%');
+  check('单调不增', [1e9, 1e10, 5e10, 1e11, 1e12, 1e13].every((c, i, arr) => i === 0 || at(c) <= at(arr[i - 1]) + 1e-12));
 }
 
 // ---------------------------------------------------------------- 2
 log('');
-log('=== 2 低倍数票（0.7×）：几乎不受影响 ===');
+log('=== 2 期望原地踏步（不涨不跌）===');
 {
-  fixRandom(0.5);
-  const rep = genNextReport(mkStock({ multiple: 0.7 }), { growthCeiling: 8 });
-  const hand = expectByHand(0.7, 0.05);
-  check('剩余空间 ≈ 91%', Math.abs(hand.room - 0.9125) < 1e-6, hand.room.toFixed(4));
-  check('预期仍按公式来', Math.abs(rep.expectedGrowth - hand.expected) < 1e-6);
-  check('预期只被削掉约 1pp', Math.abs(hand.g - hand.expected) < 0.012,
-    `${((hand.g - hand.expected) * 100).toFixed(2)}pp`);
-  check('实际 ≈ 预期', Math.abs(rep.growth - rep.expectedGrowth) < 1e-9);
+  const st = mkStock({ multiple: 3, trait: 'reversal' });
+  const growths = [];
+  const ratios = [];
+  for (let i = 0; i < 3000; i++) {
+    const r = genNextReport(st, { growthCeiling: 8 });
+    growths.push(Number(r.growth));
+    ratios.push(Number(r.revenue) / (1e9 * 3));
+  }
+  check('3000 期平均增速 ≈ 0', Math.abs(mean(growths)) < 0.004, (mean(growths) * 100).toFixed(3) + '%');
+  check('中位数营收倍数 ≈ 1（不整体缩水）', Math.abs(ratios.sort((a, b) => a - b)[1500] - 1) < 0.03);
+  check('正负各一半', Math.abs(growths.filter((g) => g > 0).length / growths.length - 0.5) < 0.03,
+    `${((growths.filter((g) => g > 0).length / growths.length) * 100).toFixed(1)}%`);
+  check('偏移是零均值 -> 预期也是 0',
+    growths.every((g, i) => Number(genNextReport(st, {}).expectedGrowth) === 0));
 }
 
 // ---------------------------------------------------------------- 3
 log('');
-log('=== 3 正好贴在天花板上：预期 0、实际 0 ===');
+log('=== 3 实际波动幅度和 reportVolFor 对得上 ===');
 {
-  fixRandom(0.5);
-  const rep = genNextReport(mkStock({ multiple: 8 }), { growthCeiling: 8 });
-  check('预期剩 0', Math.abs(rep.expectedGrowth) < 1e-9, rep.expectedGrowth.toExponential(2));
-  check('实际增速也被压到 0', Math.abs(rep.growth) < 1e-9, rep.growth.toExponential(2));
-  check('营收不再增长', Math.abs(rep.revenue - 8e9) < 1, (rep.revenue / 1e9).toFixed(4));
+  const big = mkStock({ trait: 'reversal', shares: 4e10, price: 100 });   // 4 万亿？
+  const small = mkStock({ trait: 'reversal', shares: 2e8, price: 100 });
+  const cfg = { growthCeiling: 8, reportVol: 0.05, reportRefCap: 1e11, reportVolMin: 0.01, reportVolMax: 0.1 };
+  const sample = (st) => Array.from({ length: 2000 }, () => Number(genNextReport(st, cfg).growth));
+  const sBig = sd(sample(big));
+  const sSmall = sd(sample(small));
+  const vBig = reportVolFor(big.fair * big.shares, { reportVol: 0.05, reportRefCap: 1e11, reportVolMin: 0.01, reportVolMax: 0.1 });
+  const vSmall = reportVolFor(small.fair * small.shares, { reportVol: 0.05, reportRefCap: 1e11, reportVolMin: 0.01, reportVolMax: 0.1 });
+  check('大公司的偏移接近理论值', Math.abs(sBig - vBig) < 0.01, `${(sBig * 100).toFixed(2)}% vs ${(vBig * 100).toFixed(2)}%`);
+  check('小公司的偏移接近上限', Math.abs(sSmall - 0.1) < 0.02, (sSmall * 100).toFixed(2) + '%');
+  check('小公司抖动明显更大', sSmall > sBig * 2, `${(sBig * 100).toFixed(2)}% vs ${(sSmall * 100).toFixed(2)}%`);
 }
 
 // ---------------------------------------------------------------- 4
 log('');
-log('=== 4 负增长的票：预期不吃剩余空间（该跌还是跌）===');
+log('=== 4 纯随机路径：预期 0，意外 = 实际偏移 ===');
 {
-  fixRandom(0.5);
-  const rep = genNextReport(mkStock({ multiple: 1.2, growth: -0.3, trait: 'meme' }), { growthCeiling: 8 });
-  const hand = expectByHand(1.2, -0.3, { trait: 'meme' });
-  check('手算确实是负的', hand.g < 0, (hand.g * 100).toFixed(2) + '%');
-  check('预期是负数', rep.expectedGrowth < 0, (rep.expectedGrowth * 100).toFixed(2) + '%');
-  check('负增速不乘剩余空间', Math.abs(rep.expectedGrowth - Math.max(-0.35, hand.g)) < 1e-6,
-    `${(rep.expectedGrowth * 100).toFixed(2)}% vs ${(hand.g * 100).toFixed(2)}%`);
-  check('实际 ≈ 预期', Math.abs(rep.growth - rep.expectedGrowth) < 1e-9);
+  const st = mkStock({ trait: 'reversal' });
+  const rep = withFixedRandom(() => genNextReport(st, {}), 'pos');
+  check('预期为 0', rep.expectedGrowth === 0, String(rep.expectedGrowth));
+  check('正向偏移 → 意外为正', rep.growth > 0.2, (rep.growth * 100).toFixed(1) + '%');
+  const rep2 = withFixedRandom(() => genNextReport(st, {}), 'neg');
+  check('负向偏移 → 意外为负', rep2.growth < -0.03, (rep2.growth * 100).toFixed(2) + '%');
+  check('零偏移 → 增长 0', Math.abs(withFixedRandom(() => genNextReport(st, {}), 'zero').growth) < 1e-9);
 }
 
 // ---------------------------------------------------------------- 5
 log('');
-log('=== 5 噪声仍然能造出超预期 / 不及预期 ===');
+log('=== 5 特质驱动的票仍然走自己的路径（不被随机偏移打乱）===');
 {
-  fixRandom(0.99);   // rand(-0.08,0.08) ≈ +0.078
-  const up = genNextReport(mkStock({ multiple: 1.5 }), { growthCeiling: 8 });
-  check('随机高开 → 实际高于预期 5pp 以上', up.growth - up.expectedGrowth > 0.05,
-    ((up.growth - up.expectedGrowth) * 100).toFixed(1) + 'pp');
+  // 稳步增长（麦当劳）：永远是正的小幅增长
+  const steady = mkStock({ trait: 'steady', extra: { capCeiling: 1e12 } });
+  const steadyG = Array.from({ length: 200 }, () => Number(genNextReport(steady, { growthCeiling: 8 }).growth));
+  check('稳步增长型平均明显为正', mean(steadyG) > 0.005, (mean(steadyG) * 100).toFixed(2) + '%');
+  check('稳步增长型几乎不抖', sd(steadyG) < 0.01, (sd(steadyG) * 100).toFixed(3) + '%');
 
-  fixRandom(0.01);   // ≈ −0.078
-  const down = genNextReport(mkStock({ multiple: 1.5 }), { growthCeiling: 8 });
-  check('随机低开 → 实际低于预期 5pp 以上', down.growth - down.expectedGrowth < -0.05,
-    ((down.growth - down.expectedGrowth) * 100).toFixed(1) + 'pp');
+  // 市值目标（弦卷）：往目标收
+  const tgt = mkStock({ trait: 'backstop', extra: { capTarget: 5e11, capTargetRate: 0.06 } });
+  const tgtG = Array.from({ length: 100 }, () => Number(genNextReport(tgt, { growthCeiling: 8 }).growth));
+  check('有市值目标的票增长是「朝目标收」', tgtG.every((g) => g > 0.05 || g < -0.5), String(tgtG.length));
+  check('市值目标的预期不是 0（可预期）', Number(genNextReport(tgt, {}).expectedGrowth) !== 0);
+
+  // 天气：由天气决定
+  const weather = mkStock({ trait: 'weather' });
+  const wSun = Number(withFixedRandom(() => genNextReport(weather, { weather: 1, growthCeiling: 8 }), 'zero').growth);
+  const wRain = Number(withFixedRandom(() => genNextReport(weather, { weather: -1, growthCeiling: 8 }), 'zero').growth);
+  check('天气好 → 正增长', wSun > 0.1, (wSun * 100).toFixed(1) + '%');
+  check('天气差 → 负增长', wRain < -0.1, (wRain * 100).toFixed(1) + '%');
 }
 
 // ---------------------------------------------------------------- 6
 log('');
-log('=== 6 steady（麦当劳）预期 ≈ 实际 ===');
+log('=== 6 安全网：地板与天花板还在 ===');
 {
-  fixRandom(0.5);
-  const st = mkStock({ multiple: 2.25, growth: 0.03, trait: 'steady' });
-  st.capCeiling = 1e12;
-  st.fair = 500;
-  const rep = genNextReport(st, { growthCeiling: 8 });
-  check('steady 票预期 ≈ 实际（噪声被压到 ±0.25%）',
-    Math.abs(rep.growth - rep.expectedGrowth) < 0.003,
-    `${(rep.growth * 100).toFixed(3)}%`);
+  const low = mkStock({ multiple: 0.3, trait: 'reversal' });
+  const high = mkStock({ multiple: 7.9, trait: 'reversal' });
+  const lowRep = withFixedRandom(() => genNextReport(low, { growthCeiling: 8 }), 'neg');
+  const highRep = withFixedRandom(() => genNextReport(high, { growthCeiling: 8 }), 'pos');
+  check('跌破基准 25% 就被托住', lowRep.revenue >= 1e9 * 0.25 - 1,
+    (lowRep.revenue / 1e8).toFixed(1) + ' 亿（地板 2.5 亿）');
+  check('顶到天花板就不许再上', highRep.revenue <= 1e9 * 8 + 1,
+    (highRep.revenue / 1e8).toFixed(1) + ' 亿（上限 80 亿）');
+  check('被夹住时不制造假超预期', Math.abs(highRep.growth - (highRep.revenue / (1e9 * 7.9) - 1)) < 1e-9);
 }
 
 // ---------------------------------------------------------------- 7
 log('');
-log('=== 7 有市值目标的票（弦卷财团）预期 = 实际 ===');
+log('=== 7 财报其余字段仍然自洽 ===');
 {
-  fixRandom(0.5);
-  const st = mkStock({ multiple: 1, growth: 0.02, trait: 'backstop' });
-  st.capTarget = 5e11;
-  st.capTargetRate = 0.06;
+  const st = mkStock({ multiple: 2, trait: 'reversal' });
   const rep = genNextReport(st, { growthCeiling: 8 });
-  check('capTarget 票预期 = 实际', Math.abs(rep.growth - rep.expectedGrowth) < 1e-9,
-    `${(rep.growth * 100).toFixed(3)}% vs ${(rep.expectedGrowth * 100).toFixed(3)}%`);
+  check('营收 = 上期 × (1+偏移)', Math.abs(rep.revenue - 1e9 * 2 * (1 + rep.growth)) < 1e6,
+    `${(rep.revenue / 1e8).toFixed(2)} 亿`);
+  check('EPS = 净利 / 股本', Math.abs(rep.eps - rep.netProfit / st.shares) < 1e-9);
+  check('净利 = 营收 × 净利率', Math.abs(rep.netProfit - rep.revenue * rep.margin) < 1e3);
+  check('净资产是正的', rep.bps > 0);
+  check('财报期号 +1', rep.period === 11, String(rep.period));
+  check('行业成长中枢仍然可查', Number.isFinite((INDUSTRY.科技.growth[0] + INDUSTRY.科技.growth[1]) / 2));
 }
 
-Math.random = origRandom;
+Math.random = realRandom;
 console.log(out.join('\n'));
 console.log(`\n---- ${passes} 通过 / ${fails} 失败 ----`);
 if (fails > 0) process.exit(1);

@@ -93,9 +93,10 @@ log('=== 2 发布时用的就是预览那份（所见即所得）===');
 
 // ---------------------------------------------------------------- 3
 log('');
-log('=== 3 无噪声（均值轨迹）→ 全部「符合预期」===');
+log('=== 3 无偏移（随机数刚好让 z=0）→ 全部「符合预期」===');
 {
-  fixRandom(0.5);
+  // Math.random=0.25 → cos(2π×0.25)=0 → 高斯值为 0 → 偏移为 0
+  fixRandom(0.25);
   const db = newDb();
   runReports(db);
   db.tick += 100 - TYCOON_LEAD_TICKS;
@@ -116,13 +117,15 @@ log('=== 3 无噪声（均值轨迹）→ 全部「符合预期」===');
 log('');
 log('=== 4 有噪声 → 该超的标超预期、该砸的标不及预期 ===');
 {
-  for (const [rnd, want] of [[0.99, 'beat'], [0.01, 'miss']]) {
+  // 0.0001 → z ≈ +4.3（大幅正偏移）；0.5 → cos(π) = −1 → z ≈ −1.18（负偏移）
+  for (const [rnd, want] of [[0.0001, 'beat'], [0.5, 'miss']]) {
     fixRandom(rnd);
     const db = newDb();
     runReports(db);
     db.tick += 100 - TYCOON_LEAD_TICKS;
     runReports(db);
-    const st = stocks(db).find((s) => isTycoonSector(s) && s.pendingReport);
+    // 只用「纯随机偏移」的金融票（MB 是金价驱动，不受这个随机数控制）
+    const st = stocks(db).find((s) => isTycoonSector(s) && s.pendingReport && s.trait?.id === 'broker');
     const j = judge(st.pendingReport);
     check(`随机 ${rnd} → ${st.code} 判定 ${want}（实际差 ${(j.surprise * 100).toFixed(1)}pp）`,
       j.verdict === want, j.verdict);

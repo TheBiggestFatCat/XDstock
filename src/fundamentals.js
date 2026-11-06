@@ -34,6 +34,31 @@ const TRAIT_BIAS = {
 const rand = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
+/** 标准正态（Box-Muller） */
+function gauss() {
+  const u = Math.max(1e-9, Math.random());
+  const v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+/**
+ * 财报的随机偏移量（标准差）。
+ *
+ * 规则：**体量越大，偏移越小**，按市值的平方根缩放 ——
+ * 体量翻 4 倍，偏移量减半。再夹在 [volMin, volMax] 之间。
+ *
+ * @param {number} sizeCap 当前市值
+ * @param {object} cfg     取 reportVol / reportRefCap / reportVolMin / reportVolMax
+ */
+export function reportVolFor(sizeCap, cfg = {}) {
+  const refCap = Math.max(1e9, Number(cfg.reportRefCap) || 1e11);      // 基准体量 1000 亿
+  const volBase = clamp(Number(cfg.reportVol) || 0.05, 0.001, 0.5);
+  const volMin = clamp(Number(cfg.reportVolMin) || 0.01, 0.001, 0.5);
+  const volMax = clamp(Number(cfg.reportVolMax) || 0.1, volMin, 1);
+  const size = Math.max(1e8, Number(sizeCap) || refCap);
+  return clamp(volBase * Math.sqrt(refCap / size), volMin, volMax);
+}
+
 /** 每期把多少比例的利润并进净资产（剩下的视作分红/回购，发给场外股东） */
 const BPS_RETAIN = [0.15, 0.3];
 /** 账面价值过高时，每期向「盈利估值×2」收敛的比例（半衰期约 230 期） */
@@ -216,37 +241,29 @@ export function genNextReport(st, ctx = {}) {
   const midG = (ind.growth[0] + ind.growth[1]) / 2;
   const trait = st.trait?.id;
 
-  // 天生体质：决定这家公司长期是扩张还是萎缩
-  // 注意：体质每期会向「行业性格」回归一点，不然一次衰退会让公司永久 -30%/期螺旋下跌，
-  // 一路砸到营收地板后财报就变成「营收不动、同比却 -35%」的假数字
-  const baseBias = Number(TRAIT_BIAS[trait] ?? 0);
-  let bias = Number.isFinite(Number(f.bias))
-    ? Number(f.bias)
-    : (baseBias + (Math.random() - 0.5) * 0.04);
-  bias = baseBias + (bias - baseBias) * (1 - BIAS_REVERT);
-  // 12% 概率遇到景气/衰退周期，体质发生偏移
-  if (Math.random() < 0.12) {
-    bias = clamp(bias + rand(-0.05, 0.05), -0.16, 0.16);
-  }
-
-  // 低基数修复：营收跌破基准的一半，公司会自己去找新的增长点（越惨修得越猛）。
-  // 没有这一条，先天偏负的票（老钱/梗股）会一路缩到营收地板后就永远躺着，
-  // 全市场最后全趴在地板上 —— 有了它才有「衰退 → 触底 → 复苏」的周期。
-  const baseRevRef = Number(f.baseRevenue) || Number(f.revenue) || 1;
-  const multNow = Math.max(0, (Number(f.revenue) || baseRevRef) / baseRevRef);
-  if (multNow < 0.5) {
-    bias += 0.08 * ((0.5 - multNow) / 0.5);
-  }
-
-  // 增速：向行业中枢回归（50% 上期 + 50% 中枢）+ 天生体质
-  let growth = ((Number(f.growth) || midG) * 0.5 + midG * 0.5 + bias);
-
-  // 规模衰减：营收已经是基准的 N 倍时，增速按 1/(1+(N-1)*0.8) 收缩，
-  // 不然高成长股每期 30% 复利，几期就涨到天上去
+  // ===== 新的财报基线：**零期望的随机偏移** =====
+  // 不再向行业中枢回归、也没有「天生体质」：每期就在上一期的基础上随机抖一下，
+  // 期望正好是「原地踏步」（正态分布对称）。体量越大抖得越小（见 reportVolFor）。
   const baseRev = Number(f.baseRevenue) || Number(f.revenue) || 1;
   const multiple = Math.max(0.2, (Number(f.revenue) || baseRev) / baseRev);
+  // 规模衰减只留给「特质驱动」的那几条线用（金价、券商），基线不用它
   const decay = 1 / (1 + Math.max(0, multiple - 1) * 1.5);
-  growth *= decay;
+
+  const cfgVol = {
+    reportRefCap: Number(st.reportRefCap ?? ctx.reportRefCap ?? 1e11),
+    reportVol: Number(st.reportVol ?? ctx.reportVol ?? 0.05),
+    reportVolMin: Number(st.reportVolMin ?? ctx.reportVolMin ?? 0.01),
+    reportVolMax: Number(st.reportVolMax ?? ctx.reportVolMax ?? 0.1)
+  };
+  const sizeCap = Math.max(1e8, (Number(st.fair) || Number(st.price) || 1) * shares);
+  const vol = reportVolFor(sizeCap, cfgVol);
+  // 在对数空间里取零均值（中位数原地踏步）：直接用乘法随机游走会让
+  // 大多数路径慢慢缩水（Itô 漂移），玩家看到的就成了「所有公司都在缩」
+  const logShift = clamp(gauss() * vol, -0.35, 0.35);
+  let growth = clamp(Math.exp(logShift) - 1, -0.3, 0.3);
+  // 没被特质覆盖时，市场预期就是「不变」——随机偏移本身就是意外
+  let plainRandom = true;
+  let bias = 0;
 
   // 「稳步增长」型（麦当劳）：增速只由「离市值天花板还有多远」决定，
   // 越接近天花板长得越慢 —— 无限接近但永远到不了
@@ -258,6 +275,7 @@ export function genNextReport(st, ctx = {}) {
     // 离得远 ≈ g0，贴到天花板 → 0
     growth = g0 * Math.sqrt(room);
     bias = 0;
+    plainRandom = false;
   }
 
   // 业务联动也属于「可预期」的一部分
@@ -289,6 +307,7 @@ export function genNextReport(st, ctx = {}) {
     capTargetGrowth = clamp((tgtRev / Math.max(1, Number(f.revenue) || baseRev) - 1) * rate, -0.5, 0.5);
     growth = capTargetGrowth;
     bias = 0;
+    plainRandom = false;
   }
 
   // 种业：营收完全由天气决定（天气全程公开，大家都知道）
@@ -297,6 +316,7 @@ export function genNextReport(st, ctx = {}) {
     const swing = Math.max(0.1, Number(st.trait?.swing) || 0.5);
     // 天气决定增速，但仍然要吃规模衰减：大公司涨不快，也跌不快
     growth = w * swing * decay;
+    plainRandom = false;
   }
 
   // 金价驱动（矿工银行）：增速 = 金价涨跌 × 系数（可预期）+ 随机浮动（不可预期）
@@ -312,6 +332,7 @@ export function genNextReport(st, ctx = {}) {
     // 有市值目标（矿工银行 1000 亿 → 3000 亿）：目标增速是主干，金价是叠加的波动
     growth = (capTargetGrowth ?? 0) + goldExpected + rand(-goldJitterAmp, goldJitterAmp);
     bias = 0;
+    plainRandom = false;
   }
 
   // 规模天花板：营收只能「无限接近」baseRev × growthCeiling，永远不超过。
@@ -327,15 +348,24 @@ export function genNextReport(st, ctx = {}) {
   // 预期 2% 而实际被压到 0.4%，每期都白挨一次「不及预期」的价格下杀。
   // 负增长不吃 room（该萎缩就萎缩，天花板只管往上）。
   const goldTotal = goldExpected !== null ? (capTargetGrowth ?? 0) + goldExpected : null;
-  const expectedGrowth = goldTotal !== null
-    ? clamp(goldTotal > 0 ? goldTotal * ceilRoom : goldTotal, -0.35, 0.9)
-    : clamp(growth > 0 ? growth * ceilRoom : growth, -0.35, 0.9);
+  // 纯随机路径：市场预期 = 0（没人能猜到这个偏移），所以「意外」= 实际偏移
+  const expectedGrowth = plainRandom
+    ? 0
+    : (goldTotal !== null
+      ? clamp(goldTotal > 0 ? goldTotal * ceilRoom : goldTotal, -0.35, 0.9)
+      : clamp(growth > 0 ? growth * ceilRoom : growth, -0.35, 0.9));
 
   // 稳步增长 / 有市值目标的票：财报不抖（它们的走势是「慢慢走」，不该被随机噪声带跑）
   const smoothReport = trait === 'steady' || capTargetNow > 0;
-  // 金价股：随机浮动已经按 goldJitter 加过了，这里只补一点点，别把因果淹掉
-  if (trait === 'gold') growth += rand(-0.002, 0.002);
-  else growth += smoothReport ? rand(-0.0025, 0.0025) : rand(-0.08, 0.08);
+  // 纯随机路径：偏移本身已经是随机的，不再叠加噪声（否则体量缩放会被冲掉）
+  if (plainRandom) {
+    // 什么都不加
+  } else if (trait === 'gold') {
+    // 金价股：随机浮动已经按 goldJitter 加过了，这里只补一点点
+    growth += rand(-0.002, 0.002);
+  } else {
+    growth += smoothReport ? rand(-0.0025, 0.0025) : rand(-0.08, 0.08);
+  }
 
   // ----- 业务联动 -----
   // 券商：全市场成交越活跃，佣金收入越高，增速越快
@@ -351,8 +381,10 @@ export function genNextReport(st, ctx = {}) {
 
   growth = clamp(growth, -0.35, 0.9);
 
-  // 实际增速同样吃天花板剩余空间（负增长不受影响，该萎缩还是会萎缩）
-  if (growth > 0) growth *= ceilRoom;
+  // 实际增速同样吃天花板剩余空间（负增长不受影响，该萎缩还是会萎缩）。
+  // 但**纯随机路径不吃**：否则正偏移永远被削一刀，期望就变成「慢慢缩水」了；
+  // 随机路径的失控由下面的 revCeil 硬夹负责。
+  if (!plainRandom && growth > 0) growth *= ceilRoom;
 
   let margin = (Number(f.margin) || (ind.margin[0] + ind.margin[1]) / 2) + rand(-0.02, 0.02);
   // 稳步增长 / 有市值目标的公司净利率也稳（不然 ±2pp 的抖动会让 EPS 上下乱跳，PE 看着像过山车）

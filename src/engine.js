@@ -1004,6 +1004,10 @@ export function runReports(db) {
         goldReturn: goldReturnSinceReport(db),
         goldCoef: cfg.goldCoef,
         goldJitter: cfg.goldJitter,
+        reportVol: cfg.reportVol,
+        reportVolMin: cfg.reportVolMin,
+        reportVolMax: cfg.reportVolMax,
+        reportRefCap: cfg.reportRefCap,
         growthCeiling: cfg.growthCeiling
       };
       st.pendingReport = genNextReport(st, ctxP);
@@ -1022,6 +1026,8 @@ export function runReports(db) {
     st.fundamentals = st.pendingReport || genNextReport(st, {
       volumeFactor, fxFactor, fxReturn, weather: st.weather?.score || 0,
       goldReturn, goldCoef: cfg.goldCoef, goldJitter: cfg.goldJitter,
+      reportVol: cfg.reportVol, reportVolMin: cfg.reportVolMin,
+      reportVolMax: cfg.reportVolMax, reportRefCap: cfg.reportRefCap,
       growthCeiling: cfg.growthCeiling
     });
     // 这一期结束后，汇率 / 金价基准往前推

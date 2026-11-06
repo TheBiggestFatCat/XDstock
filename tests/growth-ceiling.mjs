@@ -38,12 +38,17 @@ log('=== 1 营收天花板：最高只能长到 base × growthCeiling，永远�
   let maxRev = 0;
   const realLog = console.log;
   console.log = () => {};
+  const origRandom = Math.random;
+  // 强制每期都是「大幅正偏移」（u 极小、cos≈1 → z ≈ +4.3）
+  let k = 0;
+  Math.random = () => (k++ % 2 === 0 ? 1e-4 : 0.999);
   try {
     for (let i = 0; i < 800; i++) {
       st.fundamentals = genNextReport(st, { growthCeiling: 8 });
       if (st.fundamentals.revenue > maxRev) maxRev = st.fundamentals.revenue;
     }
   } finally {
+    Math.random = origRandom;
     console.log = realLog;
   }
   check('800 期内营收从未超过 8 倍基准', maxRev <= ceil + 1, `最高 ${(maxRev / 1e8).toFixed(1)} 亿（上限 ${(ceil / 1e8).toFixed(0)} 亿）`);
@@ -53,12 +58,13 @@ log('=== 1 营收天花板：最高只能长到 base × growthCeiling，永远�
 
 // ---------------------------------------------------------------- 2
 log('');
-log('=== 2 越接近天花板，正向增速被压得越低 ===');
+log('=== 2 越接近天花板，正向偏移被压得越低 ===');
 {
-  const near = seeded('MAMA', { revenue: 780e8, baseRevenue: 100e8 });   // 7.8× / 8×，只剩 2.5% 空间
-  const far = seeded('MAMA', { revenue: 200e8, baseRevenue: 100e8 });    // 2× / 8×，还有 75% 空间
   const realLog = console.log;
   console.log = () => {};
+  const origRandom = Math.random;
+  let k = 0;
+  Math.random = () => (k++ % 2 === 0 ? 1e-4 : 0.999);   // 同样的「大幅正偏移」
   let nearG;
   let farG;
   try {
@@ -69,24 +75,26 @@ log('=== 2 越接近天花板，正向增速被压得越低 ===');
     b.st.fundamentals = genNextReport(b.st, { growthCeiling: 8 });
     farG = b.st.fundamentals.growth;
   } finally {
+    Math.random = origRandom;
     console.log = realLog;
   }
   check('贴近天花板的公司增速明显更低', nearG < farG * 0.2,
     `7.8× 增速 ${(nearG * 100).toFixed(2)}% vs 2× 增速 ${(farG * 100).toFixed(2)}%`);
-  void near;
-  void far;
 }
 
 // ---------------------------------------------------------------- 3
 log('');
 log('=== 3 负增长不受天花板影响（该萎缩照样萎缩）===');
 {
-  // 贴着天花板（8×），连跑多次取平均，把噪声平均掉看确定性部分
+  // 贴着天花板（8×），固定成负偏移（Math.random=0.5 → z<0）
+  const origRandom = Math.random;
+  Math.random = () => 0.5;
   const runs = [];
   for (let i = 0; i < 60; i++) {
     const s = seeded('MAMA', { revenue: 800e8, baseRevenue: 100e8, growth: -0.3, bias: -0.16 });
     runs.push(genNextReport(s.st, { growthCeiling: 8 }));
   }
+  Math.random = origRandom;
   const avgG = runs.reduce((a, r) => a + r.growth, 0) / runs.length;
   const avgRev = runs.reduce((a, r) => a + r.revenue, 0) / runs.length;
   check('贴顶的公司负增长仍然成立', avgG < -0.005, `60 期平均增速 ${(avgG * 100).toFixed(2)}%`);

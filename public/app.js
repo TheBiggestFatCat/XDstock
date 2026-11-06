@@ -5327,6 +5327,16 @@ async function loadAdmin() {
       desc: '券商特质、收益曲线、ST 等冷门项',
       groups: [
         {
+          title: '财报随机偏移',
+          desc: '每期财报 = 上期基础上随机抖一下（零期望，体量越大抖得越小）',
+          fields: [
+            ['reportVol', '基准偏移(1000亿公司)'],
+            ['reportVolMin', '偏移下限(巨无霸)'],
+            ['reportVolMax', '偏移上限(小公司)'],
+            ['reportRefCap', '基准体量(市值)']
+          ]
+        },
+        {
           title: '金价（矿工银行）',
           desc: '游戏内模拟的金价：每轮随机游走 + 向基准回归，MB 的财报就跟着它走',
           fields: [

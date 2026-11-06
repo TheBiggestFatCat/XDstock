@@ -93,6 +93,12 @@ export const DEFAULT_CONFIG = {
   shopBodyguardTicks: 720,     // 保护时长（720 轮 = 1 小时）
   shopThemePrice: 2000000,     // 主题配色售价
   mindThemePrice: 5000000,     // 「情绪读心」主题售价（Lv.2 商店）
+  // ===== 财报随机偏移（体量越大偏移越小）=====
+  reportVol: 0.05,             // 基准体量（1000 亿）公司的每期偏移标准差
+  reportVolMin: 0.01,          // 偏移量下限（巨无霸公司）
+  reportVolMax: 0.1,           // 偏移量上限（小公司）
+  reportRefCap: 100000000000,  // 基准体量：1000 亿
+
   // ===== 金价（矿工银行的财报驱动源，游戏内模拟）=====
   goldBase: 2400,              // 基准金价（美元/盎司）
   goldVol: 0.0012,             // 每轮波动（0.0012 = 0.12%）

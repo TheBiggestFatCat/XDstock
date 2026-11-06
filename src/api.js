@@ -622,6 +622,11 @@ export function marketPayload(db, me) {
       mindThemePrice: db.config.mindThemePrice ?? 5000000,
       mindFakeChance: db.config.mindFakeChance ?? 0.5,
       mindAccurateChanceEvolved: db.config.mindAccurateChanceEvolved ?? 0.7,
+      // 财报随机偏移（体量越大偏移越小）
+      reportVol: db.config.reportVol ?? 0.05,
+      reportVolMin: db.config.reportVolMin ?? 0.01,
+      reportVolMax: db.config.reportVolMax ?? 0.1,
+      reportRefCap: db.config.reportRefCap ?? 1e11,
       // 金价（矿工银行的财报驱动源）
       goldBase: db.config.goldBase ?? 2400,
       goldVol: db.config.goldVol ?? 0.0012,
@@ -1207,6 +1212,7 @@ export async function handleApi(ctx) {
       'shopBodyguardPrice', 'shopBodyguardTicks', 'shopThemePrice', 'mindThemePrice', 'mindFakeChance',
       'mindAccurateChanceEvolved',
       'goldBase', 'goldVol', 'goldRev', 'goldCoef', 'goldJitter',
+      'reportVol', 'reportVolMin', 'reportVolMax', 'reportRefCap',
       'nightStartHour', 'nightEndHour', 'nightStealCooldown',
       'shopChannelBasePrice', 'shopChannelRatio', 'shopChannelStep',
       'shopAutoDcaPrice', 'shopAutoDcaPremium',
