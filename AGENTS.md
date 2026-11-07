@@ -29,6 +29,7 @@ node tests/tpsl.mjs                  # 止盈止损全流程（改平仓/委托�
 node tests/market-money.mjs          # 虚假成交推动股价 + 游资轮动（改行情/流水必跑，73 条）
 node tests/payload-wire.mjs          # 前端数据包白名单（加字段/改 payload 必跑，120 条）
 node tests/shop-perks.mjs            # 咸鱼代下单（免手续费）/ 游资情报（改商城必跑，57 条）
+node tests/index-suspension.mjs      # 成分股停牌不影响指数（改指数/停牌必跑，23 条）
 node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占比/天花板（不是断言套，看表格）
 ```
 
@@ -54,7 +55,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 6. **发布流程**：改代码 → `node --check` → 本地跑通 → SFTP 上传 → 改线上数据（先备份）→
    `systemctl restart xdstock` → curl 验证 → `git commit` → `git push`（需代理 `127.0.0.1:4780`）。
 
-## 最容易踩的 12 个坑
+## 最容易踩的 13 个坑
 
 | 坑 | 症状 | 正解 |
 |---|---|---|
@@ -69,6 +70,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 | 押金漏算冲击成本 | 全仓挂单成交那一刻报「现金不足」并自动撤单 | `estimateReserve()` 里加 `impactCost` |
 | 跨模块函数忘了 import | `node --check` 只查语法 → 上线后每个 tick 抛 ReferenceError、systemd 重启循环 | 跑 `node tests/imports.mjs`；新写的分支本地一定要**真的走一遍**（2026-11 踩过：`isNightWindow`） |
 | 两套资金冲击混用 | 游资砸钱占满玩家上限 / 玩家单子推不动 | 玩家走 `st.flow`、虚假成交与游资走 `st.mflow`，公式各自一份、互不抢上限 |
+| 指数只算「在交易」的成分股 | 一停牌指数就闪崩（麦当劳停牌时 DENG −32%），复牌还回不来 | 遍历 status !== 'delisted'，停牌按最后价计；只有退市才剔除并强制调仓 |
 | payload 把引擎参数抖出去 | F12 里能看到 `trait.lotteryChance` / `volMult` / `fair` / `sentimentStrength`，等于把价格模型交给玩家 | 所有下发字段必须过 `src/wire.js` 白名单；跑 `node tests/payload-wire.mjs` |
 
 ## 新增配置参数（四处都要改）

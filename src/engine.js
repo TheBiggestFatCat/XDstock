@@ -724,19 +724,28 @@ export function stepMarket(db) {
   spawnNews(db);
 
   // 5. 指数：权重按季度调仓，期内权重冻结
-  const live = stocks.filter((s) => s.status === 'normal' && !s.isIndex);
-  if (live.length) {
+  //
+  // ⚠️ 成分股**停牌时仍然是成分股**：按最后成交价计（和真实交易所一致）。
+  //    2026-11 修的 bug：以前这里只遍历 status === 'normal' 的票，
+  //    麦当劳一停牌，它那 22.9% 就从求和里直接消失 → DENG 一个 tick 闪崩 32%
+  //    （2728 → 1869），而且复牌后还要等一次调仓才可能回来。
+  //    现在只有**退市**才剔除成分股（剔除时强制调仓，scale 跟着重置，不会跳空）。
+  const members = stocks.filter((s) => s.status !== 'delisted' && !s.isIndex);
+  if (members.length) {
     const idx = db.index;
     const period = Math.max(60, Number(cfg.indexRebalanceTicks ?? 2160));
-    // 有新股上市（权重表里没有它）就立刻调仓，不用等到季度末
-    const missing = live.some((x) => !(Number(idx.weights?.[x.code]) > 0));
+    const memberCodes = new Set(members.map((s) => s.code));
+    // 有新股上市（权重表里没有它）或成分股退市（权重表里还留着它）都要立刻调仓
+    const missing = members.some((x) => !(Number(idx.weights?.[x.code]) > 0));
+    const stale = Object.keys(idx.weights || {}).some((c) => !memberCodes.has(c));
     if (!idx.weights || !idx.basePrices || !(idx.nextRebalanceTick > 0)
-      || missing || db.tick >= idx.nextRebalanceTick) {
-      rebalanceIndex(db, live, period);
+      || missing || stale || db.tick >= idx.nextRebalanceTick) {
+      rebalanceIndex(db, members, period);
       if (missing) console.log('[指数] 发现新成分股，已调仓纳入');
+      if (stale) console.log('[指数] 有成分股退市，已调仓剔除');
     }
     let sum = 0;
-    for (const s of live) {
+    for (const s of members) {
       const w = Number(idx.weights?.[s.code]) || 0;
       const b = Number(idx.basePrices?.[s.code]) || 0;
       if (w > 0 && b > 0) sum += w * (s.price / b);
@@ -761,16 +770,20 @@ export function stepMarket(db) {
       db.smallIndex = { value: INDEX_BASE, series: [INDEX_BASE] };
     }
     const sidx = db.smallIndex;
-    const byCap = live
+    // 小灯指数同样：成分股停牌只是价格冻住，不能把它踢出篮子
+    const byCap = members
       .map((x) => ({ x, cap: x.price * (Number(x.shares) || 0) * (Number(x.freeFloat) || 0.45) }))
       .filter((o) => o.cap > 0)
       .sort((a, b) => a.cap - b.cap)
       .slice(0, 7)
       .map((o) => o.x);
 
+    const byCapCodes = new Set(byCap.map((x) => x.code));
     const sMissing = byCap.some((x) => !(Number(sidx.weights?.[x.code]) > 0));
+    // 有成分股掉出「最小的 7 家」也要调仓，否则它那份权重会凭空消失
+    const sStale = Object.keys(sidx.weights || {}).some((c) => !byCapCodes.has(c));
     // 调仓时机完全跟着灯证指数走
-    if (sMissing || db.tick === (Number(idx.rebalanceTick) || -1)
+    if (sMissing || sStale || db.tick === (Number(idx.rebalanceTick) || -1)
       || !sidx.weights || !(Number(sidx.nextRebalanceTick) > 0)) {
       const total = byCap.reduce(
         (a, x) => a + x.price * (Number(x.shares) || 0) * (Number(x.freeFloat) || 0.45), 0);
@@ -1238,12 +1251,15 @@ function fmtYi(v) {
 
 /**
  * 指数季度调仓：按流通市值定权重，记下期初价和期初点位，期内权重冻结。
+ *
+ * `members` 是**全部未退市成分股**（停牌的也算：用它的最后成交价），
+ * 这样调仓前后点位数不会跳（scale = 调仓当刻的点位）。
  */
-export function rebalanceIndex(db, live, period) {
+export function rebalanceIndex(db, members, period) {
   const idx = db.index;
   const caps = {};
   let total = 0;
-  for (const s of live) {
+  for (const s of members) {
     const sh = Number(s.shares) || 0;
     const ff = Number(s.freeFloat) || 0.45;
     const cap = s.price * sh * ff;
@@ -1253,7 +1269,7 @@ export function rebalanceIndex(db, live, period) {
   const weights = {};
   for (const code of Object.keys(caps)) weights[code] = caps[code] / total;
   const basePrices = {};
-  for (const s of live) basePrices[s.code] = Math.max(0.01, Number(s.price) || 0.01);
+  for (const s of members) basePrices[s.code] = Math.max(0.01, Number(s.price) || 0.01);
   idx.weights = weights;
   idx.basePrices = basePrices;
   idx.scale = Number(idx.value) > 0 ? Number(idx.value) : 1000;
