@@ -205,23 +205,29 @@ export function indexUptrend(db) {
   return last > ma5 && ma5 > ma10 && ma10 > ma30;
 }
 
-/** 进化后的手续费率：红牛进化 + 多头排列 → 挂单/交易手续费全免 */
-export function feeRateFor(db, player, opts = {}) {
+/**
+ * 手续费率。
+ *
+ * 2026-11 按 docs/主题技能.md 重平衡：🐂 红牛进化的效果改成「返现 1.5%」，
+ * 不再有多头排列免手续费这条（所以这里只剩「咸鱼代下单」一种免手续费来源）。
+ */
+export function feeRateFor(db, player) {
   const cfg = db.config || {};
   const base = Number(cfg.feeRate ?? 0);
   // 🐟 咸鱼代下单：生效期间手续费全免（印花税在 stampRateFor 里一起免）
   if (freeFeeActive(db, player)) return 0;
-  if (!player || player.skill !== 'red' || !isEvolved(player, 'red')) return base;
-  if (!Number(cfg.themeEvolveFeeFreeRed ?? 1)) return base;
-  const uptrend = opts.uptrend !== undefined ? !!opts.uptrend : indexUptrend(db);
-  return uptrend ? 0 : base;
+  return base;
 }
 
-/** 暗黑大手的冲击倍率：进化后 1.08（默认 1.05） */
+/** 暗黑大手的冲击倍率：未进化用 config.darkImpactBase（默认 1.05），进化后用 themeEvolveImpact（默认 1.08） */
 export function darkImpactMult(db, player) {
   if (!player || player.skill !== 'dark') return 1;
-  if (!isEvolved(player, 'dark')) return 1.05;
-  const v = Number((db.config || {}).themeEvolveImpact);
+  const cfg = db.config || {};
+  if (!isEvolved(player, 'dark')) {
+    const b = Number(cfg.darkImpactBase);
+    return Number.isFinite(b) && b > 0 ? b : 1.05;
+  }
+  const v = Number(cfg.themeEvolveImpact);
   return Number.isFinite(v) && v > 0 ? v : 1.08;
 }
 
@@ -304,12 +310,7 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
   side = side === 'short' ? 'short' : 'long';
   const price = st.price;
   const notional = qty * price;
-  let margin = notional / leverage;
-  // 🐻 绿熊进化：空头排列时做空，保证金 −20%（更容易上杠杆）
-  if (side === 'short' && player.skill === 'bear' && isEvolved(player, 'bear') && indexDowntrend(db)) {
-    const cut = Number(cfg.themeEvolveBearMarginCut ?? 0.2);
-    if (cut > 0 && cut < 1) margin *= 1 - cut;
-  }
+  const margin = notional / leverage;
   const fee = notional * feeRateFor(db, player);
   const stamp = side === 'short' ? notional * stampRateFor(db, player) : 0;
 

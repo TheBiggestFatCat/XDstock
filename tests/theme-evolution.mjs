@@ -157,28 +157,39 @@ log('=== 4 🐂🐻 返现倍率 1.0 → 1.5（上限仍由 redBonusRate 控制�
 
 // ---------------------------------------------------------------- 5
 log('');
-log('=== 5 🐻 空头排列做空：保证金 −20% ===');
+log('=== 5 🐻 绿熊进化：返现 1% → 1.5%（不再有保证金减免）===');
 {
   const mk = (evolved) => {
-    const db = newDb();
+    const db = newDb({ bearBonusRate: 0.01, bearBonusMinTicks: 0 });
     downIndex(db);
     const p = mkPlayer(db, 'b', 1e9, 'bear');
     if (evolved) { grantAchv(db, p, 'bear_trend'); grantAchv(db, p, 'bear_bonus'); evolveTheme(db, p, 'bear'); }
-    const before = p.cash;
     openPosition(db, p, { code: 'TGW', side: 'short', qty: 1000, leverage: 5 });
-    return before - p.cash;             // 总成本（含手续费/印花税）
+    db.tick += 5;
+    closePosition(db, p, 'TGW');
+    return { bonus: p.bearBonusEarned, cost: 1e9 - p.cash };
   };
   const a = mk(false);
   const b = mk(true);
-  check('进化后成本更低', b < a, `${a.toFixed(0)} → ${b.toFixed(0)}`);
-  // 保证金从 20000 降到 16000，手续费和税不变
-  const saved = a - b;
-  check('省下 ≈ 4000（100000/5 × 20%）', near(saved, 4000, 1), saved.toFixed(0));
+  check('进化前返现 ≈ 1% 成交额', near(a.bonus, 100000 * 0.01, 1), a.bonus.toFixed(0));
+  check('进化后返现 ≈ 1.5% 成交额', near(b.bonus, 100000 * 0.015, 1), b.bonus.toFixed(0));
+  // 2026-11：保证金减免下线了，进化只影响返现，不影响开仓成本
+  const openCost = (evolved) => {
+    const db = newDb();
+    downIndex(db);
+    const p = mkPlayer(db, 'b2', 1e9, 'bear');
+    if (evolved) { grantAchv(db, p, 'bear_trend'); grantAchv(db, p, 'bear_bonus'); evolveTheme(db, p, 'bear'); }
+    const c0 = p.cash;
+    openPosition(db, p, { code: 'TGW', side: 'short', qty: 1000, leverage: 5 });
+    return c0 - p.cash;
+  };
+  check('开仓成本不受进化影响（保证金减免已下线）',
+    near(openCost(false), openCost(true), 1e-6), `${openCost(false).toFixed(0)} vs ${openCost(true).toFixed(0)}`);
 }
 
 // ---------------------------------------------------------------- 6
 log('');
-log('=== 6 🕶️ 暗黑大手：冲击 1.05 → 1.08，且返还 20% 冲击成本 ===');
+log('=== 6 🕶️ 暗黑大手：冲击 1.05 → 1.1，且返还 20% 冲击成本 ===');
 {
   const mk = (evolved, patch = {}) => {
     const db = newDb({ impactCostCoef: 6, impactCostMax: 0.06, ...patch });
@@ -206,7 +217,7 @@ log('=== 6 🕶️ 暗黑大手：冲击 1.05 → 1.08，且返还 20% 冲击成
 
 // ---------------------------------------------------------------- 7
 log('');
-log('=== 7 🐊 大鳄：提前量 20 → 30 ===');
+log('=== 7 🐊 大鳄：提前量 20 → 40 ===');
 {
   const db = newDb();
   const p = mkPlayer(db, 't', 1e9, 'tycoon');
@@ -214,7 +225,7 @@ log('=== 7 🐊 大鳄：提前量 20 → 30 ===');
   grantAchv(db, p, 'tycoon_prophet');
   grantAchv(db, p, 'tycoon_info');
   evolveTheme(db, p, 'tycoon');
-  check('进化后 30 轮', tycoonLeadTicks(db, p) === 30, String(tycoonLeadTicks(db, p)));
+  check('进化后 40 轮', tycoonLeadTicks(db, p) === 40, String(tycoonLeadTicks(db, p)));
   const q = mkPlayer(db, 't2', 1e9, 'red');
   check('别的技能不受影响', tycoonLeadTicks(db, q) === 20);
 }
@@ -368,19 +379,19 @@ log('=== 14 🕵️ 情报网 + Ⅱ 阶看全部持仓 ===');
 
 // ---------------------------------------------------------------- 15
 log('');
-log('=== 15 🌙 夜行者：夜 CD 5 → 3 ===');
+log('=== 15 🌙 夜行者：20:00~04:00，夜里 CD 3 → 1 ===');
 {
   const db = newDb();
   // 必须按**本地时间**造，不能用 UTC 毫秒（getHours 取的是本地小时）
-  const night = new Date(2026, 0, 1, 22, 0, 0).getTime();   // 22:00 在夜里（18~04）
+  const night = new Date(2026, 0, 1, 22, 0, 0).getTime();   // 22:00 在夜里（20~04）
   const day = new Date(2026, 0, 1, 12, 0, 0).getTime();     // 12:00 不在夜里
   const p = mkPlayer(db, 'n', 1e9, 'night');
-  check('未进化：夜里 CD 5', stealCooldownFor(db, p, night) === 5, String(stealCooldownFor(db, p, night)));
+  check('未进化：夜里 CD 3', stealCooldownFor(db, p, night) === 3, String(stealCooldownFor(db, p, night)));
   check('未进化：白天还是 60', stealCooldownFor(db, p, day) === 60, String(stealCooldownFor(db, p, day)));
   grantAchv(db, p, 'night_big');
   grantAchv(db, p, 'night_200');
   evolveTheme(db, p, 'night');
-  check('进化后：夜里 CD 3', stealCooldownFor(db, p, night) === 3, String(stealCooldownFor(db, p, night)));
+  check('进化后：夜里 CD 1', stealCooldownFor(db, p, night) === 1, String(stealCooldownFor(db, p, night)));
   check('进化后：白天仍 60', stealCooldownFor(db, p, day) === 60);
 }
 

@@ -26,6 +26,7 @@ import { notifyList, unreadCount, markNotifyRead } from './notify.js';
 import {
   freeFeeDuration, cooldownLeft, hotTipTarget
 } from './perks.js';
+import { skillTextPayload } from './skillText.js';
 
 const THEME_NEED_LEVEL = { probe: 2, mind: 2, night: 2 };
 
@@ -638,6 +639,11 @@ export async function handleApi(ctx) {
     return json(res, 200, marketPayload(db, a?.player));
   }
 
+  // 主题技能文案：数字全部按当前后台配置生成（商城里不再写死「20 轮 / 50%」）
+  if (pathname === '/api/skill-text' && method === 'GET') {
+    return json(res, 200, skillTextPayload(db));
+  }
+
   if (pathname === '/api/candles' && method === 'GET') {
     const code = String(query.code || '').toUpperCase();
     const tf = String(query.tf || '1m');
@@ -1046,10 +1052,10 @@ export async function handleApi(ctx) {
       'achvValueCrossTarget', 'achvValueHoldTarget',
       'achvShortOpenMin', 'achvShortNextPnlPct', 'achvShortWindowTicks', 'achvShortPnlPct',
       'achvDragonNextTarget', 'achvDragonFastTarget', 'achvGlobalRequireAll',
-      'themeEvolveSkillMult', 'themeEvolveImpact', 'themeEvolveImpactRefund',
+      'themeEvolveSkillMult', 'themeEvolveImpact', 'themeEvolveImpactRefund', 'darkImpactBase',
       'tycoonLeadTicks', 'tycoonLeadTicksEvolved',
       'hermitHideChance', 'hermitHideChanceEvolved',
-      'investigateCooldownEvolved', 'themeEvolveBearMarginCut', 'themeEvolveFeeFreeRed',
+      'investigateCooldownEvolved',
       'nightStealCooldownEvolved'
     ];
     for (const [k, v] of Object.entries(patch)) {

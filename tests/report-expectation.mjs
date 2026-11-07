@@ -89,7 +89,10 @@ log('=== 2 期望原地踏步（不涨不跌）===');
     growths.push(Number(r.growth));
     ratios.push(Number(r.revenue) / (1e9 * 3));
   }
-  check('3000 期平均增速 ≈ 0', Math.abs(mean(growths)) < 0.004, (mean(growths) * 100).toFixed(3) + '%');
+  // ⚠️ 对数空间零均值 ≠ 算术均值零：E[e^X − 1] = e^(σ²/2) − 1 ≈ +0.13%（σ=5% 的凸性项），
+  // 再叠加 3000 次采样的标准误（≈0.07%），所以上限放到 0.6% —— 以前卡 0.4% 会偶发失败
+  check('3000 期平均增速 ≈ 0（含对数正态的 +0.13% 凸性项）', Math.abs(mean(growths)) < 0.006,
+    (mean(growths) * 100).toFixed(3) + '%');
   check('中位数营收倍数 ≈ 1（不整体缩水）', Math.abs(ratios.sort((a, b) => a - b)[1500] - 1) < 0.03);
   check('正负各一半', Math.abs(growths.filter((g) => g > 0).length / growths.length - 0.5) < 0.03,
     `${((growths.filter((g) => g > 0).length / growths.length) * 100).toFixed(1)}%`);

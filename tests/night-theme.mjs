@@ -54,10 +54,10 @@ log('=== 2 时间窗可以配，且 start === end 视为不生效 ===');
 
 // ---------------------------------------------------------------- 3
 log('');
-log('=== 3 偷钱 CD：夜行者夜里 5 轮，其余 60 轮 ===');
+log('=== 3 偷钱 CD：夜行者夜里 3 轮，其余 60 轮 ===');
 {
   const night = { theme: 'night', skill: 'night' };
-  check('夜行者 · 夜里 → 5 轮', stealCooldownFor(db(), night, at(21)) === 5);
+  check('夜行者 · 夜里 → 3 轮', stealCooldownFor(db(), night, at(21)) === 3);
   check('夜行者 · 白天 → 60 轮', stealCooldownFor(db(), night, at(12)) === 60);
   check('别的主题 · 夜里 → 60 轮', stealCooldownFor(db(), { theme: 'dark', skill: 'dark' }, at(21)) === 60);
   check('没主题（新号）· 夜里 → 60 轮', stealCooldownFor(db(), {}, at(21)) === 60);
@@ -77,7 +77,7 @@ log('=== 4 给前端的 nightInfo ===');
   const info = nightInfoFor(db(), { theme: 'night', skill: 'night' }, at(21));
   check('夜里 active = true', info.active === true);
   check('夜行者夜里 bonus = true', info.bonus === true);
-  check('stealCd = 5', info.stealCd === 5);
+  check('stealCd = 3', info.stealCd === 3);
   check('距离天亮是正数且小于 24 小时', info.msLeft > 0 && info.msLeft <= 86400000,
     Math.round(info.msLeft / 3600000) + ' 小时');
 
@@ -104,7 +104,7 @@ log('=== 5 结算时用 cd 推 stealReadyAt（模拟 server.js 那两行）===')
   const p = { theme: 'night', skill: 'night', stealReadyAt: 0 };
   const cd = stealCooldownFor(db(), p, at(21));
   p.stealReadyAt = stealTick + cd;
-  check('夜行者夜里偷完只要等 5 轮', p.stealReadyAt === 1005);
+  check('夜行者夜里偷完只要等 3 轮', p.stealReadyAt === 1003);
 
   const q = { theme: 'night', skill: 'night', stealReadyAt: 0 };
   q.stealReadyAt = stealTick + stealCooldownFor(db(), q, at(12));

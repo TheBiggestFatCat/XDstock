@@ -32,6 +32,7 @@ node tests/shop-perks.mjs            # 咸鱼代下单（免手续费）/ 游资
 node tests/index-suspension.mjs      # 成分股停牌不影响指数（改指数/停牌必跑，23 条）
 node tests/tycoon-broker.mjs         # 券商营收/大鳄预览（改财报/券商必跑，26 条）
 node tests/report-trend-expectation.mjs  # 市场预期=最近5期走势拟合（改财报预期必跑，25 条）
+node tests/skill-text.mjs            # 主题技能文案跟着配置走（改技能/文案必跑，47 条）
 node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占比/天花板（不是断言套，看表格）
 ```
 
@@ -57,7 +58,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 6. **发布流程**：改代码 → `node --check` → 本地跑通 → SFTP 上传 → 改线上数据（先备份）→
    `systemctl restart xdstock` → curl 验证 → `git commit` → `git push`（需代理 `127.0.0.1:4780`）。
 
-## 最容易踩的 15 个坑
+## 最容易踩的 16 个坑
 
 | 坑 | 症状 | 正解 |
 |---|---|---|
@@ -72,6 +73,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 | 押金漏算冲击成本 | 全仓挂单成交那一刻报「现金不足」并自动撤单 | `estimateReserve()` 里加 `impactCost` |
 | 跨模块函数忘了 import | `node --check` 只查语法 → 上线后每个 tick 抛 ReferenceError、systemd 重启循环 | 跑 `node tests/imports.mjs`；新写的分支本地一定要**真的走一遍**（2026-11 踩过：`isNightWindow`） |
 | 两套资金冲击混用 | 游资砸钱占满玩家上限 / 玩家单子推不动 | 玩家走 `st.flow`、虚假成交与游资走 `st.mflow`，公式各自一份、互不抢上限 |
+| 技能描述写死在 HTML 里 | 后台把「大鳄提前 20 轮」改成 12，商城还写 20，玩家按错误信息做决策 | 文案只在 `src/skillText.js` 生成（读 config），前端经 /api/skill-text 取；跑 `tests/skill-text.mjs` |
 | 市场预期写死成 0 | 玩家看不到「预期」，超预期/不及预期成了内部参数的游戏 | 用 `expectedGrowthFromHistory()`（最近 5 期营收回归外推），不够 3 期才回退模型口径 |
 | 券商活跃度用绝对口径 | 线上成交笔数少 → 营收被 25% 地板夹死 → 每期财报 0%、大鳄预览永远是「符合预期 0%」 | 用 `volumeFactorOf()`（volumeAvg / 慢速 volumeRef），migrate 会给贴地板的券商重置基准营收 |
 | 指数只算「在交易」的成分股 | 一停牌指数就闪崩（麦当劳停牌时 DENG −32%），复牌还回不来 | 遍历 status !== 'delisted'，停牌按最后价计；只有退市才剔除并强制调仓 |
@@ -110,6 +112,7 @@ src/kfc.js         肯德基：反向跟随麦当劳 + 疯狂星期四
 src/marketTrades.js 虚假成交（三档金额，**会推动股价**：写 st.mflow）
 src/hotmoney.js    游资（板块轮动，成交记录混在虚假成交里、看不出区别）
 src/perks.js       道具规则：咸鱼代下单（免手续费）/ 游资情报（读 hotMoney.nextIndustry）
+src/skillText.js   主题技能文案（按 config 生成一级/二级描述，前端不写死）
 src/store.js       db 加载/保存/migrate
 public/app.js      前端全部逻辑（~3500 行单文件）
 public/index.html  单页结构（视图 div）

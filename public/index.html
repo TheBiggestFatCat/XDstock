@@ -582,8 +582,9 @@
               <div>
                 <h3>金融大鳄</h3>
                 <p class="shop-sub">黄绿配色，老练的猎手<br />
-                  <b class="perk">技能：金融板块（券商/外汇）的下一期财报提前 20 轮可见，直接标明超预期还是不及预期</b>
+                  <b class="perk" data-perk="tycoon"></b>
                 </p>
+                <p class="perk-2" data-perk2="tycoon"></p>
               </div>
               <span class="shop-price">$2,000,000</span>
             </div>
@@ -605,8 +606,9 @@
               <div>
                 <h3>隐世仙人</h3>
                 <p class="shop-sub">青紫雾气，来去无踪<br />
-                  <b class="perk">技能：你的成交有 50% 概率不会出现在成交记录里，别人看不出来你在进出</b>
+                  <b class="perk" data-perk="hermit"></b>
                 </p>
+                <p class="perk-2" data-perk2="hermit"></p>
               </div>
               <span class="shop-price">$2,000,000</span>
             </div>
@@ -628,8 +630,9 @@
               <div>
                 <h3>红红的牛<span class="theme-owned hidden" data-owned="red">已拥有</span></h3>
                 <p class="shop-sub">满屏血红，涨得像头牛<br />
-                  <b class="perk">技能：指数处于上升趋势（价 &gt; MA5 &gt; MA10 &gt; MA30）时平仓，额外返 1% 成交额</b>
+                  <b class="perk" data-perk="red"></b>
                 </p>
+                <p class="perk-2" data-perk2="red"></p>
                 <p class="theme-earned">累计已返 <b id="redEarned">$0</b></p>
               </div>
               <span class="shop-price">$2,000,000</span>
@@ -651,8 +654,9 @@
               <div>
                 <h3>绿绿的熊<span class="theme-owned hidden" data-owned="bear">已拥有</span></h3>
                 <p class="shop-sub">满屏深绿，跌得像头熊<br />
-                  <b class="perk">技能：指数处于下跌趋势（价 &lt; MA5 &lt; MA10 &lt; MA30）时平仓，额外返 1% 成交额</b>
+                  <b class="perk" data-perk="bear"></b>
                 </p>
+                <p class="perk-2" data-perk2="bear"></p>
                 <p class="theme-earned">累计已返 <b id="bearEarned">$0</b></p>
               </div>
               <span class="shop-price">$2,000,000</span>
@@ -673,7 +677,10 @@
               <span class="shop-icon">🕶️</span>
               <div>
                 <h3>暗黑大手<span class="theme-owned hidden" data-owned="dark">已拥有</span></h3>
-                <p class="shop-sub">幕后操盘手的专属皮肤<br /><b class="perk">技能：你的成交对市场冲击额外 +5%，撬动价格比常人更狠</b></p>
+                <p class="shop-sub">幕后操盘手的专属皮肤<br />
+                  <b class="perk" data-perk="dark"></b>
+                </p>
+                <p class="perk-2" data-perk2="dark"></p>
               </div>
               <span class="shop-price">$2,000,000</span>
             </div>
@@ -709,8 +716,9 @@
               <div>
                 <h3>暗中调查<span class="theme-owned hidden" data-owned="probe">已拥有</span></h3>
                 <p class="shop-sub">深棕大衣，雨夜里的私家侦探<br />
-                  <b class="perk">技能：在排行榜「偷钱」旁边多一个「调查」，随机看一名玩家的一个持仓（方向 / 数量 / 成本 / 浮盈），冷却 30 轮</b>
+                  <b class="perk" data-perk="probe"></b>
                 </p>
+                <p class="perk-2" data-perk2="probe"></p>
               </div>
               <span class="shop-price">$2,000,000</span>
             </div>
@@ -732,9 +740,9 @@
               <div>
                 <h3>情绪读心<span class="theme-owned hidden" data-owned="mind">已拥有</span></h3>
                 <p class="shop-sub">玫紫电波，看得见散户在想什么<br />
-                  <b class="perk">技能：每只票多一条双向情绪条 —— 中线左边绿（看空）、右边红（看多），长度就是当前情绪的强弱；<br />
-                    ⚠️ 但它有 <b>50%</b> 的概率是假的（按同一套公式重新抽一个），真假自己判断</b>
+                  <b class="perk" data-perk="mind"></b>
                 </p>
+                <p class="perk-2" data-perk2="mind"></p>
               </div>
               <span class="shop-price">$5,000,000</span>
             </div>
@@ -756,10 +764,10 @@
               <div>
                 <h3>夜行者<span class="theme-owned hidden" data-owned="night">已拥有</span></h3>
                 <p class="shop-sub">深蓝近黑，只在夜里睁眼<br />
-                  <b class="perk">技能：现实时间 <b id="nightWindowText">18:00 ~ 04:00</b> 生效 ——
-                    偷钱冷却从 <b id="nightCdBase">60</b> 轮砍到 <b id="nightCdNight">5</b> 轮（白天照常）<br />
-                    <span id="nightStatus" class="night-status"></span></b>
+                  <b class="perk" data-perk="night"></b>
                 </p>
+                <p class="perk-2" data-perk2="night"></p>
+                <p class="night-status" id="nightStatus"></p>
               </div>
               <span class="shop-price">$2,000,000</span>
             </div>

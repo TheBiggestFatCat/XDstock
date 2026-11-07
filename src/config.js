@@ -112,10 +112,10 @@ export const DEFAULT_CONFIG = {
   mindAccurateChanceEvolved: 0.7,
 
   // ---- 夜行者主题（Lv.2）----
-  nightStartHour: 18,      // 现实时间几点开始算夜里（服务器本地时间）
+  nightStartHour: 20,      // 现实时间几点开始算夜里（服务器本地时间）
   nightEndHour: 4,         // 几点结束（支持跨零点）
-  nightStealCooldown: 5,   // 夜行者夜里偷钱的冷却（轮），其他情况用 stealCooldownTicks
-  nightStealCooldownEvolved: 3,  // 进化后夜里偷钱冷却（硬底线 3 轮）
+  nightStealCooldown: 3,   // 夜行者夜里偷钱的冷却（轮），其他情况用 stealCooldownTicks
+  nightStealCooldownEvolved: 1,  // 进化后夜里偷钱冷却（硬底线 1 轮）
 
   // ================= 主题成就 / 主题进化（Lv1 → Lv2）=================
   // 见 docs/成就系统设计.md §9。这里只是默认值，线上以 db.config 为准。
@@ -171,17 +171,18 @@ export const DEFAULT_CONFIG = {
   achvGlobalRequireAll: 1,
 
   // ---- 进化后的技能数值（Lv2 才生效）----
-  themeEvolveSkillMult: 1.5,       // 红牛/绿熊返现倍率（1.0 → 1.5）
-  themeEvolveImpact: 1.08,         // 暗黑大手冲击倍率（1.05 → 1.08）
+  // 2026-11 按 docs/主题技能.md 重平衡：二级技能统一是「数值更强」，
+  // 不再有「红牛免手续费 / 绿熊保证金减免」这两个额外效果。
+  themeEvolveSkillMult: 1.5,       // 红牛/绿熊返现倍率（1.0 → 1.5，1% → 1.5%）
+  darkImpactBase: 1.05,            // 暗黑大手冲击倍率（未进化，1 = 不加成）
+  themeEvolveImpact: 1.1,          // 暗黑大手冲击倍率（进化后）
   themeEvolveImpactRefund: 0.2,    // 暗黑大手返还自己冲击成本的比例
   tycoonLeadTicks: 20,             // 金融大鳄提前量（未进化）
-  tycoonLeadTicksEvolved: 30,      // 金融大鳄提前量（进化后）
-  hermitHideChance: 0.5,           // 隐世仙人成交隐身概率
-  hermitHideChanceEvolved: 0.75,   // 进化后隐身概率
+  tycoonLeadTicksEvolved: 40,      // 金融大鳄提前量（进化后）
+  hermitHideChance: 0.75,          // 隐世仙人成交隐身概率
+  hermitHideChanceEvolved: 1,      // 进化后隐身概率（100% = 完全隐身）
   investigateCooldownTicks: 30,    // 暗中调查冷却（未进化）
   investigateCooldownEvolved: 20,  // 暗中调查冷却（进化后）
-  themeEvolveBearMarginCut: 0.2,   // 绿熊进化：空头排列做空保证金 −20%
-  themeEvolveFeeFreeRed: 1,        // 红牛进化：多头排列挂单免手续费（1=开）
   shopBgPrice: 5000000,        // 自定义背景（一次买断）
   shopRenamePrice: 1000000,    // 改名卡
   shopRenameCooldown: 2000,    // 改名冷却（轮）

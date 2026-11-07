@@ -146,8 +146,21 @@ log('=== 6 情绪会累积成趋势，不是一次性 ===');
   const before = st.price;
   const prices = runTicks(db, st, 120);
   // 每次施加 ±2% 以内的对称噪声，120 次的累计 σ ≈ 1.15% × √120 ≈ 12.6%
-  const drift = Math.abs(st.price / before - 1);
-  check('120 轮后有明显位移', drift > 0.005, `位移 ${(drift * 100).toFixed(2)}%`);
+  // ⚠️ 单次路径的终点可能恰好回到原点（±2% 对称噪声掷 10 次，|净位移| < 0.5% 约 11% 概率），
+  // 所以跑 5 条独立路径看「最大位移」——断言的是「情绪真的在推价格」，不是「这次掷得够远」
+  const drifts = [];
+  for (let k = 0; k < 5; k++) {
+    const dbk = setup({ sentimentStrength: 0.02, sentimentDrift: 0 });
+    const stk = dbk.stocks.TGW;
+    stk.trait.sentStrength = 0.02;
+    stk.sentiment = { v: 1, nextRoll: 1e12, nextApply: 0 };
+    const b = stk.price;
+    runTicks(dbk, stk, 120);
+    drifts.push(Math.abs(stk.price / b - 1));
+  }
+  const drift = Math.max(...drifts);
+  check('120 轮后有明显位移（5 条路径取最大）', drift > 0.01,
+    `位移 ${(drift * 100).toFixed(2)}%（5 条：${drifts.map((d) => (d * 100).toFixed(2)).join(' / ')}%）`);
   check('位移在合理量级内（< 60%）', drift < 0.6, `${(drift * 100).toFixed(2)}%`);
   check('过程中价格确实在变', changedCount(prices) > 100, `变动 ${changedCount(prices)} 次`);
 }

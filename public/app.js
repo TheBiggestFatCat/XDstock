@@ -2091,6 +2091,44 @@ async function chooseTheme(code, part = 'look') {
   }
 }
 
+/**
+ * 主题技能文案：**数字全部由服务端按后台配置生成**（`/api/skill-text`），
+ * 前端一个字都不写死 —— 后台把大鳄提前量从 20 改成 12，卡片上立刻是 12。
+ * 二级技能（进化后）单独一行，按玩家的 `me.achv.themes[code].tier` 显示是否已解锁。
+ */
+function renderSkillPerks() {
+  const texts = state.skillText || {};
+  const tiers = state.market?.me?.achv?.themes || {};
+  document.querySelectorAll('[data-perk]').forEach((el) => {
+    const t = texts[el.dataset.perk];
+    el.textContent = t && t.t1 ? `技能：${t.t1}` : '';
+  });
+  document.querySelectorAll('[data-perk2]').forEach((el) => {
+    const code = el.dataset.perk2;
+    const t = texts[code];
+    if (!t || !t.t2) { el.textContent = ''; return; }
+    const on = (Number(tiers?.[code]?.tier) || 1) >= 2;
+    el.className = 'perk-2' + (on ? ' on' : '');
+    el.textContent = `Ⅱ 阶${on ? '（已解锁）' : '（进化后解锁）'}：${t.t2}`;
+  });
+}
+
+/** 拉技能文案：进商城时拉一次，60 秒内复用（后台改了参数重进商城就更新） */
+async function loadSkillText(force) {
+  const t = Date.now();
+  if (!force && state.skillTextAt && t - state.skillTextAt < 60000) return;
+  try {
+    const r = await api('/api/skill-text');
+    if (r && r.texts) {
+      state.skillText = r.texts;
+      state.skillTextAt = t;
+      renderSkillPerks();
+    }
+  } catch {
+    /* 拿不到就保持上一次的文案，别把卡片清空 */
+  }
+}
+
 function renderShop() {
   const cfg = state.market?.config || {};
   const price = Number(cfg.shopFakeNewsPrice ?? 500000);
@@ -2362,19 +2400,14 @@ function renderShop() {
   });
 
   // 夜行者：现在是不是夜里 + 距离下一次开关还有多久
+  renderSkillPerks();
+  loadSkillText();
   const nightEl = $('#nightStatus');
   if (nightEl) {
     const n = state.market?.me?.night || {};
     const start = Number(cfg.nightStartHour ?? 18);
     const end = Number(cfg.nightEndHour ?? 4);
     const hh = (v) => String(v).padStart(2, '0') + ':00';
-    // 卡片上的数字全部按后台配置显示，别写死
-    const winEl = $('#nightWindowText');
-    if (winEl) winEl.textContent = `${hh(start)} ~ ${hh(end)}`;
-    const baseEl = $('#nightCdBase');
-    if (baseEl) baseEl.textContent = String(Number(cfg.stealCooldownTicks ?? 60));
-    const nightCdEl = $('#nightCdNight');
-    if (nightCdEl) nightCdEl.textContent = String(Number(cfg.nightStealCooldown ?? 5));
     const left = Math.max(0, Number(n.msLeft) || 0);
     const mins = Math.ceil(left / 60000);
     if (n.active) {
@@ -5338,24 +5371,39 @@ async function loadAdmin() {
           ]
         },
         {
-          title: '进化后的数值（Ⅱ 阶）',
-          desc: '只影响技能手感，不动本金和成交上限',
+          title: 'Ⅰ 阶：主题技能数值',
+          desc: '买了主题就生效的数值（改完商城卡片文案会自动跟着变）',
           fields: [
-            ['themeEvolveSkillMult', '红牛/绿熊返现倍率(1.5)'],
-            ['themeEvolveFeeFreeRed', '红牛：多头排列免手续费(1=开)'],
-            ['themeEvolveBearMarginCut', '绿熊：做空保证金减免(0.2=20%)'],
-            ['themeEvolveImpact', '暗黑：冲击倍率(1.08)'],
-            ['themeEvolveImpactRefund', '暗黑：冲击成本返还(0.2=20%)'],
-            ['tycoonLeadTicks', '大鳄：提前量(轮)'],
-            ['tycoonLeadTicksEvolved', '大鳄：进化后提前量(轮)'],
-            ['hermitHideChance', '隐世：隐身概率(0.5)'],
-            ['hermitHideChanceEvolved', '隐世：进化后隐身概率(0.75)'],
-            ['investigateCooldownTicks', '调查冷却(轮)'],
-            ['investigateCooldownEvolved', '调查冷却·进化后(轮)'],
-            ['nightStealCooldown', '夜行：夜里偷钱冷却(轮)'],
-            ['nightStealCooldownEvolved', '夜行：进化后冷却(轮)']
+            ['redBonusRate', '红牛：多头排列平仓返现率(0.01=1%)'],
+            ['redBonusMinTicks', '红牛：返现要求的最少持仓轮数(12)'],
+            ['bearBonusRate', '绿熊：空头排列平仓返现率(0.01=1%)'],
+            ['bearBonusMinTicks', '绿熊：返现要求的最少持仓轮数(12)'],
+            ['darkImpactBase', '暗黑：成交冲击倍率(1.05)'],
+            ['tycoonLeadTicks', '大鳄：财报提前量(轮, 20)'],
+            ['hermitHideChance', '隐世：成交隐身概率(0.75)'],
+            ['investigateCooldownTicks', '调查：冷却(轮, 30)'],
+            ['mindFakeChance', '读心：假读数概率(0.5=50%)'],
+            ['nightStartHour', '夜行：夜里开始小时(20)'],
+            ['nightEndHour', '夜行：夜里结束小时(4)'],
+            ['nightStealCooldown', '夜行：夜里偷钱冷却(轮, 3)'],
+            ['stealCooldownTicks', '偷钱：白天冷却(轮, 60)'],
+            ['stealCapRatio', '偷钱：上限占对方现金比例']
           ]
-        }
+        },
+        {
+          title: 'Ⅱ 阶：进化后数值',
+          desc: '进化（消耗结晶）之后才生效的更强数值',
+          fields: [
+            ['themeEvolveSkillMult', '红牛/绿熊：返现倍率(1.5, 1%→1.5%)'],
+            ['themeEvolveImpact', '暗黑：成交冲击倍率(1.1)'],
+            ['themeEvolveImpactRefund', '暗黑：冲击成本返还比例(0.2=20%)'],
+            ['tycoonLeadTicksEvolved', '大鳄：财报提前量(轮, 40)'],
+            ['hermitHideChanceEvolved', '隐世：成交隐身概率(1=100%)'],
+            ['investigateCooldownEvolved', '调查：冷却(轮, 20)'],
+            ['mindAccurateChanceEvolved', '读心：看到真值的概率(0.7=70%)'],
+            ['nightStealCooldownEvolved', '夜行：夜里偷钱冷却(轮, 1)']
+          ]
+        },
       ]
     },
     {

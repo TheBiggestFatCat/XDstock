@@ -42,7 +42,7 @@ export function isNightWindow(db, nowMs = Date.now()) {
 /**
  * 该玩家**此刻**的偷钱冷却（轮）。
  *
- * - 夜行者主题 + 夜里 → `nightStealCooldown`（默认 5 轮）
+ * - 夜行者主题 + 夜里 → `nightStealCooldown`（默认 3 轮）
  * - 其他情况 → `stealCooldownTicks`（默认 60 轮）
  */
 export function stealCooldownFor(db, player, nowMs = Date.now()) {
@@ -51,11 +51,11 @@ export function stealCooldownFor(db, player, nowMs = Date.now()) {
   if (!player || player.skill !== 'night') return base;
   if (!isNightWindow(db, nowMs)) return base;
   const night = Number(cfg.nightStealCooldown);
-  const baseNight = Math.max(0, Number.isFinite(night) ? night : 5);
-  // 进化后（Ⅱ 阶）夜行者的夜间冷却再降一档，硬底线 3 轮
+  const baseNight = Math.max(0, Number.isFinite(night) ? night : 3);
+  // 进化后（Ⅱ 阶）夜行者的夜间冷却再降一档，硬底线 1 轮（2026-11 按主题技能表下调）
   if (!isEvolved(player, 'night')) return baseNight;
   const evo = Number(cfg.nightStealCooldownEvolved);
-  return Math.max(3, Math.min(baseNight, Number.isFinite(evo) ? evo : 3));
+  return Math.max(1, Math.min(baseNight, Number.isFinite(evo) ? evo : 1));
 }
 
 /** 给前端展示用：这个玩家当前的偷钱 CD 和夜里状态 */
