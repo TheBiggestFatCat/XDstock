@@ -20,7 +20,8 @@ node tests/order-audit.mjs           # 下单/撮合/押金回归（改下单必
 node tests/order-conflict.mjs        # 同票开平冲突（改挂单必跑，21 条断言）
 node tests/theme-split.mjs           # 主题=外观+技能（改商城必跑，28 条断言）
 node tests/shop-gate.mjs             # 商城等级门槛（改商城必跑，30 条断言）
-node tests/theme-evolution.mjs       # 主题成就 + 主题进化（改成就/技能必跑，69 条断言）
+node tests/theme-evolution.mjs       # 主题成就 + 主题进化（改成就/技能必跑，72 条断言）
+node tests/theme-achv-own.mjs        # 主题成就只看「拥有」不看装备（改成就判定必跑，36 条）
 node tests/imports.mjs               # 静态体检：跨模块「用了但没 import」（改 server/api 必跑，17 条）
 node tests/global-achievements.mjs   # 全局成就 价值投资/短线擒龙（改成就必跑，53 条）
 node tests/gold-stock.mjs            # 矿工银行 MB 金价驱动 + 退市清理（改新股必跑，58 条）
@@ -58,7 +59,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 6. **发布流程**：改代码 → `node --check` → 本地跑通 → SFTP 上传 → 改线上数据（先备份）→
    `systemctl restart xdstock` → curl 验证 → `git commit` → `git push`（需代理 `127.0.0.1:4780`）。
 
-## 最容易踩的 16 个坑
+## 最容易踩的 17 个坑
 
 | 坑 | 症状 | 正解 |
 |---|---|---|
@@ -73,6 +74,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 | 押金漏算冲击成本 | 全仓挂单成交那一刻报「现金不足」并自动撤单 | `estimateReserve()` 里加 `impactCost` |
 | 跨模块函数忘了 import | `node --check` 只查语法 → 上线后每个 tick 抛 ReferenceError、systemd 重启循环 | 跑 `node tests/imports.mjs`；新写的分支本地一定要**真的走一遍**（2026-11 踩过：`isNightWindow`） |
 | 两套资金冲击混用 | 游资砸钱占满玩家上限 / 玩家单子推不动 | 玩家走 `st.flow`、虚假成交与游资走 `st.mflow`，公式各自一份、互不抢上限 |
+| 成就判定写成「必须装备技能」 | 玩家买了主题、换用别的技能，成就再也不涨 | 判定用 `achievements.js#ownsTheme()`；技能效果（返现/冲击/隐身/冷却）仍然只看 `player.skill` |
 | 技能描述写死在 HTML 里 | 后台把「大鳄提前 20 轮」改成 12，商城还写 20，玩家按错误信息做决策 | 文案只在 `src/skillText.js` 生成（读 config），前端经 /api/skill-text 取；跑 `tests/skill-text.mjs` |
 | 市场预期写死成 0 | 玩家看不到「预期」，超预期/不及预期成了内部参数的游戏 | 用 `expectedGrowthFromHistory()`（最近 5 期营收回归外推），不够 3 期才回退模型口径 |
 | 券商活跃度用绝对口径 | 线上成交笔数少 → 营收被 25% 地板夹死 → 每期财报 0%、大鳄预览永远是「符合预期 0%」 | 用 `volumeFactorOf()`（volumeAvg / 慢速 volumeRef），migrate 会给贴地板的券商重置基准营收 |

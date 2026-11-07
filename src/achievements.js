@@ -292,6 +292,20 @@ export function isEvolved(player, theme) {
 }
 
 /**
+ * 是否**拥有**某个主题（买过就算，不需要正在装备）。
+ *
+ * 2026-11 起：主题成就的判定只看「拥有」—— 买了红牛主题、用着别的技能，
+ * 平仓照样算「顺势收割」。技能效果本身（返现 / 冲击 / 隐身 / 冷却…）还是只看 `player.skill`。
+ *
+ * `themes` 数组是买断记录；老存档可能只有正在用的 `theme` / `skill`，一并算拥有。
+ */
+export function ownsTheme(player, theme) {
+  if (!player || !theme) return false;
+  if (Array.isArray(player.themes) && player.themes.includes(theme)) return true;
+  return player.theme === theme || player.skill === theme;
+}
+
+/**
  * 技能强度倍率：进化后 1.5（红牛/绿熊返现用这个乘）。
  * 具体上限仍由 `redBonusRate` / `bearBonusRate` 控制，不在这里写死金额。
  */

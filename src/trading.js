@@ -1,7 +1,7 @@
 import { now } from './store.js';
 import {
   bumpAchv, grantAchv, bumpGlobal, isEvolved, skillMult, achvTarget, ensureAchvState,
-  themeTier, refreshGlobals
+  themeTier, refreshGlobals, ownsTheme
 } from './achievements.js';
 import { isTycoonSector } from './fundamentals.js';
 import { maskSentiment } from './mind.js';
@@ -250,7 +250,8 @@ function recentOtherTrades(db, code, selfId, windowTicks, action) {
 
 /** 🕶️ 黑手：暗黑大手同股同方向累计开仓额，达标后「换技能平仓」才解锁 */
 function trackDarkAccum(db, player, code, side, notional) {
-  if (player.skill !== 'dark') return;
+  // 成就只看「拥有」：用着别的技能也照样累计（技能效果本身还是看 skill）
+  if (!ownsTheme(player, 'dark')) return;
   if (!player.darkAccum || typeof player.darkAccum !== 'object') player.darkAccum = {};
   if (!player.darkArmed || typeof player.darkArmed !== 'object') player.darkArmed = {};
   const cur = player.darkAccum[code];
@@ -265,7 +266,7 @@ function trackDarkAccum(db, player, code, side, notional) {
 
 /** 🕶️ 推土机：别人刚开仓，我反方向进场 → 武装；等他平完我再平 → 解锁 */
 function armDarkPush(db, player, code, side) {
-  if (player.skill !== 'dark') return;
+  if (!ownsTheme(player, 'dark')) return;
   const win = achvTarget(db.config, 'achvDarkPushWindowTicks');
   const others = recentOtherTrades(db, code, player.id, win, 'open')
     .filter((t) => (t.side === 'short' ? 'short' : 'long') !== side);
@@ -276,7 +277,7 @@ function armDarkPush(db, player, code, side) {
 
 /** 🧙 来去无踪：别人刚成交，我用隐世仙人跟着成交 */
 function trackHermitFollow(db, player, code) {
-  if (player.skill !== 'hermit') return;
+  if (!ownsTheme(player, 'hermit')) return;
   const win = achvTarget(db.config, 'achvHermitFollowWindowTicks');
   if (!recentOtherTrades(db, code, player.id, win).length) return;
   bumpAchv(db, player, 'hermitFollow', 1);
@@ -284,7 +285,7 @@ function trackHermitFollow(db, player, code) {
 
 /** 🕵️ 软柿子：别人刚建仓，我在同一只票反方向开仓 */
 function trackProbeWeak(db, player, code, side) {
-  if (player.skill !== 'probe') return;
+  if (!ownsTheme(player, 'probe')) return;
   const win = achvTarget(db.config, 'achvProbeWindowTicks');
   const others = recentOtherTrades(db, code, player.id, win, 'open')
     .filter((t) => (t.side === 'short' ? 'short' : 'long') !== side);
@@ -415,7 +416,9 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
   trackProbeWeak(db, player, code, side);
   // 🧙 孤狼：单票持仓市值
   const posNow = player.positions[code];
-  if (posNow) bumpAchv(db, player, 'hermitMaxPos', num(posNow.qty) * price, 'max');
+  if (posNow && ownsTheme(player, 'hermit')) {
+    bumpAchv(db, player, 'hermitMaxPos', num(posNow.qty) * price, 'max');
+  }
 
   return { ok: true, position: player.positions[code] };
 }
@@ -457,39 +460,45 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
   // （分批止盈/止损时，每一笔平仓都有机会吃到返现）
   const redRate = Number(cfg.redBonusRate ?? 0.01);
   const uptrendNow = indexUptrend(db);
-  // 🐂 顺势收割：多头排列期间平仓就计数（不要求吃到返现）
-  if (player.skill === 'red' && !noBonus && uptrendNow) {
+  // 🐂 顺势收割：**拥有**红牛主题就计数（不用正在装备技能）
+  if (ownsTheme(player, 'red') && !noBonus && uptrendNow) {
     bumpAchv(db, player, 'redTrendClose', 1);
   }
-  if (player.skill === 'red' && redRate > 0 && !noBonus) {
+  if (ownsTheme(player, 'red') && redRate > 0 && !noBonus) {
     const minTicks = Math.max(0, Number(cfg.redBonusMinTicks ?? 12));
     const held = db.tick - Number(pos.openedTick ?? db.tick);
     if (held >= minTicks && uptrendNow) {
-      // 进化后倍率 1.5（上限仍由 redBonusRate 控制，不在这里写死金额）
-      bonus = notional * redRate * skillMult(db, player, 'red');
-      back += bonus;
-      // 累计统计，主题卡片上要显示
-      player.redBonusEarned = num(player.redBonusEarned) + bonus;
-      bumpAchv(db, player, 'redBonusEarned', bonus);
+      // 成就按「基础返现率」累计；真金白银只有装备了红牛技能才发
+      bumpAchv(db, player, 'redBonusEarned', notional * redRate);
+      if (player.skill === 'red') {
+        // 进化后倍率 1.5（上限仍由 redBonusRate 控制，不在这里写死金额）
+        bonus = notional * redRate * skillMult(db, player, 'red');
+        back += bonus;
+        // 累计统计，主题卡片上要显示
+        player.redBonusEarned = num(player.redBonusEarned) + bonus;
+      }
     }
   }
 
   // 「绿绿的熊」技能：熊市里平仓，同样返 1% 成交额（和红牛正好反过来）
   const bearRate = Number(cfg.bearBonusRate ?? 0.01);
   const downtrendNow = indexDowntrend(db);
-  // 🐻 熊市舞者：空头排列期间平仓就计数
-  if (player.skill === 'bear' && !noBonus && downtrendNow) {
+  // 🐻 熊市舞者：**拥有**绿熊主题就计数（不用正在装备技能）
+  if (ownsTheme(player, 'bear') && !noBonus && downtrendNow) {
     bumpAchv(db, player, 'bearTrendClose', 1);
   }
-  if (player.skill === 'bear' && bearRate > 0 && !noBonus) {
+  if (ownsTheme(player, 'bear') && bearRate > 0 && !noBonus) {
     const minTicks = Math.max(0, Number(cfg.bearBonusMinTicks ?? 12));
     const held = db.tick - Number(pos.openedTick ?? db.tick);
     if (held >= minTicks && downtrendNow) {
-      const add = notional * bearRate * skillMult(db, player, 'bear');
-      bonus += add;
-      back += add;
-      player.bearBonusEarned = num(player.bearBonusEarned) + add;
-      bumpAchv(db, player, 'bearBonusEarned', add);
+      // 成就按基础返现率累计；真金白银只有装备了绿熊技能才发
+      bumpAchv(db, player, 'bearBonusEarned', notional * bearRate);
+      if (player.skill === 'bear') {
+        const add = notional * bearRate * skillMult(db, player, 'bear');
+        bonus += add;
+        back += add;
+        player.bearBonusEarned = num(player.bearBonusEarned) + add;
+      }
     }
   }
 
@@ -545,7 +554,7 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
   }
 
   // 🕶️ 推土机：我推过价，且对方已经平掉 → 解锁
-  if (player.skill === 'dark' && player.pushArm && player.pushArm.code === code) {
+  if (ownsTheme(player, 'dark') && player.pushArm && player.pushArm.code === code) {
     const other = db.players?.[player.pushArm.otherId];
     const otherStillIn = other && other.positions && other.positions[code];
     if (!otherStillIn) {
@@ -555,7 +564,7 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
   }
 
   // 🐊 先知：金融板块「超预期」财报公布前后的一进一出
-  if (player.skill === 'tycoon' && st && isTycoonSector(st)) {
+  if (ownsTheme(player, 'tycoon') && st && isTycoonSector(st)) {
     const surprise = Number(st.lastSurprise) || 0;
     const reportAt = Number(st.lastReportTick) || 0;
     const needLev = achvTarget(cfgA, 'achvTycoonProphetLeverage');
@@ -571,8 +580,8 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
     if (net > 0) bumpAchv(db, player, 'tycoonFinancePnl', net);
   }
 
-  // 🧠 读心 / 情绪交易员
-  if (player.skill === 'mind') {
+  // 🧠 读心 / 情绪交易员（只看拥有；没装备的人读到的是引擎那份真值，不影响判定）
+  if (ownsTheme(player, 'mind')) {
     // 用「这个玩家自己看到的读数」判定，而不是全局那份
     const v = Number(maskSentiment(st, db, player).v) || 0;
     const extreme = Math.max(0.1, Math.min(1, Number(cfgA.achvMindExtreme ?? 0.8)));
@@ -582,8 +591,8 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
     if (netMind > 0) bumpAchv(db, player, 'mindPnl', netMind);
   }
 
-  // 🧙 孤狼：平仓前再量一次持仓市值（涨上去也算）
-  if (pos && pos.qty > 0) {
+  // 🧙 孤狼：平仓前再量一次持仓市值（涨上去也算；拥有隐世主题才算）
+  if (ownsTheme(player, 'hermit') && pos && pos.qty > 0) {
     bumpAchv(db, player, 'hermitMaxPos', num(pos.qty) * price, 'max');
   }
 

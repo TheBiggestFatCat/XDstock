@@ -20,7 +20,7 @@ import { visibleEmotes } from './src/emoji.js';
 import { latestVersionPost } from './src/version.js';
 import { stealAmount } from './src/steal.js';
 import {
-  achvPayload, ensureAchvState, bumpAchv, isEvolved
+  achvPayload, ensureAchvState, bumpAchv, isEvolved, ownsTheme
 } from './src/achievements.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
