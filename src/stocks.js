@@ -198,8 +198,12 @@ export const STOCK_SEED = {
     freeFloat: 0.5,
     desc: '快餐连锁、品牌授权、全球门店',
     initialPrice: 327.35,
-    // 市值天花板：10000 亿（1e12），无限接近但不超过
-    capCeiling: 1000000000000,
+    // 2026-11 按需求**去掉市值天花板**（原来 capCeiling = 1e12 = 10000 亿，
+    // 把股价硬夹在 1666.67，涨到头就再也上不去，看起来像卡死）。
+    // 现在 MCD 没有专属上限，只剩两条全局规则：
+    //   · 价格 ≤ fair × maxPremium（防泡沫，所有票都吃）
+    //   · 营收 ≤ baseRev × growthCeiling（基本面天花板，会自然放慢增速）
+    // 引擎仍然支持 capCeiling：其它票想设就写在这，跑 tests/mcd.mjs 会一起验。
     // 营收天花板：长到 4.5 倍就基本停（对应 EPS 约 80，PE 落在 20 附近，不会出现「PE 只有 8」的怪相）
     growthCeiling: 4.5,
     // 专属：每天现实时间 12:00 / 18:00 整各拉升一次
@@ -207,10 +211,10 @@ export const STOCK_SEED = {
     trait: {
       id: 'steady',
       name: '稳步增长',
-      desc: '财报稳得像闹钟，市值一点点往一万亿靠；每天 12 点和 18 点各拉一次',
+      desc: '财报稳得像闹钟，越远离天花板长得越快；每天 12 点和 18 点各拉一次',
       volMult: 0.7,
       revMult: 1.2,
-      // 离天花板最远时的每期增速（越接近天花板越慢）
+      // 没有天花板时的每期增速（有 capCeiling 时越接近越慢）
       steadyGrowth: 0.028
     }
   }

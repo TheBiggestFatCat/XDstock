@@ -265,8 +265,10 @@ export function genNextReport(st, ctx = {}) {
   let plainRandom = true;
   let bias = 0;
 
-  // 「稳步增长」型（麦当劳）：增速只由「离市值天花板还有多远」决定，
-  // 越接近天花板长得越慢 —— 无限接近但永远到不了
+  // 「稳步增长」型（麦当劳）：有市值天花板时增速只由「离天花板还有多远」决定，
+  // 越接近天花板长得越慢 —— 无限接近但永远到不了。
+  // 2026-11 起 MCD 不再设 capCeiling（天花板会把它硬夹在 10000 亿、看起来像卡死），
+  // 没有天花板时 room 固定取 0.5（≈ 每期 2%），剩下的刹车交给营收天花板（growthCeiling）。
   if (trait === 'steady') {
     const capTarget = Math.max(0, Number(st.capCeiling) || Number(ctx.capCeiling) || 0);
     const capNow = Math.max(1, (Number(st.fair) || Number(st.price) || 1) * shares);

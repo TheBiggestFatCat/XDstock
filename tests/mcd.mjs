@@ -31,7 +31,9 @@ log('=== 1 上市设定 ===');
   check('总股本 6 亿股', st.shares === 600000000, String(st.shares));
   check('上市市值 1964.1 亿', Math.abs(capOf(st) / 1e8 - 1964.1) < 0.05,
     (capOf(st) / 1e8).toFixed(2) + ' 亿');
-  check('市值天花板 10000 亿', st.capCeiling === 1000000000000);
+  // 2026-11：按需求去掉 MCD 专属的 10000 亿市值天花板（它把股价硬夹在 1666.67）
+  check('没有市值天花板（capCeiling 已去掉）', !st.capCeiling, String(st.capCeiling));
+  check('营收天花板仍然保留（4.5 倍）', Number(st.growthCeiling) === 4.5, String(st.growthCeiling));
   check('拉升时间 12 / 18 点', JSON.stringify(st.rallyHours) === '[12,18]');
   check('起点不打折（fair ≈ 现价）', Math.abs(st.fair / st.price - 1) < 0.02,
     `fair ${st.fair.toFixed(2)} / 价 ${st.price.toFixed(2)}`);
@@ -73,7 +75,7 @@ log('=== 2 稳步增长：营收一期一期往上走，增速很稳 ===');
 
 // ---------------------------------------------------------------- 3
 log('');
-log('=== 3 市值无限靠近 10000 亿，但永远不超过（走真实 runReports）===');
+log('=== 3 不再有市值天花板：400 期实跑，fair 市值会越过 10000 亿 ===');
 {
   const db = migrate({});
   const st = db.stocks.MCD;
@@ -86,10 +88,13 @@ log('=== 3 市值无限靠近 10000 亿，但永远不超过（走真实 runRepo
   db.config.reportIntervalTicks = 720;
   db.config.dividendRate = 0;      // 这段只关心市值曲线
   db.players = {};
+  const baseRev = Number(st.fundamentals.revenue) || 1;
+  const revCeil = baseRev * 4.5;
   const realLog = console.log;
   let maxCap = 0;
   const marks = {};
   const growths = {};
+  let maxRev = 0;
   try {
     console.log = () => {};
     for (let i = 1; i <= 400; i++) {
@@ -98,6 +103,7 @@ log('=== 3 市值无限靠近 10000 亿，但永远不超过（走真实 runRepo
       runReports(db);
       const cap = st.fair * st.shares;
       if (cap > maxCap) maxCap = cap;
+      maxRev = Math.max(maxRev, Number(st.fundamentals.revenue) || 0);
       if ([10, 50, 150, 300, 400].includes(i)) {
         marks[i] = cap / 1e8;
         growths[i] = Number(st.fundamentals.growth) || 0;
@@ -106,18 +112,15 @@ log('=== 3 市值无限靠近 10000 亿，但永远不超过（走真实 runRepo
   } finally {
     console.log = realLog;
   }
-  check('400 期里 fair 市值从没越过 10000 亿', maxCap <= 1e12 + 1e6,
+  check('fair 市值已经越过 10000 亿（说明没有硬顶了）', maxCap > 1e12,
     '最高 ' + (maxCap / 1e8).toFixed(0) + ' 亿');
-  check('确实靠近了（超过 5000 亿）', marks[400] > 5000, marks[400].toFixed(0) + ' 亿');
-  check('停在 9500 亿附近（留 5% 给整点拉升）',
-    marks[400] > 9000 && marks[400] < 9600, marks[400].toFixed(0) + ' 亿');
-  check('越接近天花板长得越慢（早期增速是晚期的 3 倍以上）',
-    growths[10] > growths[300] * 3,
-    `第10期 ${(growths[10] * 100).toFixed(2)}% vs 第300期 ${(growths[300] * 100).toFixed(3)}%`);
-  check('永远到不了天花板（最后一期仍低于 10000 亿）',
-    marks[400] < 10000, marks[400].toFixed(0) + ' 亿');
+  check('越往后长得越慢（营收逼近天花板）', growths[10] > growths[400] * 1.5,
+    `第10期 ${(growths[10] * 100).toFixed(2)}% vs 第400期 ${(growths[400] * 100).toFixed(3)}%`);
+  check('营收仍然守着 baseRev × 4.5 的天花板', maxRev <= revCeil * 1.0001,
+    `${(maxRev / 1e8).toFixed(0)} 亿 / 上限 ${(revCeil / 1e8).toFixed(0)} 亿`);
   const pe = st.fundamentals.eps > 0 ? st.fair / st.fundamentals.eps : 0;
   check('PE 没跑飞（10~40 之间）', pe > 10 && pe < 40, 'PE ' + pe.toFixed(1));
+  void marks;
 }
 
 // ---------------------------------------------------------------- 4
@@ -197,31 +200,60 @@ log('=== 5 真的会拉升：幅度落在 5%~20%，而且不会连拉 ===');
 
 // ---------------------------------------------------------------- 6
 log('');
-log('=== 6 市值天花板兜底：硬推也推不过 10000 亿 ===');
+log('=== 6 引擎仍然支持 capCeiling（只是 MCD 不再设），且现在价格不会被夹在 1666.67 ===');
 {
-  const db = createDb();
-  Object.assign(db.config, {
-    baseVolatility: 0, meanReversion: 0, eventChance: 0, localEventChance: 0,
-    marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0, sentimentEnabled: 0, maxPremium: 1e9
-  });
-  const st = db.stocks.MCD;
-  st.shares = 600000000;
-  st.capCeiling = 1000000000000;
-  st.price = 1600;
-  st.fair = 1600;
-  st.nextReportTick = 1e12;
-  st.rallyHours = [];
-  const realLog = console.log;
-  console.log = () => {};
-  try {
-    for (let i = 0; i < 50; i++) stepMarket(db);
-  } finally {
-    console.log = realLog;
+  // 6a：MCD 没有天花板 → 价格可以站上 1666.67
+  {
+    const db = createDb();
+    Object.assign(db.config, {
+      baseVolatility: 0, meanReversion: 0, eventChance: 0, localEventChance: 0,
+      marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0, sentimentEnabled: 0, maxPremium: 1e9
+    });
+    const st = db.stocks.MCD;
+    st.shares = 600000000;
+    st.capCeiling = 0;
+    st.price = 1700;
+    st.fair = 1700;
+    st.nextReportTick = 1e12;
+    st.rallyHours = [];
+    const realLog = console.log;
+    console.log = () => {};
+    try {
+      for (let i = 0; i < 50; i++) stepMarket(db);
+    } finally {
+      console.log = realLog;
+    }
+    check('没有天花板时 1700 不会被夹到 1666.67', st.price > 1666.67 + 1,
+      st.price.toFixed(2));
+    check('市值可以超过 10000 亿', capOf(st) > 1e12, (capOf(st) / 1e8).toFixed(0) + ' 亿');
   }
-  check('股价被压在 1666.67 以内', st.price <= 1000000000000 / 600000000 + 1e-9,
-    st.price.toFixed(2));
-  check('市值不超过 10000 亿', capOf(st) <= 1e12 + 1e3,
-    (capOf(st) / 1e8).toFixed(1) + ' 亿');
+
+  // 6b：手动给某只票设 capCeiling，硬推还是推不过（引擎能力保留）
+  {
+    const db = createDb();
+    Object.assign(db.config, {
+      baseVolatility: 0, meanReversion: 0, eventChance: 0, localEventChance: 0,
+      marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0, sentimentEnabled: 0, maxPremium: 1e9
+    });
+    const st = db.stocks.MCD;
+    st.shares = 600000000;
+    st.capCeiling = 1000000000000;
+    st.price = 1600;
+    st.fair = 1600;
+    st.nextReportTick = 1e12;
+    st.rallyHours = [];
+    const realLog = console.log;
+    console.log = () => {};
+    try {
+      for (let i = 0; i < 50; i++) stepMarket(db);
+    } finally {
+      console.log = realLog;
+    }
+    check('设了 capCeiling 时股价仍被压在上限内', st.price <= 1000000000000 / 600000000 + 1e-9,
+      st.price.toFixed(2));
+    check('设了 capCeiling 时市值不超过上限', capOf(st) <= 1e12 + 1e3,
+      (capOf(st) / 1e8).toFixed(1) + ' 亿');
+  }
 }
 
 console.log(out.join('\n'));
