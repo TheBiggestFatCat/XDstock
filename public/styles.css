@@ -502,6 +502,27 @@ input[type="range"]::-webkit-slider-thumb {
 }
 input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.12); }
 
+/* 杠杆滑条：左边绿（低倍）→ 右边红（高倍），滑块描边跟当前档位同色 */
+#orderLev {
+  background: linear-gradient(90deg, #16a34a 0%, #84cc16 28%, #eab308 56%, #f97316 80%, #dc2626 100%);
+}
+#orderLev::-webkit-slider-thumb {
+  border-color: var(--lev-color, var(--accent));
+  box-shadow: 0 3px 10px rgba(15, 42, 38, .22);
+}
+#orderLev::-moz-range-thumb {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--surface); border: 3px solid var(--lev-color, var(--accent)); cursor: pointer;
+}
+#orderLev::-moz-range-track {
+  height: 6px; border-radius: 4px;
+  background: linear-gradient(90deg, #16a34a, #eab308, #dc2626);
+}
+#levLabel {
+  font-variant-numeric: tabular-nums;
+  transition: color .18s ease;
+}
+
 .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .cost-box {
   background: var(--soft); border-radius: 13px; padding: 11px 13px; margin: 4px 0 14px;

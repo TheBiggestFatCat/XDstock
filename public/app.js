@@ -4249,6 +4249,37 @@ function maxAffordableQty() {
   return Math.max(0, lo);
 }
 
+/**
+ * 杠杆档位对应的颜色：下限绿 → 上限红（HSL 色相 140° → 0°，中间过黄）。
+ * 低倍是保本思维（绿），高倍是赌一把（红），一眼能看出当前有多激进。
+ */
+function leverageColor(lev, min, max) {
+  const lo = Number.isFinite(Number(min)) ? Number(min) : 1;
+  let hi = Number.isFinite(Number(max)) ? Number(max) : 20;
+  if (!(hi > lo)) hi = lo + 1;
+  const t = Math.max(0, Math.min(1, (Number(lev) - lo) / (hi - lo)));
+  const hue = Math.round(140 * (1 - t));        // 140 绿 → 0 红
+  const sat = Math.round(64 + 10 * t);
+  const light = Math.round(38 + 10 * t);
+  return `hsl(${hue} ${sat}% ${light}%)`;
+}
+
+/** 把当前杠杆的颜色刷到文字和滑条上（文字变色 + 滑块描边 + 滑条本身的绿→红底） */
+function paintLeverageLabel(lev, min, max) {
+  const color = leverageColor(lev, min, max);
+  const label = $('#levLabel');
+  if (label) {
+    label.style.color = color;
+    label.style.textShadow = 'none';
+  }
+  const slider = $('#orderLev');
+  if (slider) {
+    slider.style.setProperty('--lev-color', color);
+    slider.style.accentColor = color;
+  }
+  return color;
+}
+
 function updateCostPreview() {
   const st = state.market?.stocks?.[state.code];
   if (!st) return;
@@ -4265,6 +4296,8 @@ function updateCostPreview() {
   const levMin = Number(cfg.minLeverage ?? 1);
   const levMax = Number(cfg.maxLeverage ?? 20);
   $('#levLabel').textContent = `${lev}x（${levMin}~${levMax} 倍）`;
+  // 文字颜色跟着档位走：低倍绿、高倍红
+  paintLeverageLabel(lev, levMin, levMax);
   // 爆仓价按「实际开仓价」算：挂了限价就按限价，而不是现价
   const basePx = refPrice > 0 ? refPrice : st.price;
   const liqPx = state.side === 'long' ? basePx * (1 - 1 / lev) : basePx * (1 + 1 / lev);
