@@ -435,6 +435,24 @@ export function migrate(d) {
   if (!merged.hotMoney || typeof merged.hotMoney !== 'object') {
     merged.hotMoney = { code: '', industry: '', nextSwitchTick: 0, switches: 0, startedTick: 0 };
   }
+  // 成交活跃度的长期基准（券商/外汇营收按「相对活跃度」算，见 engine.js#volumeFactorOf）
+  if (!(Number(merged.volumeRef) > 0)) {
+    merged.volumeRef = Math.max(0.05, Number(merged.volumeAvg) || 0.05);
+  }
+  // 自愈：券商 / 外汇的营收如果贴着 25% 地板（每期财报都是「同比 0.00%」，
+  // 金融大鳄的预览也永远是「符合预期 +0.00%」），把基准营收拉回现值。
+  // 只在真的贴地板时才动手，正常存档不会被改。
+  for (const st of Object.values(merged.stocks)) {
+    if (st.isIndex || !st.fundamentals) continue;
+    const id = st.trait && st.trait.id;
+    if (id !== 'broker' && id !== 'fx') continue;
+    const rev = Number(st.fundamentals.revenue) || 0;
+    const base = Number(st.fundamentals.baseRevenue) || 0;
+    if (rev > 0 && base > 0 && rev <= base * 0.26) {
+      st.fundamentals.baseRevenue = rev;
+      console.log(`[券商] ${st.name} 营收贴着地板（${((rev / base) * 100).toFixed(1)}%），基准营收已重置为现值`);
+    }
+  }
   // 老的贷款功能已下线，存档里的残留字段一并清掉
   for (const p of Object.values(merged.players)) {
     delete p.loan;

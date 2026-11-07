@@ -77,6 +77,27 @@ function uniform(lo, hi) {
 }
 
 /**
+ * 成交活跃度倍数：1 = 和「长期基准」一样活跃。
+ *
+ * 券商（XD）/外汇的营收都乘这个数。以前写的是「成交笔数 ÷ 2」（2 笔/轮算正常），
+ * 那是**绝对口径**：玩家少、成交冷清时永远远小于 0.2，
+ * 券商营收一路被 25% 的地板夹死 → 每期财报「同比 0.00%」→
+ * 金融大鳄的提前预览永远是「符合预期 +0.00%」，技能等于没有。
+ *
+ * 现在改成相对口径：`volumeAvg / volumeRef`（volumeRef 是慢速 EMA），
+ * 平时就在 1 附近，只有「最近明显比平常热闹 / 冷清」时才偏，和玩家总数无关。
+ */
+export function volumeFactorOf(db) {
+  const avg = Math.max(0, Number(db && db.volumeAvg) || 0);
+  const refRaw = Number(db && db.volumeRef);
+  // 没有基准（新档 / 测试环境）时就用自己 → 比值 1，和以前 `|| 1` 的老口径一致
+  const ref = Math.max(0.05, Number.isFinite(refRaw) && refRaw > 0 ? refRaw : avg);
+  // 完全没成交也当作「和平常一样」，不要把券商按到地板上
+  if (!(avg > 0)) return 1;
+  return Math.max(0.15, Math.min(5, avg / ref));
+}
+
+/**
  * 散户情绪的重掷周期（轮）：每次重掷都从 [min, max] 里重新抽一个间隔，
  * 免得所有票像上了发条一样同节奏换情绪。
  *
@@ -633,6 +654,13 @@ export function stepMarket(db) {
   // 成交活跃度 EMA（给券商的财报用）
   const alphaV = 0.02;
   db.volumeAvg = (db.volumeAvg || trades) * (1 - alphaV) + trades * alphaV;
+  // 成交活跃度的「长期基准」（慢 40 倍的 EMA）：券商/外汇的营收按**相对活跃度**算，
+  // 见 volumeFactorOf()。用绝对笔数当口径的话，玩家一少、成交一冷，
+  // 券商营收会被 25% 地板夹死，每期财报都是 0%，金融大鳄就没得看了。
+  {
+    const ref = Number(db.volumeRef) > 0 ? Number(db.volumeRef) : Math.max(0.05, db.volumeAvg);
+    db.volumeRef = ref * (1 - 0.0005) + db.volumeAvg * 0.0005;
+  }
   // 金价：每轮随机游走一次（矿工银行的财报驱动源）
   stepGold(db);
 
@@ -1029,7 +1057,7 @@ export function runReports(db) {
       const fxNowP = Number(db.fx?.rate) || 0;
       const fxBaseP = Number(db.fx?.reportBase) || fxNowP;
       const ctxP = {
-        volumeFactor: (Number(db.volumeAvg) || 0) / 2,
+        volumeFactor: volumeFactorOf(db),
         fxFactor: (Number(db.fxVolAvg) || 0) / 0.004,
         fxReturn: fxBaseP > 0 ? fxNowP / fxBaseP - 1 : 0,
         // ⚠️ 天气也要带进来：现在所有票都提前算 pendingReport，
@@ -1050,7 +1078,7 @@ export function runReports(db) {
     if (db.tick < st.nextReportTick) continue;
 
     const before = Number(st.fair) || 0;
-    const volumeFactor = (Number(db.volumeAvg) || 0) / 2;          // 2 笔/轮算正常
+    const volumeFactor = volumeFactorOf(db);                        // 1 = 和平常一样活跃
     const fxFactor = (Number(db.fxVolAvg) || 0) / 0.004;           // 0.4% 波动算正常
     // 本期汇率涨跌：以上一期财报时的汇率为基准
     const fxNow = Number(db.fx?.rate) || 0;

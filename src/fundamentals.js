@@ -69,6 +69,50 @@ const DEFAULT_GROWTH_CEILING = 8;
 /** 「金融大鳄」能提前多少轮看到下一期财报（引擎生成 pendingReport 时也用这个） */
 export const TYCOON_LEAD_TICKS = 20;
 
+/** 市场预期看最近几期财报（拟合走势用） */
+export const EXPECT_LOOKBACK = 5;
+
+/**
+ * 市场预期：拿最近 `lookback`（默认 5）期财报的**营收走势**做最小二乘拟合，外推下一期。
+ *
+ * 2026-11 改：以前「市场预期」是按模型内部参数算的理论值（纯随机票直接给 0），
+ * 玩家看到的「预期」和实际盘面没多大关系。现在改成「市场看走势」：
+ * 最近 5 期一路涨，市场就预期它接着涨；一路跌就预期它接着跌。
+ * 这样「超预期 / 不及预期」才是相对**市场共识**说的。
+ *
+ * 做法：把 5 期营收取对数做一元线性回归，拟合线的斜率就是「每期对数增速」，
+ * 换算成百分比即预期同比。对数空间做是为了让「+10% 再 +10%」这种等比走势是直线。
+ *
+ * 返回 `{ growth, slope, samples }`；有效样本 < 3 期时返回 `null`
+ * （新上市 / 老存档还没攒够历史，调用方回退到模型口径）。
+ */
+export function expectedGrowthFromHistory(history, lookback = EXPECT_LOOKBACK) {
+  const rows = Array.isArray(history) ? history.slice(-Math.max(2, Math.floor(lookback) || EXPECT_LOOKBACK)) : [];
+  const pts = [];
+  for (let i = 0; i < rows.length; i++) {
+    const rev = Number(rows[i] && rows[i].revenue);
+    if (Number.isFinite(rev) && rev > 0) pts.push({ x: pts.length, y: Math.log(rev) });
+  }
+  if (pts.length < 3) return null;
+  const n = pts.length;
+  const mx = pts.reduce((a, p) => a + p.x, 0) / n;
+  const my = pts.reduce((a, p) => a + p.y, 0) / n;
+  let sxy = 0;
+  let sxx = 0;
+  for (const p of pts) {
+    sxy += (p.x - mx) * (p.y - my);
+    sxx += (p.x - mx) * (p.x - mx);
+  }
+  const slope = sxx > 0 ? sxy / sxx : 0;
+  // 预期增速 = 拟合线往下一格涨多少（对数空间的差 → 百分比）
+  const nextY = my + slope * (n - mx);
+  const lastY = my + slope * (n - 1 - mx);
+  const growth = Number.isFinite(nextY) && Number.isFinite(lastY)
+    ? Math.exp(nextY - lastY) - 1
+    : 0;
+  return { growth: clamp(growth, -0.35, 0.9), slope, samples: n };
+}
+
 /**
  * 「金融大鳄」能看到哪些票：**只有金融板块**（券商 / 外汇）。
  * 引擎用它决定给谁生成 pendingReport，api/server 用它决定要不要下发 previewIn，
@@ -351,11 +395,16 @@ export function genNextReport(st, ctx = {}) {
   // 负增长不吃 room（该萎缩就萎缩，天花板只管往上）。
   const goldTotal = goldExpected !== null ? (capTargetGrowth ?? 0) + goldExpected : null;
   // 纯随机路径：市场预期 = 0（没人能猜到这个偏移），所以「意外」= 实际偏移
-  const expectedGrowth = plainRandom
+  let expectedGrowth = plainRandom
     ? 0
     : (goldTotal !== null
       ? clamp(goldTotal > 0 ? goldTotal * ceilRoom : goldTotal, -0.35, 0.9)
       : clamp(growth > 0 ? growth * ceilRoom : growth, -0.35, 0.9));
+
+  // 2026-11：市场预期改成「看最近 5 期财报的走势」（拟合外推），
+  // 攒够 3 期就按走势来；不够（新上市 / 老存档）才回退到上面那套模型口径。
+  const trendFit = expectedGrowthFromHistory(st.reportHistory, EXPECT_LOOKBACK);
+  if (trendFit) expectedGrowth = trendFit.growth;
 
   // 稳步增长 / 有市值目标的票：财报不抖（它们的走势是「慢慢走」，不该被随机噪声带跑）
   const smoothReport = trait === 'steady' || capTargetNow > 0;

@@ -29,7 +29,9 @@ const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
 
 /** 财报面板真的会画出来的字段（revenue/netProfit 画折线，其余是文字/计算） */
 const REPORT_KEYS = [
-  'industry', 'fair', 'revenue', 'netProfit', 'eps', 'bps', 'roe', 'debt', 'growth', 'period'
+  // expectedGrowth = 市场预期（最近 5 期财报走势拟合出来的，前端财报面板要显示）
+  // ⚠️ 它是**公开数据的函数**（往期营收都在 history 里），不算引擎内部参数
+  'industry', 'fair', 'revenue', 'netProfit', 'eps', 'bps', 'roe', 'debt', 'growth', 'period', 'expectedGrowth'
 ];
 
 /**

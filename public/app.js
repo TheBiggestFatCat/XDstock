@@ -1047,6 +1047,16 @@ function renderReport() {
   const cls2 = prem > 0 ? 'up' : prem < 0 ? 'down' : 'flat';
   const word = prem > 8 ? '高估' : prem < -8 ? '低估' : '接近合理';
   const g = Number(r.growth) || 0;
+  // 市场预期（最近 5 期财报走势拟合出来的）：比它高 2pp 以上算超预期
+  const expG = Number(r.expectedGrowth);
+  const hasExp = Number.isFinite(expG);
+  const surprise = hasExp ? Math.max(-0.3, Math.min(0.3, g - expG)) : 0;
+  const verdict = surprise > 0.02
+    ? { k: 'beat', t: '🔥 超预期' }
+    : surprise < -0.02
+      ? { k: 'miss', t: '🧊 不及预期' }
+      : { k: 'inline', t: '⚖️ 符合预期' };
+  const signPct = (x) => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(2)}%`;
 
   panel.innerHTML = `
     <div class="rp-head">
@@ -1064,6 +1074,12 @@ function renderReport() {
       <div><span>ROE</span><b>${((r.roe || 0) * 100).toFixed(1)}%</b></div>
       <div><span>资产负债率</span><b>${((r.debt || 0) * 100).toFixed(0)}%</b></div>
     </div>
+    ${hasExp ? `<div class="rp-expect">
+      <span>市场预期 <b class="${expG >= 0 ? 'up' : 'down'}">${signPct(expG)}</b></span>
+      <span class="rv ${verdict.k}">${verdict.t}</span>
+      ${Math.abs(surprise) > 0.0005 ? `<span>差 <b class="${surprise >= 0 ? 'up' : 'down'}">${surprise >= 0 ? '+' : ''}${(surprise * 100).toFixed(2)}pp</b></span>` : ''}
+      <span class="rp-expect-note">按最近 5 期财报走势拟合</span>
+    </div>` : ''}
     <div class="rp-div" id="reportDiv">${renderDividendLine(st)}</div>
     ${renderReportChart(r.history)}
     ${renderTycoonSlot(st)}

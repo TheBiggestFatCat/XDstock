@@ -113,13 +113,15 @@ log('=== 1 个股字段：只留界面要用的 ===');
 
   const rep = tgw.report;
   const ALLOWED_REPORT = new Set(['industry', 'fair', 'revenue', 'netProfit', 'eps', 'bps',
-    'roe', 'debt', 'growth', 'period', 'history']);
+    'roe', 'debt', 'growth', 'period', 'expectedGrowth', 'history']);
   const extraRep = Object.keys(rep).filter((k) => !ALLOWED_REPORT.has(k));
   check('财报没有白名单以外的字段', extraRep.length === 0, extraRep.join(',') || '（干净）');
   for (const k of ['marketCap', 'freeCap', 'pe', 'pb', 'premium', 'lastSurprise',
-    'expectedGrowth', 'dividendRate', 'reportAt', 'shares', 'freeFloat']) {
+    'dividendRate', 'reportAt', 'shares', 'freeFloat']) {
     check(`财报里不再下发 ${k}`, rep[k] === undefined, String(rep[k]));
   }
+  check('市场预期要下发（前端财报面板显示）', typeof rep.expectedGrowth === 'number',
+    String(rep.expectedGrowth));
   check('财报折线只留营收/净利',
     rep.history.every((h) => Object.keys(h).join(',') === 'revenue,netProfit'),
     JSON.stringify(rep.history[0] || {}));
