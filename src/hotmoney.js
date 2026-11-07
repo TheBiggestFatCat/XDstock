@@ -126,9 +126,19 @@ export function stepHotMoney(db, opts = {}) {
   const hm = ensureHotMoney(db);
   if (!hm) return null;
 
-  // 手里有票、还没到换的时候 → 什么都不做
+  // 手里有票、还没到换的时候 → 什么都不做；
+  // 但如果还没抽好「下一次去哪」，顺手补一次（老存档 / 刚上线时情报会买不到）
   const tick = num(db.tick, 0);
-  if (hm.code && tick < hm.nextSwitchTick) return null;
+  if (hm.code && tick < hm.nextSwitchTick) {
+    if (!hm.nextIndustry) {
+      const sectors0 = hotMoneySectors(db);
+      if (sectors0.size) {
+        hm.nextIndustry = pickIndustry(sectors0, hm.industry, Math.random);
+        if (!(hm.nextAmount > 0)) hm.nextAmount = hotMoneyAmount(cfg, Math.random);
+      }
+    }
+    return null;
+  }
 
   const sectors = hotMoneySectors(db);
   const keys = [...sectors.keys()];

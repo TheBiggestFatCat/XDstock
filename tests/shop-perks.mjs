@@ -227,6 +227,23 @@ log('=== 5 游资情报：说哪就去哪（情报必须是真的） ===');
   db.config.hotMoneyEnabled = 1;
   hm.nextIndustry = '';
   check('还没抽好下一次时也没有情报', hotTipTarget(db) === null);
+
+  // 老存档 / 刚上线：手里有票但没抽过下一次 → 下一轮自动补出来，情报立刻可用
+  const db3 = mkDb({ hotMoneyEnabled: 1 });
+  db3.tick = 7000;
+  const h3 = ensureHotMoney(db3);
+  h3.code = 'DFY';
+  h3.industry = '科技AI';
+  h3.nextSwitchTick = db3.tick + 200;
+  h3.nextIndustry = '';
+  h3.nextAmount = 0;
+  check('补之前没法买情报', hotTipTarget(db3) === null);
+  stepHotMoney(db3, { rand: mulberry32(5) });
+  const tip3 = hotTipTarget(db3);
+  check('没到换仓也会把下一次的板块补出来', !!tip3 && tip3.industry.length > 0, JSON.stringify(tip3));
+  check('补出来的板块和现在不同', tip3.industry !== h3.industry, `${h3.industry} → ${tip3?.industry}`);
+  check('补出来的金额在 1000 万~3000 万之间',
+    tip3.amount >= 10000000 && tip3.amount <= 30000000, String(tip3.amount));
 }
 
 // ================================================================ 6
