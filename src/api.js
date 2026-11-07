@@ -23,6 +23,9 @@ const TOKEN_TTL = 30 * 24 * 3600 * 1000;
 const THEMES = ['red', 'bear', 'dark', 'tycoon', 'hermit', 'probe', 'mind', 'night'];
 /** 需要账号等级的主题（其余 Lv.1 就能买） */
 import { notifyList, unreadCount, markNotifyRead } from './notify.js';
+import {
+  freeFeeDuration, cooldownLeft, hotTipTarget
+} from './perks.js';
 
 const THEME_NEED_LEVEL = { probe: 2, mind: 2, night: 2 };
 
@@ -42,9 +45,11 @@ const SHOP_NEED_LEVEL = {
   fakeNews: 1,
   bodyguard: 1,
   channel: 1,
+  freeFee: 1,        // 咸鱼代下单：Lv.1
   bg: 2,
   rename: 2,
   autoDca: 2,
+  hotTip: 3,         // 游资情报：Lv.3
   // 其他
   levelUp: 1,
   comingSoon: 3
@@ -169,6 +174,11 @@ function publicPlayer(p, db) {
     // 自动定投：autoDca = 买过这件道具，autoDcaOn = 当前是否开着
     autoDca: !!p.autoDca,
     autoDcaOn: p.autoDcaOn !== false,
+    // 🐟 咸鱼代下单：免手续费生效到哪一轮 / 冷却到哪一轮
+    freeFeeUntilTick: Number(p.freeFeeUntilTick) || 0,
+    freeFeeReadyAt: Number(p.freeFeeReadyAt) || 0,
+    // 🕵 游资情报：冷却到哪一轮
+    hotTipReadyAt: Number(p.hotTipReadyAt) || 0,
     // 丰川银行：bank = 余额（不算进总资产），bankDeposited = 累计存入
     bank: Math.round((Number(p.bank) || 0) * 100) / 100,
     bankDeposited: Math.round((Number(p.bankDeposited) || 0) * 100) / 100,
@@ -997,6 +1007,8 @@ export async function handleApi(ctx) {
       'nightStartHour', 'nightEndHour', 'nightStealCooldown',
       'shopChannelBasePrice', 'shopChannelRatio', 'shopChannelStep',
       'shopAutoDcaPrice', 'shopAutoDcaPremium',
+      'shopFreeFeePrice', 'shopFreeFeeTicks', 'shopFreeFeeCooldown',
+      'shopHotTipPrice', 'shopHotTipCooldown',
       'bankPoorThreshold', 'bankWithdrawRateMin', 'bankWithdrawRateMax', 'bankWithdrawFloor',
       'stPrice', 'stDelistTicks',
       'marketTradesEnabled',
@@ -1620,6 +1632,74 @@ export async function handleApi(ctx) {
     me.autoDcaOn = on;
     saveDb();
     return json(res, 200, { ok: true, autoDcaOn: on });
+  }
+
+  // 🐟 咸鱼代下单（Lv.1）：60 轮内所有交易手续费全免
+  if (pathname === '/api/shop/free-fee' && method === 'POST') {
+    const gate = shopGate(me, 'freeFee');
+    if (gate) return json(res, 403, gate);
+    const price = Math.max(0, Number(db.config.shopFreeFeePrice ?? 500000));
+    const cd = Math.max(0, Math.round(Number(db.config.shopFreeFeeCooldown ?? 100)));
+    const left = cooldownLeft(db, me, 'freeFeeReadyAt');
+    if (left > 0) {
+      return json(res, 429, { error: `冷却中，还有 ${left} 轮才能再买`, leftTicks: left });
+    }
+    if (Number(me.cash) < price) {
+      return json(res, 400, {
+        error: `现金不足，售价 $${price.toLocaleString()}，你只有 $${Number(me.cash).toFixed(2)}`
+      });
+    }
+    const ticks = freeFeeDuration(db);
+    me.cash -= price;
+    me.shopSpent = (Number(me.shopSpent) || 0) + price;
+    // 已经在生效中再买一次：时长接上去，不浪费
+    const from = Math.max(Number(db.tick) || 0, Number(me.freeFeeUntilTick) || 0);
+    me.freeFeeUntilTick = from + ticks;
+    me.freeFeeReadyAt = (Number(db.tick) || 0) + cd;
+    saveDb();
+    return json(res, 200, {
+      ok: true,
+      price,
+      cash: me.cash,
+      ticks,
+      untilTick: me.freeFeeUntilTick,
+      leftTicks: ticks,
+      freeFeeUntilTick: me.freeFeeUntilTick,
+      freeFeeReadyAt: me.freeFeeReadyAt
+    });
+  }
+
+  // 🕵 游资情报（Lv.3）：告诉你游资下一次进场的板块
+  if (pathname === '/api/shop/hot-tip' && method === 'POST') {
+    const gate = shopGate(me, 'hotTip');
+    if (gate) return json(res, 403, gate);
+    const price = Math.max(0, Number(db.config.shopHotTipPrice ?? 2000000));
+    const cd = Math.max(0, Math.round(Number(db.config.shopHotTipCooldown ?? 500)));
+    const left = cooldownLeft(db, me, 'hotTipReadyAt');
+    if (left > 0) {
+      return json(res, 429, { error: `冷却中，还有 ${left} 轮才能再买`, leftTicks: left });
+    }
+    // 没有情报就不收钱、也不进冷却（空手不罚，和「暗中调查」一个口径）
+    const tip = hotTipTarget(db);
+    if (!tip) return json(res, 400, { error: '游资暂时没有动向（可能已关闭），这次不收钱' });
+    if (Number(me.cash) < price) {
+      return json(res, 400, {
+        error: `现金不足，售价 $${price.toLocaleString()}，你只有 $${Number(me.cash).toFixed(2)}`
+      });
+    }
+    me.cash -= price;
+    me.shopSpent = (Number(me.shopSpent) || 0) + price;
+    me.hotTipReadyAt = (Number(db.tick) || 0) + cd;
+    me.lastHotTip = { industry: tip.industry, tick: db.tick, at: now() };
+    saveDb();
+    return json(res, 200, {
+      ok: true,
+      price,
+      cash: me.cash,
+      industry: tip.industry,
+      leftTicks: tip.leftTicks,
+      hotTipReadyAt: me.hotTipReadyAt
+    });
   }
 
   if (pathname === '/api/shop/bodyguard' && method === 'POST') {

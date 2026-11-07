@@ -6,6 +6,7 @@ import {
 import { isTycoonSector } from './fundamentals.js';
 import { maskSentiment } from './mind.js';
 import { SMALL_INDEX_STOCK } from './stocks.js';
+import { freeFeeActive, stampRateFor } from './perks.js';
 
 const TRADE_LOG_MAX = 4000;
 
@@ -208,6 +209,8 @@ export function indexUptrend(db) {
 export function feeRateFor(db, player, opts = {}) {
   const cfg = db.config || {};
   const base = Number(cfg.feeRate ?? 0);
+  // 🐟 咸鱼代下单：生效期间手续费全免（印花税在 stampRateFor 里一起免）
+  if (freeFeeActive(db, player)) return 0;
   if (!player || player.skill !== 'red' || !isEvolved(player, 'red')) return base;
   if (!Number(cfg.themeEvolveFeeFreeRed ?? 1)) return base;
   const uptrend = opts.uptrend !== undefined ? !!opts.uptrend : indexUptrend(db);
@@ -308,7 +311,7 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
     if (cut > 0 && cut < 1) margin *= 1 - cut;
   }
   const fee = notional * feeRateFor(db, player);
-  const stamp = side === 'short' ? notional * (cfg.stampDuty ?? 0) : 0;
+  const stamp = side === 'short' ? notional * stampRateFor(db, player) : 0;
 
   // 冲击成本：这笔单自己会推动价格，成本由下单人承担
   // 指数是由成分股算出来的，买卖它不会推动它自己，所以不收冲击成本
@@ -432,7 +435,7 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
   const pnl = (pos.side === 'long' ? price - pos.entry : pos.entry - price) * closeQty;
   const fee = notional * feeRateFor(db, player);
   // 平多 = 卖出，收印花税；平空 = 买入，不收
-  const stamp = pos.side === 'long' ? notional * (cfg.stampDuty ?? 0) : 0;
+  const stamp = pos.side === 'long' ? notional * stampRateFor(db, player) : 0;
 
   const sideNow = pos.side;
   const entry = pos.entry;

@@ -35,17 +35,34 @@ export function hotMoneySectors(db) {
   return out;
 }
 
-/** 补齐游资状态（老存档 / 新存档都走这里）。原地补字段，保持对象引用不变 */
+/**
+ * 补齐游资状态（老存档 / 新存档都走这里）。原地补字段，保持对象引用不变。
+ *
+ * nextIndustry / nextAmount = **下一次进场**的板块与金额，在这一次换仓时就抽好。
+ * 「游资情报」道具卖的就是 nextIndustry（见 src/perks.js#hotTipTarget），
+ * 所以情报永远是真的，不是让玩家猜。
+ */
 export function ensureHotMoney(db) {
   if (!db || typeof db !== 'object') return null;
   if (!db.hotMoney || typeof db.hotMoney !== 'object') db.hotMoney = {};
   const hm = db.hotMoney;
   hm.code = typeof hm.code === 'string' ? hm.code : '';
   hm.industry = typeof hm.industry === 'string' ? hm.industry : '';
+  hm.nextIndustry = typeof hm.nextIndustry === 'string' ? hm.nextIndustry : '';
+  hm.nextAmount = Math.max(0, num(hm.nextAmount, 0));
   hm.nextSwitchTick = Math.max(0, Math.floor(num(hm.nextSwitchTick, 0)));
   hm.switches = Math.max(0, Math.floor(num(hm.switches, 0)));
   hm.startedTick = Math.max(0, Math.floor(num(hm.startedTick, 0)));
   return hm;
+}
+
+/** 抽一个板块：优先避开 exclude（只有一个板块时就在原地转） */
+export function pickIndustry(sectors, exclude = '', rnd = Math.random) {
+  const keys = [...sectors.keys()].filter((k) => (sectors.get(k) || []).length);
+  if (!keys.length) return '';
+  const others = keys.filter((k) => k !== exclude);
+  const pool = others.length ? others : keys;
+  return pool[Math.floor(rand01(rnd) * pool.length) % pool.length];
 }
 
 /** 换板块的间隔（轮）：[hotMoneySwitchMin, hotMoneySwitchMax] 闭区间随机 */
@@ -132,22 +149,26 @@ export function stepHotMoney(db, opts = {}) {
     }
   }
 
-  // 2) 挑一个和当前不同的板块（只有一个板块时就在原地换）
-  const others = keys.filter((k) => k !== hm.industry);
-  const pool = others.length ? others : keys;
-  const industry = pool[Math.floor(rand01(rnd) * pool.length) % pool.length];
+  // 2) 挑板块：优先用**上一次换仓时就抽好**的 nextIndustry
+  //    （「游资情报」道具卖的就是它，所以情报永远准）
+  const pre = String(hm.nextIndustry || '');
+  const preOk = pre && pre !== hm.industry && (sectors.get(pre) || []).length > 0;
+  const industry = preOk ? pre : pickIndustry(sectors, hm.industry, rnd);
   const list = sectors.get(industry) || [];
   if (!list.length) {
-    // 极端情况：板块里的票全停牌了，下一轮再试
+    // 极端情况：板块里的票全停牌了，下一轮再试（并重新抽情报）
     hm.code = '';
     hm.industry = '';
+    hm.nextIndustry = '';
+    hm.nextAmount = 0;
     hm.nextSwitchTick = tick + 1;
     return out;
   }
 
   // 3) 在新板块里买一只（买入推高价格）
   const st = list[Math.floor(rand01(rnd) * list.length) % list.length];
-  const amount = hotMoneyAmount(cfg, rnd);
+  // 金额也是上次就抽好的（情报里会带量级），没有就现抽一个
+  const amount = hm.nextAmount > 0 ? hm.nextAmount : hotMoneyAmount(cfg, rnd);
   const qty = Math.max(1, Math.floor(amount / Math.max(0.01, Number(st.price) || 0.01)));
   out.bought = pushHotTrade(db, st, { action: 'open', qty, rnd });
   addMarketFlow(db, st, qty * Number(st.price));
@@ -156,6 +177,9 @@ export function stepHotMoney(db, opts = {}) {
   hm.industry = industry;
   hm.switches += 1;
   hm.nextSwitchTick = tick + hotMoneySwitchInterval(cfg, rnd);
+  // 4) 立刻抽好**下一次**的板块和金额（游资情报的来源）
+  hm.nextIndustry = pickIndustry(sectors, industry, rnd);
+  hm.nextAmount = hotMoneyAmount(cfg, rnd);
   out.industry = industry;
   out.code = st.code;
   return out;

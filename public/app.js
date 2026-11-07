@@ -1783,6 +1783,158 @@ async function toggleAutoDca() {
   }
 }
 
+/**
+ * 🐟 咸鱼代下单（Lv.1 道具）：60 轮内所有交易手续费全免。
+ * 生效期内再买一次会**接在剩余时长后面**，不会浪费。
+ */
+function renderFreeFeeCard() {
+  const me = state.market?.me || {};
+  const cfg = state.market?.config || {};
+  const price = Number(cfg.shopFreeFeePrice ?? 500000);
+  const ticks = Math.max(1, Number(cfg.shopFreeFeeTicks ?? 60));
+  const cdTicks = Math.max(0, Number(cfg.shopFreeFeeCooldown ?? 100));
+  const cash = Number(me.cash) || 0;
+  const lv = Math.max(1, Math.floor(Number(me.level) || 1));
+  const tickNow = state.market?.tick || 0;
+  const tickMs = state.market?.tickMs || 5000;
+
+  const priceEl = $('#freeFeePrice');
+  if (priceEl) priceEl.textContent = money0(price);
+  const ticksEl = $('#freeFeeTicks');
+  if (ticksEl) ticksEl.textContent = String(ticks);
+  const cdEl = $('#freeFeeCd');
+  if (cdEl) cdEl.textContent = String(cdTicks);
+
+  const activeLeft = Math.max(0, Number(me.freeFeeUntilTick || 0) - tickNow);
+  const cdLeft = Math.max(0, Number(me.freeFeeReadyAt || 0) - tickNow);
+
+  const status = $('#freeFeeStatus');
+  if (status) {
+    if (activeLeft > 0) {
+      const sec = Math.ceil(activeLeft * (tickMs / 1000));
+      status.textContent = `🐟 免手续费中 · 还剩 ${activeLeft} 轮（约 ${Math.max(1, Math.round(sec / 60))} 分钟）`;
+      status.classList.add('on');
+    } else {
+      status.textContent = '当前没有免手续费';
+      status.classList.remove('on');
+    }
+  }
+
+  const btn = $('#freeFeeBuy');
+  if (btn) {
+    if (cdLeft > 0) {
+      const sec = Math.ceil(cdLeft * (tickMs / 1000));
+      btn.disabled = true;
+      btn.textContent = `冷却中 · 还有 ${cdLeft} 轮（约 ${Math.ceil(sec / 60)} 分钟）`;
+    } else if (cash < price) {
+      btn.disabled = true;
+      btn.textContent = `现金不足（差 ${money0(price - cash)}）`;
+    } else {
+      btn.disabled = false;
+      btn.textContent = activeLeft > 0
+        ? `再续 ${ticks} 轮 · ${money0(price)}`
+        : `购买 · ${money0(price)}`;
+    }
+  }
+  // 解锁提示（等级不够时 applyShopGates 会再盖一层）
+  if (btn && lv < 1) btn.disabled = true;
+}
+
+async function buyFreeFee() {
+  const btn = $('#freeFeeBuy');
+  if (btn && btn.disabled) return;
+  try {
+    const r = await api('/api/shop/free-fee', { method: 'POST' });
+    if (state.market?.me) {
+      if (Number.isFinite(r.cash)) state.market.me.cash = r.cash;
+      state.market.me.freeFeeUntilTick = r.freeFeeUntilTick || 0;
+      state.market.me.freeFeeReadyAt = r.freeFeeReadyAt || 0;
+    }
+    toast(`🐟 咸鱼已接单：${r.ticks || 60} 轮内交易手续费全免`, 'ok');
+    refreshMarket();
+    renderShop();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
+let hotTipTimer = null;
+
+/** 🕵 游资情报的弹框：下方停 5 秒后自己消失 */
+function showHotTipPop(industry, leftTicks) {
+  const el = $('#hotTipPop');
+  if (!el) return;
+  const mins = Math.max(1, Math.round((Number(leftTicks) || 0) * ((state.market?.tickMs || 5000) / 1000) / 60));
+  el.innerHTML = `
+    <img class="htp-icon" src="/assets/shop/%E6%B8%B8%E8%B5%84%E6%83%85%E6%8A%A5.png" alt="" />
+    <div class="htp-body">
+      <b>游资情报</b>
+      <span>下一波进场：<em>${escapeHtml(String(industry || '未知'))}</em></span>
+      <i>约 ${mins} 分钟后 · 情报保证是真的</i>
+    </div>`;
+  el.classList.remove('hidden');
+  // 强制重排，让入场动画每次都能重放
+  void el.offsetWidth;
+  el.classList.add('show');
+  if (hotTipTimer) clearTimeout(hotTipTimer);
+  hotTipTimer = setTimeout(() => {
+    el.classList.remove('show');
+    hotTipTimer = setTimeout(() => {
+      el.classList.add('hidden');
+      el.innerHTML = '';
+      hotTipTimer = null;
+    }, 320);
+  }, 5000);
+}
+
+function renderHotTipCard() {
+  const me = state.market?.me || {};
+  const cfg = state.market?.config || {};
+  const price = Number(cfg.shopHotTipPrice ?? 2000000);
+  const cdTicks = Math.max(0, Number(cfg.shopHotTipCooldown ?? 500));
+  const cash = Number(me.cash) || 0;
+  const tickNow = state.market?.tick || 0;
+  const tickMs = state.market?.tickMs || 5000;
+
+  const priceEl = $('#hotTipPrice');
+  if (priceEl) priceEl.textContent = money0(price);
+  const cdEl = $('#hotTipCd');
+  if (cdEl) cdEl.textContent = String(cdTicks);
+
+  const cdLeft = Math.max(0, Number(me.hotTipReadyAt || 0) - tickNow);
+  const btn = $('#hotTipBuy');
+  if (btn) {
+    if (cdLeft > 0) {
+      const sec = Math.ceil(cdLeft * (tickMs / 1000));
+      btn.disabled = true;
+      btn.textContent = `冷却中 · 还有 ${cdLeft} 轮（约 ${Math.ceil(sec / 60)} 分钟）`;
+    } else if (cash < price) {
+      btn.disabled = true;
+      btn.textContent = `现金不足（差 ${money0(price - cash)}）`;
+    } else {
+      btn.disabled = false;
+      btn.textContent = `购买情报 · ${money0(price)}`;
+    }
+  }
+}
+
+async function buyHotTip() {
+  const btn = $('#hotTipBuy');
+  if (btn && btn.disabled) return;
+  try {
+    const r = await api('/api/shop/hot-tip', { method: 'POST' });
+    if (state.market?.me) {
+      if (Number.isFinite(r.cash)) state.market.me.cash = r.cash;
+      state.market.me.hotTipReadyAt = r.hotTipReadyAt || 0;
+    }
+    showHotTipPop(r.industry, r.leftTicks);
+    refreshMarket();
+    renderShop();
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
 // ---------------- 商城 ----------------
 // ---------------- 主题配色 ----------------
 const THEME_CHART = {
@@ -2117,6 +2269,8 @@ function renderShop() {
   renderBgCard();
   renderRenameHint();
   renderAutoDcaCard();
+  renderFreeFeeCard();
+  renderHotTipCard();
 
   const ownedThemes = state.market?.me?.themes || [];
   const curTheme = state.theme || state.market?.me?.theme || 'default';
@@ -5308,7 +5462,12 @@ async function loadAdmin() {
             ['shopChannelRatio', '通道涨价倍率'],
             ['shopChannelStep', '通道每级加成(会×玩家等级)'],
             ['shopAutoDcaPrice', '自动定投售价'],
-            ['shopAutoDcaPremium', '定投挂单溢价(0.03=+3%)']
+            ['shopAutoDcaPremium', '定投挂单溢价(0.03=+3%)'],
+            ['shopFreeFeePrice', '咸鱼代下单售价'],
+            ['shopFreeFeeTicks', '免手续费时长(轮,60=5分钟)'],
+            ['shopFreeFeeCooldown', '咸鱼代下单冷却(轮)'],
+            ['shopHotTipPrice', '游资情报售价'],
+            ['shopHotTipCooldown', '游资情报冷却(轮)']
           ]
         },
         {
@@ -5929,6 +6088,8 @@ function bind() {
   });
   $('#autoDcaBuy')?.addEventListener('click', buyAutoDca);
   $('#autoDcaToggle')?.addEventListener('click', toggleAutoDca);
+  $('#freeFeeBuy')?.addEventListener('click', buyFreeFee);
+  $('#hotTipBuy')?.addEventListener('click', buyHotTip);
   $('#orderBtn').addEventListener('click', placeLimit);
 
   // 暗中调查弹窗

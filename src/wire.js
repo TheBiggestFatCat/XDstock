@@ -58,6 +58,9 @@ const CONFIG_KEYS = [
   'shopChannelBasePrice', 'shopChannelRatio', 'shopChannelStep',
   'shopThemePrice', 'shopThemeCooldown', 'mindThemePrice',
   'shopAutoDcaPrice', 'shopAutoDcaPremium',
+  // 咸鱼代下单 / 游资情报
+  'shopFreeFeePrice', 'shopFreeFeeTicks', 'shopFreeFeeCooldown',
+  'shopHotTipPrice', 'shopHotTipCooldown',
   // 夜行者 / 偷钱
   'nightStartHour', 'nightEndHour', 'nightStealCooldown',
   'stealCapRatio', 'stealCooldownTicks',

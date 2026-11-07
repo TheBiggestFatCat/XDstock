@@ -17,6 +17,7 @@
 //   · 价格跳空导致钱不够时，按买得起的数量成交，而不是整单撤销。
 
 import { openPosition, closePosition, impactCostRate, indexImpactCost } from './trading.js';
+import { freeFeeActive, stampRateFor } from './perks.js';
 
 const num = (v, d = 0) => {
   const n = Number(v);
@@ -45,13 +46,17 @@ export function isBuyOrder(order) {
  *
  * 冲击成本必须算进来，否则成交那一刻 openPosition 会因为「现金不足」
  * 把整张单卡死（押金刚好用满的玩家 100% 命中）。
+ *
+ * player 可选：传进来才能算上「咸鱼代下单」的免手续费（不传按原价押）。
  */
-export function estimateReserve(db, st, price, qty, leverage, side) {
+export function estimateReserve(db, st, price, qty, leverage, side, player = null) {
   const cfg = (db && db.config) || {};
   const notional = qty * price;
   const margin = notional / Math.max(1, num(leverage, 1));
-  const fee = notional * num(cfg.feeRate, 0);
-  const stamp = side === 'short' ? notional * num(cfg.stampDuty, 0) : 0;
+  const feeRate = freeFeeActive(db, player) ? 0 : num(cfg.feeRate, 0);
+  const fee = notional * feeRate;
+  const stampRate = player ? stampRateFor(db, player) : num(cfg.stampDuty, 0);
+  const stamp = side === 'short' ? notional * stampRate : 0;
   const impact = st && st.isIndex
     ? indexImpactCost(db, notional)
     : notional * impactCostRate(db, notional);
@@ -205,7 +210,7 @@ export function placeLimitOrder(db, player, body) {
   //   卖单 → 取限价和现价里更高的那个（成交价没有上限，成交时再按买得起的量缩小）
   const buySide = side === 'long';
   const refPrice = buySide ? limit : Math.max(limit, st.price);
-  const reserve = estimateReserve(db, st, refPrice, qty, leverage, side);
+  const reserve = estimateReserve(db, st, refPrice, qty, leverage, side, player);
   if (player.cash < reserve) {
     return { ok: false, error: `押金不足，需要 $${reserve.toFixed(2)}，你只有 $${player.cash.toFixed(2)}` };
   }
@@ -422,7 +427,7 @@ export function processOrders(db) {
 
     if (order.action === 'open') {
       // 价格跳空、押金不够时按买得起的数量成交，不整单撤销
-      const perShare = estimateReserve(db, st, px, 1, order.leverage, order.side);
+      const perShare = estimateReserve(db, st, px, 1, order.leverage, order.side, player);
       const afford = Math.floor(
         (num(player.cash) + Math.max(0, num(order.reserve))) / Math.max(perShare, 1e-9)
       );
@@ -439,7 +444,7 @@ export function processOrders(db) {
       // 按比例解冻这一轮要用的押金；价格往上跳就多解冻一点
       const reserve = Math.max(0, num(order.reserve));
       const perShareReserve = remainQty > 0 ? reserve / remainQty : 0;
-      const needNow = estimateReserve(db, st, px, fillQty, order.leverage, order.side) * 1.01;
+      const needNow = estimateReserve(db, st, px, fillQty, order.leverage, order.side, player) * 1.01;
       const fromReserve = Math.min(reserve, Math.max(perShareReserve * fillQty, needNow));
       player.cash = num(player.cash) + fromReserve;
       order.reserve = reserve - fromReserve;

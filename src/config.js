@@ -202,6 +202,15 @@ export const DEFAULT_CONFIG = {
   shopAutoDcaPrice: 5000000,     // 售价
   shopAutoDcaPremium: 0.03,      // 挂单价 = 现价 ×(1+3%)，保证下一轮能成交
 
+  // 咸鱼代下单（Lv.1 道具）：5 分钟内所有交易手续费全免（手续费 + 印花税）
+  shopFreeFeePrice: 500000,      // 售价
+  shopFreeFeeTicks: 60,          // 生效时长（60 轮 = 5 分钟）
+  shopFreeFeeCooldown: 100,      // 冷却（用完要等 100 轮才能再买）
+
+  // 游资情报（Lv.3 道具）：告诉你游资下一次进场的板块
+  shopHotTipPrice: 2000000,      // 售价
+  shopHotTipCooldown: 500,       // 冷却（轮）
+
   // ---- 丰川银行 ----
   // 账号升级交的钱会存进银行；总资产低于阈值时可以取一笔救急
   bankPoorThreshold: 100000,     // 总资产低于这个数才允许取钱

@@ -15,11 +15,13 @@ function check(label, cond, detail = '') {
 // ---------------------------------------------------------------- 1
 log('=== 1 每个商品都有等级要求，默认 1 级 ===');
 {
-  const keys = ['fakeNews', 'bodyguard', 'channel', 'bg', 'rename', 'autoDca', 'levelUp', 'comingSoon'];
+  const keys = ['fakeNews', 'bodyguard', 'channel', 'freeFee', 'bg', 'rename', 'autoDca', 'hotTip', 'levelUp', 'comingSoon'];
   for (const k of keys) {
     const n = shopNeedLevel(k);
     check(`${k} 有等级要求`, Number.isFinite(n) && n >= 1, 'Lv.' + n);
   }
+  check('咸鱼代下单是 Lv.1 商品', shopNeedLevel('freeFee') === 1, 'Lv.' + shopNeedLevel('freeFee'));
+  check('游资情报是 Lv.3 商品', shopNeedLevel('hotTip') === 3, 'Lv.' + shopNeedLevel('hotTip'));
   check('未知 key 兜底 Lv.1', shopNeedLevel('某个不存在的商品') === 1);
   check('null / undefined 也不炸', shopNeedLevel(null) === 1 && shopNeedLevel(undefined) === 1);
 }
@@ -32,6 +34,9 @@ log('=== 2 等级够就放行，不够就拦 ===');
   check('Lv.1 买假新闻 → 放行', shopGate({ level: 1 }, 'fakeNews') === null);
   check('Lv.1 买保镖 → 放行', shopGate({ level: 1 }, 'bodyguard') === null);
   check('Lv.1 买通道 → 放行', shopGate({ level: 1 }, 'channel') === null);
+  check('Lv.1 买咸鱼代下单 → 放行', shopGate({ level: 1 }, 'freeFee') === null);
+  check('Lv.2 买游资情报 → 拦下（Lv.3）', shopGate({ level: 2 }, 'hotTip')?.needLevel === 3);
+  check('Lv.3 买游资情报 → 放行', shopGate({ level: 3 }, 'hotTip') === null);
   check('Lv.1 买改名卡 → 拦下', shopGate({ level: 1 }, 'rename')?.needLevel === 2);
   check('Lv.1 买自定义背景 → 拦下', shopGate({ level: 1 }, 'bg')?.needLevel === 2);
   check('Lv.1 买自动定投 → 拦下', shopGate({ level: 1 }, 'autoDca')?.needLevel === 2);

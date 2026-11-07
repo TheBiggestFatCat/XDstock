@@ -242,6 +242,10 @@ function tickPayload(forPlayerId) {
       fillCap: fillCapFor(d, p),
       autoDca: !!p.autoDca,
       autoDcaOn: p.autoDcaOn !== false,
+      // 🐟 咸鱼代下单 / 🕵 游资情报 的状态（和 publicPlayer 保持一致）
+      freeFeeUntilTick: Number(p.freeFeeUntilTick) || 0,
+      freeFeeReadyAt: Number(p.freeFeeReadyAt) || 0,
+      hotTipReadyAt: Number(p.hotTipReadyAt) || 0,
       bank: Math.round((Number(p.bank) || 0) * 100) / 100,
       bankDeposited: Math.round((Number(p.bankDeposited) || 0) * 100) / 100,
       orders: (p.orders || []).map((o) => ({

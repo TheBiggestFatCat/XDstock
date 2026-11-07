@@ -1,4 +1,4 @@
-﻿# AGENTS.md · XDstock 维护须知
+# AGENTS.md · XDstock 维护须知
 
 > 完整文档见 [`docs/开发者文档.md`](docs/开发者文档.md)。本文件是速查版，**动手前至少读完「铁律」一节**。
 
@@ -28,6 +28,7 @@ node tests/kfc-stock.mjs             # 肯德基 反向跟随 + 疯狂星期四�
 node tests/tpsl.mjs                  # 止盈止损全流程（改平仓/委托必跑，75 条）
 node tests/market-money.mjs          # 虚假成交推动股价 + 游资轮动（改行情/流水必跑，73 条）
 node tests/payload-wire.mjs          # 前端数据包白名单（加字段/改 payload 必跑，120 条）
+node tests/shop-perks.mjs            # 咸鱼代下单（免手续费）/ 游资情报（改商城必跑，57 条）
 node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占比/天花板（不是断言套，看表格）
 ```
 
@@ -102,6 +103,7 @@ src/gold.js        金价（MB 的财报驱动源）
 src/kfc.js         肯德基：反向跟随麦当劳 + 疯狂星期四
 src/marketTrades.js 虚假成交（三档金额，**会推动股价**：写 st.mflow）
 src/hotmoney.js    游资（板块轮动，成交记录混在虚假成交里、看不出区别）
+src/perks.js       道具规则：咸鱼代下单（免手续费）/ 游资情报（读 hotMoney.nextIndustry）
 src/store.js       db 加载/保存/migrate
 public/app.js      前端全部逻辑（~3500 行单文件）
 public/index.html  单页结构（视图 div）

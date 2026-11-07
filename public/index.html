@@ -926,6 +926,48 @@
             <button id="autoDcaBuy" class="btn btn-primary btn-block">购买</button>
             <button id="autoDcaToggle" class="btn btn-ghost btn-block hidden">暂停定投</button>
           </div>
+          <div class="shop-card" data-shop-item="freeFee" id="freeFeeCard">
+            <div class="shop-card-head">
+              <img class="shop-icon-img" id="freeFeeIcon" src="/assets/shop/%E5%92%B8%E9%B1%BC%E4%BB%A3%E4%B8%8B%E5%8D%95.png"
+                alt="咸鱼代下单" />
+              <div>
+                <h3>咸鱼代下单</h3>
+                <p class="shop-sub">花钱找条咸鱼帮你跑腿下单<br />
+                  <b class="perk">5 分钟内所有交易手续费（手续费 + 印花税）全免</b>
+                </p>
+              </div>
+              <span class="shop-price" id="freeFeePrice">$500,000</span>
+            </div>
+
+            <div class="guard-status" id="freeFeeStatus">当前没有免手续费</div>
+
+            <p class="shop-warn">
+              购买后 <b id="freeFeeTicks">60</b> 轮（约 5 分钟）内，开仓 / 平仓免手续费和印花税；
+              用完后冷却 <b id="freeFeeCd">100</b> 轮。
+            </p>
+
+            <button id="freeFeeBuy" class="btn btn-primary btn-block">购买</button>
+          </div>
+
+          <div class="shop-card" data-shop-item="hotTip" id="hotTipCard">
+            <div class="shop-card-head">
+              <img class="shop-icon-img" id="hotTipIcon" src="/assets/shop/%E6%B8%B8%E8%B5%84%E6%83%85%E6%8A%A5.png"
+                alt="游资情报" />
+              <div>
+                <h3>游资情报</h3>
+                <p class="shop-sub">花钱买条消息：下一波游资要砸哪个板块<br />
+                  <b class="perk">买完在屏幕下方弹 5 秒，只告诉你板块名（情报保证是真的）</b>
+                </p>
+              </div>
+              <span class="shop-price" id="hotTipPrice">$2,000,000</span>
+            </div>
+
+            <p class="shop-warn">
+              只覆盖<b>下一次</b>进场；看一次冷却 <b id="hotTipCd">500</b> 轮。
+            </p>
+
+            <button id="hotTipBuy" class="btn btn-primary btn-block">购买情报</button>
+          </div>
         </div>
       </div>
 
@@ -1036,6 +1078,9 @@
 <div id="achvToastLayer" class="achv-toast-layer" aria-live="polite"></div>
 
 <div id="toast" class="toast"></div>
+
+<!-- 🕵 游资情报：买完在屏幕下方停 5 秒 -->
+<div id="hotTipPop" class="hot-tip-pop hidden" role="status" aria-live="polite"></div>
 
 <script src="/vendor/lightweight-charts.js"></script>
 <script type="module" src="/app.js"></script>

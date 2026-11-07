@@ -117,7 +117,8 @@ log('=== 5 清理之后，强度跟随全局（实跑引擎）===');
   try { stepMarket(db); } finally { console.log = realLog; }
   const move = Math.abs(st.price / before - 1);
   check('价格动了', st.price !== before, `${before} -> ${st.price.toFixed(4)}`);
-  check('幅度按全局 2% 走（不是旧默认 0.4%）', move <= 0.0201 && move > 0,
+  // 理论上限 = exp(strength) − 1 = 2.0201%，留一点浮点余量（以前写 2.01% 会偶发失败）
+  check('幅度按全局 2% 走（不是旧默认 0.4%）', move <= 0.0203 && move > 0,
     `实际 ${(move * 100).toFixed(3)}%`);
   check('lastSwing 记录的是全局强度算出来的', Math.abs(st.sentiment.lastSwing) <= 0.02,
     `lastSwing=${st.sentiment.lastSwing}`);
