@@ -111,7 +111,7 @@ log('=== 4 估值上限：股价不会超过 fair × maxPremium ===');
   const db = createDb();
   Object.assign(db.config, {
     baseVolatility: 0.02, meanReversion: 0, eventChance: 0, localEventChance: 0,
-    marketTradesRate: 0, playerImpactEnabled: 0, sentimentEnabled: 0, maxPremium: 2.5
+    marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0, sentimentEnabled: 0, maxPremium: 2.5
   });
   const st = db.stocks.MAMA;
   st.fair = 500;
@@ -141,7 +141,7 @@ log('=== 5 线内的股票完全不受影响 ===');
   const db = createDb();
   Object.assign(db.config, {
     baseVolatility: 0.01, meanReversion: 0.0004, eventChance: 0, localEventChance: 0,
-    marketTradesRate: 0, playerImpactEnabled: 0, sentimentEnabled: 0, maxPremium: 2.5
+    marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0, sentimentEnabled: 0, maxPremium: 2.5
   });
   const st = db.stocks.TGW;
   st.fair = 500;

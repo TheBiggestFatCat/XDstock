@@ -26,6 +26,8 @@ node tests/global-achievements.mjs   # 全局成就 价值投资/短线擒龙（
 node tests/gold-stock.mjs            # 矿工银行 MB 金价驱动 + 退市清理（改新股必跑，58 条）
 node tests/kfc-stock.mjs             # 肯德基 反向跟随 + 疯狂星期四（改新股必跑，48 条）
 node tests/tpsl.mjs                  # 止盈止损全流程（改平仓/委托必跑，75 条）
+node tests/market-money.mjs          # 虚假成交推动股价 + 游资轮动（改行情/流水必跑，73 条）
+node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占比/天花板（不是断言套，看表格）
 ```
 
 ## 铁律
@@ -47,7 +49,7 @@ node tests/tpsl.mjs                  # 止盈止损全流程（改平仓/委托�
 6. **发布流程**：改代码 → `node --check` → 本地跑通 → SFTP 上传 → 改线上数据（先备份）→
    `systemctl restart xdstock` → curl 验证 → `git commit` → `git push`（需代理 `127.0.0.1:4780`）。
 
-## 最容易踩的 9 个坑
+## 最容易踩的 10 个坑
 
 | 坑 | 症状 | 正解 |
 |---|---|---|
@@ -61,6 +63,7 @@ node tests/tpsl.mjs                  # 止盈止损全流程（改平仓/委托�
 | 给限价单「加语义」 | 开仓大面积不成交（2026-11 踩过两次） | 限价单就是「成交价 = 市价」，任何价位都能挂；要改先问 |
 | 押金漏算冲击成本 | 全仓挂单成交那一刻报「现金不足」并自动撤单 | `estimateReserve()` 里加 `impactCost` |
 | 跨模块函数忘了 import | `node --check` 只查语法 → 上线后每个 tick 抛 ReferenceError、systemd 重启循环 | 跑 `node tests/imports.mjs`；新写的分支本地一定要**真的走一遍**（2026-11 踩过：`isNightWindow`） |
+| 两套资金冲击混用 | 游资砸钱占满玩家上限 / 玩家单子推不动 | 玩家走 `st.flow`、虚假成交与游资走 `st.mflow`，公式各自一份、互不抢上限 |
 
 ## 新增配置参数（四处都要改）
 
@@ -91,6 +94,8 @@ src/api.js         全部 REST + payload 组装 + 管理接口
 src/fundamentals.js 财报生成、估值 fair、预览
 src/gold.js        金价（MB 的财报驱动源）
 src/kfc.js         肯德基：反向跟随麦当劳 + 疯狂星期四
+src/marketTrades.js 虚假成交（三档金额，**会推动股价**：写 st.mflow）
+src/hotmoney.js    游资（板块轮动，成交记录混在虚假成交里、看不出区别）
 src/store.js       db 加载/保存/migrate
 public/app.js      前端全部逻辑（~3500 行单文件）
 public/index.html  单页结构（视图 div）
@@ -103,6 +108,9 @@ public/styles.css  全部样式（主题变量 + 移动端媒体查询）
 - `playerImpactRef = 1000000`、`impactRefFreeCap = 100亿`
 - `levelBaseAsset = 1000万`、`levelGrowth = 2`、`levelUpRatio = 0.6`
 - `marketTradesRate = 3`、`sentimentRollTicks = 720`
+- 市场资金（虚假成交 + 游资，2026-11）：虚假成交三档 1万~10万 / 10万~100万 / 100万~1000万（权重 70/24/6）；
+  游资每笔 1000万~3000万、每 20~300 轮换一次板块；推动力 = 压力 × 0.002 × impactFactor，单轮封顶 0.8%
+  → 实测一笔 1000 万 ≈ +0.3%~1%，一笔 3000 万 ≈ +1%~3%（大盘股取低值）
 - 指数：DENG（9 成分）、DENGS（市值最小的 7 只）
 - 金价：基准 2400，每轮波动 0.12%；MB 财报 = 目标增速 + 金价涨跌 ×2.2 ±3%
 - MB 市值：1000 亿起步（10 亿股 × 100），目标是 3000 亿（capTargetRate 0.08/期）

@@ -30,6 +30,7 @@ function setup(overrides = {}) {
     meanReversion: 0,
     eventChance: 0,
     marketTradesRate: 0,
+    hotMoneyEnabled: 0,
     playerImpactEnabled: 0,
     fxEnabled: 0,
     sentimentEnabled: 1,

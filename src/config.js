@@ -216,6 +216,33 @@ export const DEFAULT_CONFIG = {
   // 市场噪声成交：每轮编几笔「散户」成交，让成交列表看着像有人在交易
   marketTradesEnabled: 1,
   marketTradesRate: 3,        // 噪声成交数量倍率（3 = 三倍）
+  // 2026-11 起这些「虚假成交」会真的推动股价（走独立的 st.mflow 市场资金通道）
+  // 金额分三档，越低档越常见；三个数字只是权重，会按比例归一化
+  marketTradesSmallP: 70,     // 一档 1 万 ~ 10 万 的占比
+  marketTradesMidP: 24,       // 二档 10 万 ~ 100 万
+  marketTradesBigP: 6,        // 三档 100 万 ~ 1000 万
+  // 追涨系数：本轮涨 1% 时买盘概率 = 0.5 + 1% × 这个数（0 = 买卖各半）
+  marketTradesChase: 25,
+
+  // ---- 游资资金（2026-11 新增）----
+  // 在板块之间轮动：在一只票上买入 → 待 20~300 轮 → 换板块（卖旧买新）
+  // 成交记录混在虚假成交里（同样的昵称 / 小动物头像），前端不额外展示
+  hotMoneyEnabled: 1,
+  hotMoneySwitchMin: 20,      // 换板块的最短间隔（轮）
+  hotMoneySwitchMax: 300,     // 最长间隔
+  hotMoneyMin: 10000000,      // 每一笔的下限（1000 万）
+  hotMoneyMax: 30000000,      // 每一笔的上限（3000 万）
+
+  // ---- 市场资金对价格的影响（虚假成交 + 游资共用）----
+  // 和玩家冲击（st.flow）完全分开的一套通道（st.mflow），互不抢上限
+  marketImpactEnabled: 1,
+  marketImpactRef: 10000000,      // 压力基准：一笔 1000 万算 1 单位
+  // 0.002 = 每单位压力每轮推 0.2%（再乘 impactFactor，小盘股放大）
+  // 实测：一笔 1000 万虚假成交 ≈ 推动 0.3%~1%；一笔 3000 万游资 ≈ 1%~3%（tests/sim-market-flow.mjs）
+  marketImpactStrength: 0.002,
+  marketImpactMax: 0.008,         // 单轮最多推动 0.8%
+  marketImpactDecay: 0.85,        // 压力每轮衰减系数
+  marketImpactFlowMax: 8,         // 压力上限（单位）
 
   // 全市场新闻的冲击折扣（1 = 不打折）
   globalEventScale: 0.2,

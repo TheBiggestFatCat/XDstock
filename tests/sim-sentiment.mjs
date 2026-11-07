@@ -24,7 +24,7 @@ function run({ strength, ticks = 12, drift = 0.6, v = 1, baseVol = 0, n = 720, s
   const db = createDb();
   Object.assign(db.config, {
     baseVolatility: baseVol, meanReversion: reversion, eventChance: 0, localEventChance: 0,
-    marketTradesRate: 0, playerImpactEnabled: 0,
+    marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0,
     sentimentEnabled: 1, sentimentStrength: strength, sentimentTicks: ticks, sentimentDrift: drift,
     sentimentRollMin: 480, sentimentRollMax: 960, maxPremium: 1e9
   });

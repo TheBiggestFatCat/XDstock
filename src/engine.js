@@ -3,6 +3,7 @@ import { pushBar15, BAR15_TICKS } from './bars15.js';
 import { TYCOON_LEAD_TICKS, isTycoonSector, genNextReport, fairFromReport, impactFactor, industryMidGrowth, rollWeather, dividendPerShare } from './fundamentals.js';
 export { TYCOON_LEAD_TICKS };
 import { genMarketTrades } from './marketTrades.js';
+import { stepHotMoney } from './hotmoney.js';
 import { logTrade } from './trading.js';
 import { maskSentiment } from './mind.js';
 import { kfcRallyStep, kfcRallyInfo } from './kfc.js';
@@ -439,6 +440,23 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
     st.flowFresh = false;
   }
 
+  // 市场资金冲击（虚假成交 / 游资）：和玩家冲击同一套「压力—消化」模型，
+  // 但走**独立通道** st.mflow（各自的上限与强度），玩家那边的手感一点没动。
+  // 单位：一笔 marketImpactRef（默认 1000 万）算 1 单位压力。
+  const mflow = Number(st.mflow) || 0;
+  if (mflow !== 0 && Number(cfg.marketImpactEnabled ?? 1) !== 0) {
+    const refCapM = Number(cfg.impactRefFreeCap) || 0;
+    const factorM = refCapM > 0 ? impactFactor(st, refCapM) : 1;
+    const strengthM = Number(cfg.marketImpactStrength ?? 0.002) * factorM;
+    const capM = Math.max(0, Number(cfg.marketImpactMax ?? 0.008));
+    let impactM = mflow * strengthM;
+    impactM = Math.max(-capM, Math.min(capM, impactM));
+    p *= 1 + impactM;
+    // 压力逐轮消化（游资砸一波，几轮之内被市场吃掉）
+    st.mflow = mflow * Number(cfg.marketImpactDecay ?? 0.85);
+    if (Math.abs(st.mflow) < 0.02) st.mflow = 0;
+  }
+
   if (!Number.isFinite(p) || p <= 0) p = st.price;
   p = Math.max(0.01, p);
 
@@ -658,8 +676,11 @@ export function stepMarket(db) {
     pushBar15(st.bars15, Math.floor(db.tick / BAR15_TICKS), st.price);
   }
 
-  // 3.5 生成市场噪声成交（反映本轮的随机波动）
+  // 3.5 生成市场噪声成交（会推动价格：走 st.mflow 市场资金通道）
   genMarketTrades(db);
+
+  // 3.6 游资：到点就换板块（卖旧买新，每一笔 1000 万~3000 万）
+  stepHotMoney(db);
 
   // 3.58 天气股对齐（共用天气、同时发报）
   {

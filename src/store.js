@@ -40,6 +40,7 @@ function freshStock(code) {
     price: seed.initialPrice,
     fair: seed.initialPrice,
     flow: 0,          // 玩家资金冲击累积（正=净买入，负=净卖出）
+    mflow: 0,         // 市场资金冲击累积（虚假成交 / 游资，和 flow 分开）
     // 停牌 / 退市
     status: 'normal', // normal | suspended | delisted
     statusUntil: 0,
@@ -84,6 +85,8 @@ export function createDb() {
   fx: { rate: 0, prevRate: 0, base: 0, at: 0, source: '', stale: true },
     index: { value: INDEX_BASE, series: [INDEX_BASE] },
   smallIndex: { value: INDEX_BASE, series: [INDEX_BASE] },
+    // 游资：在板块之间轮动的「一笔资金」，状态见 src/hotmoney.js
+    hotMoney: { code: '', industry: '', nextSwitchTick: 0, switches: 0, startedTick: 0 },
     players: {},
     sessions: {},
     adminSessions: {},
@@ -424,6 +427,14 @@ export function migrate(d) {
   merged.events = d.events || [];
   merged.trades = d.trades || [];
   merged.notices = d.notices || [];
+  // 市场资金（虚假成交 / 游资）通道：老存档没有 mflow，补 0；
+  // 游资状态缺了就补一个空壳（下一次 tick 会自己在板块里开仓）
+  for (const s of Object.values(merged.stocks)) {
+    if (!Number.isFinite(Number(s.mflow))) s.mflow = 0;
+  }
+  if (!merged.hotMoney || typeof merged.hotMoney !== 'object') {
+    merged.hotMoney = { code: '', industry: '', nextSwitchTick: 0, switches: 0, startedTick: 0 };
+  }
   // 老的贷款功能已下线，存档里的残留字段一并清掉
   for (const p of Object.values(merged.players)) {
     delete p.loan;

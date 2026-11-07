@@ -5022,16 +5022,49 @@ async function loadAdmin() {
           ]
         },
         {
-          title: '新闻 / 随机成交',
+          title: '新闻',
           desc: '消息怎么影响价格',
           fields: [
             ['eventChance', '新闻概率/tick'],
             ['eventImpactScale', '影响倍率(1=标准)'],
             ['eventDurationMin', '最短持续(轮)'],
             ['eventDurationMax', '最长持续(轮)'],
-            ['globalEventScale', '全市场新闻折扣(0.2=20%)'],
-            ['marketTradesEnabled', '随机成交开关(1=开)'],
-            ['marketTradesRate', '随机成交倍率(3=三倍)']
+            ['globalEventScale', '全市场新闻折扣(0.2=20%)']
+          ]
+        },
+        {
+          title: '虚假成交（会推动股价）',
+          desc: '成交记录里带小动物头像的散户单：三档金额，越低档越常见',
+          fields: [
+            ['marketTradesEnabled', '开关(1=开 0=关)'],
+            ['marketTradesRate', '每轮笔数倍率(3=三倍)'],
+            ['marketTradesSmallP', '一档 1万~10万 权重'],
+            ['marketTradesMidP', '二档 10万~100万 权重'],
+            ['marketTradesBigP', '三档 100万~1000万 权重'],
+            ['marketTradesChase', '追涨系数(25=涨1%多15%买盘)']
+          ]
+        },
+        {
+          title: '游资资金',
+          desc: '在板块间轮动：换板块时卖旧的、买新的，成交记录混在散户里',
+          fields: [
+            ['hotMoneyEnabled', '开关(1=开 0=关)'],
+            ['hotMoneySwitchMin', '换板块最短间隔(轮)'],
+            ['hotMoneySwitchMax', '换板块最长间隔(轮)'],
+            ['hotMoneyMin', '每笔金额下限(元)'],
+            ['hotMoneyMax', '每笔金额上限(元)']
+          ]
+        },
+        {
+          title: '市场资金 → 价格',
+          desc: '虚假成交 / 游资推动价格的力度（和玩家冲击是两套独立通道）',
+          fields: [
+            ['marketImpactEnabled', '开关(1=开 0=关)'],
+            ['marketImpactRef', '压力基准金额(一笔算1单位)'],
+            ['marketImpactStrength', '每单位压力每轮推动'],
+            ['marketImpactMax', '单轮封顶(0.008=0.8%)'],
+            ['marketImpactDecay', '压力每轮衰减(0.85)'],
+            ['marketImpactFlowMax', '压力上限(单位)']
           ]
         }
       ]

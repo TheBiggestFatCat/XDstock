@@ -5,6 +5,7 @@ import {
 } from './achievements.js';
 import { isTycoonSector } from './fundamentals.js';
 import { maskSentiment } from './mind.js';
+import { SMALL_INDEX_STOCK } from './stocks.js';
 
 const TRADE_LOG_MAX = 4000;
 
@@ -75,6 +76,41 @@ function addFlow(st, cfg, signedNotional) {
 }
 
 /**
+ * 市场资金（虚假成交 / 游资）对股价的压力。
+ *
+ * 和玩家的 addFlow 是**两套独立通道**（玩家走 st.flow，市场走 st.mflow）：
+ *   - 单位和上限各自一套参数，游资砸 3000 万不会把玩家那 12 单位的上限占满
+ *   - 释放也在引擎里分开写（engine.js#stepStock），玩家冲击的手感一点没动
+ *
+ * 单位：一笔 marketImpactRef（默认 1000 万）算 1 单位压力，封顶 marketImpactFlowMax。
+ */
+function addMarketFlowTo(st, cfg, signedNotional) {
+  if (!st || st.isIndex) return;
+  const n = Number(signedNotional);
+  if (!Number.isFinite(n) || n === 0) return;
+  if (Number(cfg.marketImpactEnabled ?? 1) === 0) return;
+  const ref = Math.max(1, Number(cfg.marketImpactRef ?? 10000000));
+  const maxFlow = Math.max(1, Number(cfg.marketImpactFlowMax ?? 8));
+  const before = Number(st.mflow) || 0;
+  st.mflow = Math.max(-maxFlow, Math.min(maxFlow, before + n / ref));
+}
+
+/**
+ * 市场资金的统一入口（虚假成交 / 游资都调它）。
+ * 指数标的按权重拆给成分股 —— 买指数 = 买一篮子，和玩家那边口径一致。
+ */
+export function addMarketFlow(db, st, signedNotional) {
+  if (!db || !st) return;
+  const cfg = db.config || {};
+  if (Number(cfg.marketImpactEnabled ?? 1) === 0) return;
+  if (st.isIndex) {
+    distributeIndexFlow(db, signedNotional, 'market', indexKeyFor(st));
+    return;
+  }
+  addMarketFlowTo(st, cfg, signedNotional);
+}
+
+/**
  * 冲击成本费率：单子越大，吃掉的市场深度越多，付的钱越多
  * 和 playerImpact 用同一套参考额，避免两套口径
  */
@@ -89,9 +125,9 @@ export function impactCostRate(db, notional) {
   return Math.min(maxRate, rate);
 }
 
-/** 指数成分：当前权重（没有权重时按等权） */
-function indexWeights(db) {
-  const idx = db.index || {};
+/** 指数成分：当前权重（没有权重时按等权）。DENGS 读小灯指数自己的权重表 */
+function indexWeights(db, indexKey = 'index') {
+  const idx = (indexKey === 'smallIndex' ? db.smallIndex : db.index) || {};
   const w = idx.weights || {};
   const live = Object.values(db.stocks).filter((s) => !s.isIndex && s.status === 'normal');
   let sumW = 0;
@@ -104,22 +140,31 @@ function indexWeights(db) {
   }));
 }
 
+/** 这个指数标的该用哪张权重表（DENG → index，DENGS → smallIndex） */
+function indexKeyFor(st) {
+  return st && st.code === SMALL_INDEX_STOCK.code ? 'smallIndex' : 'index';
+}
+
 /**
  * 买卖指数 = 按权重买一篮子成分股。
  * 把成交额按权重拆开，分别记到每只成分股的资金流上，
  * 这样买指数会真的把整个市场推上去。
+ *
+ * channel：'player' 走玩家的 st.flow，'market' 走虚假成交/游资的 st.mflow
  */
-function distributeIndexFlow(db, signedNotional) {
-  for (const { st, weight } of indexWeights(db)) {
+function distributeIndexFlow(db, signedNotional, channel = 'player', indexKey = 'index') {
+  for (const { st, weight } of indexWeights(db, indexKey)) {
     if (weight <= 0) continue;
-    addFlow(st, db.config, signedNotional * weight);
+    const leg = signedNotional * weight;
+    if (channel === 'market') addMarketFlowTo(st, db.config || {}, leg);
+    else addFlow(st, db.config, leg);
   }
 }
 
 /** 指数的冲击成本 = 各成分腿冲击成本之和（拆单后更便宜，符合直觉） */
-export function indexImpactCost(db, notional) {
+export function indexImpactCost(db, notional, indexKey = 'index') {
   let total = 0;
-  for (const { st, weight } of indexWeights(db)) {
+  for (const { st, weight } of indexWeights(db, indexKey)) {
     if (weight <= 0) continue;
     const leg = notional * weight;
     total += leg * impactCostRate(db, leg);
@@ -267,7 +312,9 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
 
   // 冲击成本：这笔单自己会推动价格，成本由下单人承担
   // 指数是由成分股算出来的，买卖它不会推动它自己，所以不收冲击成本
-  const impactCost = st.isIndex ? indexImpactCost(db, notional) : notional * impactCostRate(db, notional);
+  const impactCost = st.isIndex
+    ? indexImpactCost(db, notional, indexKeyFor(st))
+    : notional * impactCostRate(db, notional);
   const cost = margin + fee + stamp + impactCost;
   if (player.cash < cost) {
     return { ok: false, error: `现金不足，需要 $${cost.toFixed(2)}，你只有 $${player.cash.toFixed(2)}` };
@@ -289,7 +336,7 @@ export function openPosition(db, player, { code, side, qty, leverage, tp, sl }) 
   const impactMult = darkImpactMult(db, player);
   if (st.isIndex) {
     // 指数：按权重把冲击分摊给成分股
-    distributeIndexFlow(db, (side === 'long' ? notional : -notional) * impactMult);
+    distributeIndexFlow(db, (side === 'long' ? notional : -notional) * impactMult, 'player', indexKeyFor(st));
   } else {
     addFlow(st, cfg, (side === 'long' ? notional : -notional) * impactMult);
   }
@@ -539,7 +586,7 @@ export function closePosition(db, player, code, reason = 'manual', qty = null) {
   // 平多 = 卖出压低；平空 = 买回推高
   const impactMult2 = darkImpactMult(db, player);
   if (st.isIndex) {
-    distributeIndexFlow(db, (pos.side === 'long' ? -notional : notional) * impactMult2);
+    distributeIndexFlow(db, (pos.side === 'long' ? -notional : notional) * impactMult2, 'player', indexKeyFor(st));
   } else {
     addFlow(st, cfg, (pos.side === 'long' ? -notional : notional) * impactMult2);
   }

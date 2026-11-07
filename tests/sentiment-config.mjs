@@ -104,7 +104,7 @@ log('=== 5 清理之后，强度跟随全局（实跑引擎）===');
   const db = mkDb({ id: 'old_money' });
   Object.assign(db.config, {
     baseVolatility: 0, meanReversion: 0, eventChance: 0,
-    marketTradesRate: 0, playerImpactEnabled: 0, fxEnabled: 0,
+    marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0, fxEnabled: 0,
     sentimentStrength: 0.02, sentimentTicks: 1
   });
   const st = db.stocks.TGW;

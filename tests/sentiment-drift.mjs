@@ -23,7 +23,7 @@ function runSentiment({ drift, v, n = 300, strength = 0.004, every = 1 }) {
   const db = createDb();
   Object.assign(db.config, {
     baseVolatility: 0, meanReversion: 0, eventChance: 0, localEventChance: 0,
-    marketTradesRate: 0, playerImpactEnabled: 0,
+    marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0,
     sentimentEnabled: 1, sentimentStrength: strength, sentimentTicks: every, sentimentDrift: drift,
     // 这段只测情绪本身，把「估值上限」关掉，否则涨到 2.5 倍 fair 就被压住了
     maxPremium: 1e9
@@ -86,7 +86,7 @@ log('=== 4 个股 trait.sentDrift 覆盖全局 ===');
   const db = createDb();
   Object.assign(db.config, {
     baseVolatility: 0, meanReversion: 0, eventChance: 0, localEventChance: 0,
-    marketTradesRate: 0, playerImpactEnabled: 0,
+    marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0,
     sentimentEnabled: 1, sentimentStrength: 0.004, sentimentTicks: 1, sentimentDrift: 0
   });
   const st = db.stocks.TGW;
@@ -179,7 +179,7 @@ log('=== 7 引擎确实按 config.sentimentEdge 抽（集成）===');
     const db = createDb();
     Object.assign(db.config, {
       baseVolatility: 0, meanReversion: 0, eventChance: 0, localEventChance: 0,
-      marketTradesRate: 0, playerImpactEnabled: 0,
+      marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0,
       sentimentEnabled: 1, sentimentStrength: 0.001, sentimentTicks: 1, sentimentEdge: edge
     });
     const st = db.stocks.TGW;
