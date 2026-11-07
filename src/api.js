@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
-import { candlesFromSeries, changesFor, timeFromAxis, tickTimeAxis, pushNotice, noticeAlive, sentimentView, liveIndexWeights } from './engine.js';
+import { candlesFromSeries, changesFor, timeFromAxis, tickTimeAxis, pushNotice, noticeAlive, liveIndexWeights } from './engine.js';
+import { stockFullWire, configWire, positionWire } from './wire.js';
 import { bars15Candles } from './bars15.js';
 import { unlockedEmojis, pushEmote, visibleEmotes } from './emoji.js';
 import { pushVersionPost, latestVersionPost, listVersionPosts, deleteVersionPost } from './version.js';
@@ -11,11 +12,9 @@ import { getBuild } from './build.js';
 import { playerEquity, positionPnl } from './trading.js';
 import { levelUpPlayer, withdrawFromBank, bankStatus } from './bank.js';
 import { placeLimitOrder, cancelOrder, orderLimitBlocked, consumeOrderSlot, fillCapFor } from './orders.js';
-import { reportPayload, dividendPerShare, dividendPayout, tycoonPreviewPayload, previewInTicks, isTycoonSector } from './fundamentals.js';
 import {
   THEMES as ACHV_THEMES, THEME_EMOJI, THEME_ACHIEVEMENTS, achvPayload, ensureAchvState,
-  themeEmojiList, themeTier, isEvolved, evolveTheme, canEvolve, bumpAchv, achvEmojiList,
-  tycoonLeadTicks
+  themeEmojiList, themeTier, isEvolved, evolveTheme, canEvolve, bumpAchv, achvEmojiList
 } from './achievements.js';
 
 const TOKEN_TTL = 30 * 24 * 3600 * 1000;
@@ -26,6 +25,9 @@ const THEMES = ['red', 'bear', 'dark', 'tycoon', 'hermit', 'probe', 'mind', 'nig
 import { notifyList, unreadCount, markNotifyRead } from './notify.js';
 
 const THEME_NEED_LEVEL = { probe: 2, mind: 2, night: 2 };
+
+/** 表情目录：等级 → 资源目录（前端拼 /assets/<dir>/<file>，白名单才是通行证） */
+const EMOJI_DIRS = { 1: 'emo_lv1' };
 
 /**
  * 商店里每个商品需要的账号等级。
@@ -125,14 +127,7 @@ function publicPlayer(p, db) {
   for (const [code, pos] of Object.entries(p.positions || {})) {
     const st = db.stocks[code];
     if (!st) continue;
-    const pnl = positionPnl(pos, st.price);
-    positions[code] = {
-      ...pos,
-      price: st.price,
-      pnl,
-      pnlPct: pos.margin > 0 ? (pnl / pos.margin) * 100 : 0,
-      equity: pos.margin + pnl
-    };
+    positions[code] = positionWire(pos, st);
   }
   return {
     id: p.id,
@@ -163,7 +158,6 @@ function publicPlayer(p, db) {
     // 自定义背景的不透明度（0~100）；前端用 1 减它当作「透明度」
     bgOpacity: Number.isFinite(Number(p.bgOpacity)) ? Math.max(0, Math.min(100, Number(p.bgOpacity))) : 100,
     renameReadyAt: Number(p.renameReadyAt) || 0,
-    themeChangedTick: p.themeChangedTick || 0,
     // -1 = 从没换过技能
     skillChangedTick: Number.isFinite(Number(p.skillChangedTick)) ? Number(p.skillChangedTick) : -1,
     themes: Array.isArray(p.themes) ? p.themes : [],
@@ -194,9 +188,8 @@ function publicPlayer(p, db) {
       autoDca: !!o.autoDca
     })),
     income: (p.workEarned || 0) + (p.stealEarned || 0),
-    // 站内通知：最新 20 条 + 未读数（止盈止损触发/成交、强平、被偷都在这儿）
+    // 站内通知：最新 20 条（网页端目前不显示，但安卓壳靠它发系统通知）
     notices: notifyList(p, 20),
-    notifyUnread: unreadCount(p),
     // 表情互动：这个等级解锁了哪些贴纸
     emojis: unlockedEmojis(p.level),
     createdAt: p.createdAt
@@ -295,10 +288,9 @@ export function leaderboardRows(db) {
         bank,
         // total = 排名用的总资产（含银行存款）
         total: Math.round(((blur ? fuzz(equity) : equity) + bank) * 100) / 100,
-        guardUntil: p.guardUntil || 0,
-        theme: p.theme || 'default',
-        skill: p.skill || p.theme || 'default',
         level: Math.max(1, Math.floor(Number(p.level) || 1)),
+        // 故意留空：排行榜不公开任何人的持仓（「暗中调查」技能才有价值）
+        // 也不发 theme / skill / guardUntil —— 那等于把别人的保镖和技能提前亮出来
         positions: []
       };
     });
@@ -444,57 +436,8 @@ export function marketPayload(db, me) {
   // 指数排在最前面
   const ordered = Object.values(db.stocks).sort((a, b) => (b.isIndex ? 1 : 0) - (a.isIndex ? 1 : 0));
   for (const st of ordered) {
-    const code = st.code;
-    const prev = st.series.length > 1 ? st.series[st.series.length - 2] : st.price;
-    const report = st.isIndex ? null : reportPayload(st);
-    stocks[code] = {
-      code,
-      name: st.name,
-      icon: st.icon || '',
-      industry: st.industry,
-      desc: st.desc,
-      price: st.price,
-      isIndex: !!st.isIndex,
-      shares: Number(st.shares) || 0,
-      marketCap: report ? report.marketCap : 0,
-      freeCap: report ? report.freeCap : 0,
-      fair: Number(st.fair) || 0,
-      nextReportTick: Number(st.nextReportTick) || 0,
-      // 本期每股股息（含现价封顶，所以每轮都会变）与实际派息率
-      dps: dividendPerShare(st, { rate: db.config.dividendRate, cap: db.config.dividendCap }),
-      payout: dividendPayout(st, db.config.dividendRate),
-      // 天气（st.weather / st.weatherTarget）只给引擎和财报用，不下发给前端
-      report,
-      // 「金融大鳄」倒计时：只有金融板块才有（> 0 还要等，<= 0 已在窗口内）
-      // 进化后提前量 20 → 30 轮，所以倒计时要按这个玩家的阶数算
-      previewIn: (st.isIndex || !isTycoonSector(st))
-        ? null
-        : previewInTicks(st, db.tick, tycoonLeadTicks(db, me)),
-      // 金融大鳄：任意个股的下一期财报，提前 TYCOON_LEAD_TICKS 轮就能看到
-      preview: (me && me.skill === 'tycoon' && st.pendingReport
-        && (Number(st.nextReportTick) - db.tick) <= tycoonLeadTicks(db, me))
-        ? tycoonPreviewPayload(st, db.tick, tycoonLeadTicks(db, me))
-        : null,
-      // 情绪读心：只有这个主题能看到每只票当前的情绪（v / 剩余轮数 / 方向分量）
-      sent: (me && me.skill === 'mind') ? sentimentView(st, db, me) : null,
-      // 按各 K 线周期算涨跌幅（前端跟着当前周期显示）
-      changes: changesFor(st.series, TIMEFRAMES),
-      changePct: prev ? ((st.price - prev) / prev) * 100 : 0,
-      dayChangePct: ((st.price - st.initialPrice) / st.initialPrice) * 100,
-      status: st.status,
-      initialPrice: st.initialPrice,
-      // 标的性格（涨跌特征），前端用来显示特质说明
-      // traitHidden 的标的（矿工银行）对外只留 id 和波动参数，不给名字/说明/驱动系数
-      trait: st.traitHidden
-        ? { id: st.trait?.id, volMult: st.trait?.volMult, revMult: st.trait?.revMult }
-        : (st.trait || {}),
-      traitName: st.traitHidden ? '' : (st.trait?.name || ''),
-      st: !!st.st,
-      stTicks: st.stTicks || 0,
-      fxTarget: st.fxTarget || 0,
-      stPrice: db.config.stPrice ?? 3,
-      stDelistTicks: db.config.stDelistTicks ?? 100
-    };
+    // 只发 src/wire.js 白名单里的字段：价格/涨跌幅/财报/ST/预览/情绪(仅读心)
+    stocks[st.code] = stockFullWire(db, st, me);
   }
   return {
     build: getBuild(),
@@ -505,8 +448,6 @@ export function marketPayload(db, me) {
     emotes: visibleEmotes(db),
     // 版本更新公告（「市场快讯」上方固定那一栏；没有就 null）
     versionPost: latestVersionPost(db),
-    startedAt: db.startedAt || 0,
-    serverTime: now(),
     index: {
       value: db.index.value,
       series: db.index.series.slice(-600),
@@ -518,16 +459,13 @@ export function marketPayload(db, me) {
         return Object.entries(db.index.weights || {})
           .map(([code, w]) => {
             const st2 = db.stocks[code] || {};
-            const sh = Number(st2.shares) || 0;
             const px2 = Number(st2.price) || 0;
             return {
               code,
               name: st2.name || code,
               weight: w,
               liveWeight: Number(live[code]) || 0,
-              price: px2,
-              marketCap: px2 * sh,
-              freeCap: px2 * sh * (Number(st2.freeFloat) || 0.45)
+              freeCap: px2 * (Number(st2.shares) || 0) * (Number(st2.freeFloat) || 0.45)
             };
           })
           .sort((a, b) => b.weight - a.weight);
@@ -558,18 +496,17 @@ export function marketPayload(db, me) {
       })),
     smallIndex: (() => {
       const si = db.smallIndex || {};
+      const liveS = liveIndexWeights(db, 'smallIndex');
       return {
         value: Number(si.value) || 0,
-        series: (si.series || []).slice(-600),
         weights: Object.entries(si.weights || {})
           .map(([code, w]) => {
             const st2 = db.stocks[code] || {};
-            const sh = Number(st2.shares) || 0;
             const px2 = Number(st2.price) || 0;
             return {
-              code, name: st2.name || code, weight: w, price: px2,
-              marketCap: px2 * sh,
-              freeCap: px2 * sh * (Number(st2.freeFloat) || 0.45)
+              code, name: st2.name || code, weight: w,
+              liveWeight: Number(liveS[code]) || 0,
+              freeCap: px2 * (Number(st2.shares) || 0) * (Number(st2.freeFloat) || 0.45)
             };
           })
           .sort((a, b) => b.weight - a.weight),
@@ -578,187 +515,13 @@ export function marketPayload(db, me) {
       };
     })(),
     me: me ? publicPlayer(me, db) : null,
-    fx: {
-      rate: Number(db.fx?.rate) || 0,
-      prevRate: Number(db.fx?.prevRate) || 0,
-      base: Number(db.fx?.base) || 0,
-      at: db.fx?.at || 0,
-      source: db.fx?.source || '',
-      stale: !!db.fx?.stale
-    },
+    // 玩家可见的配置：白名单在 src/wire.js（引擎参数一律不下发）
     config: {
-      fxEnabled: db.config.fxEnabled ?? 1,
-      fxCoef: db.config.fxCoef ?? 1,
-      fxLeverage: db.config.fxLeverage ?? 8,
-      fxRefreshMs: db.config.fxRefreshMs ?? 60000,
-      stPrice: db.config.stPrice ?? 3,
-      stDelistTicks: db.config.stDelistTicks ?? 100,
-      playerImpactTail: db.config.playerImpactTail ?? 1,
-      impactCostCoef: db.config.impactCostCoef ?? 6,
-      impactCostMax: db.config.impactCostMax ?? 0.06,
-      minLeverage: db.config.minLeverage,
-      maxLeverage: db.config.maxLeverage,
-      feeRate: db.config.feeRate,
-      stampDuty: db.config.stampDuty,
-      marketTradesRate: db.config.marketTradesRate ?? 3,
-      // 虚假成交：三档金额的权重 + 追涨系数（0 = 买卖各半）
-      marketTradesSmallP: db.config.marketTradesSmallP ?? 70,
-      marketTradesMidP: db.config.marketTradesMidP ?? 24,
-      marketTradesBigP: db.config.marketTradesBigP ?? 6,
-      marketTradesChase: db.config.marketTradesChase ?? 25,
-      // 游资：板块轮动节奏与每笔金额
-      hotMoneyEnabled: db.config.hotMoneyEnabled ?? 1,
-      hotMoneySwitchMin: db.config.hotMoneySwitchMin ?? 20,
-      hotMoneySwitchMax: db.config.hotMoneySwitchMax ?? 300,
-      hotMoneyMin: db.config.hotMoneyMin ?? 10000000,
-      hotMoneyMax: db.config.hotMoneyMax ?? 30000000,
-      // 市场资金 → 价格压力（和玩家冲击分开的通道）
-      marketImpactEnabled: db.config.marketImpactEnabled ?? 1,
-      marketImpactRef: db.config.marketImpactRef ?? 10000000,
-      marketImpactStrength: db.config.marketImpactStrength ?? 0.002,
-      marketImpactMax: db.config.marketImpactMax ?? 0.008,
-      marketImpactDecay: db.config.marketImpactDecay ?? 0.85,
-      marketImpactFlowMax: db.config.marketImpactFlowMax ?? 8,
-      sentimentEnabled: db.config.sentimentEnabled ?? 1,
-      sentimentStrength: db.config.sentimentStrength ?? 0.004,
-      sentimentDrift: db.config.sentimentDrift ?? 0.6,
-      sentimentEdge: db.config.sentimentEdge ?? 3,
-      sentimentTicks: db.config.sentimentTicks ?? 12,
-      sentimentRollMin: db.config.sentimentRollMin ?? 480,
-      sentimentRollMax: db.config.sentimentRollMax ?? 960,
-      sentimentRollTicks: db.config.sentimentRollTicks ?? 720,
-      maxOrdersPerTick: db.config.maxOrdersPerTick,
-      globalEventScale: db.config.globalEventScale ?? 0.2,
-
-      maxFillNotionalPerTick: db.config.maxFillNotionalPerTick ?? 150000,
-      shopFakeNewsPrice: db.config.shopFakeNewsPrice ?? 500000,
-      shopFakeNewsChance: db.config.shopFakeNewsChance ?? 0.2,
-      shopFakeNewsCooldown: db.config.shopFakeNewsCooldown ?? 120,
-      shopBodyguardPrice: db.config.shopBodyguardPrice ?? 50000,
-      shopBodyguardTicks: db.config.shopBodyguardTicks ?? 720,
-      shopThemePrice: db.config.shopThemePrice ?? 2000000,
-      mindThemePrice: db.config.mindThemePrice ?? 5000000,
-      mindFakeChance: db.config.mindFakeChance ?? 0.5,
-      mindAccurateChanceEvolved: db.config.mindAccurateChanceEvolved ?? 0.7,
-      // 财报随机偏移（体量越大偏移越小）
-      reportVol: db.config.reportVol ?? 0.05,
-      reportVolMin: db.config.reportVolMin ?? 0.01,
-      reportVolMax: db.config.reportVolMax ?? 0.1,
-      reportRefCap: db.config.reportRefCap ?? 1e11,
-      // 金价（矿工银行的财报驱动源）
-      goldBase: db.config.goldBase ?? 2400,
-      goldVol: db.config.goldVol ?? 0.0012,
-      goldRev: db.config.goldRev ?? 0.002,
-      goldCoef: db.config.goldCoef ?? 2.2,
-      goldJitter: db.config.goldJitter ?? 0.03,
-      nightStartHour: db.config.nightStartHour ?? 18,
-      nightEndHour: db.config.nightEndHour ?? 4,
-      nightStealCooldown: db.config.nightStealCooldown ?? 5,
-      nightStealCooldownEvolved: db.config.nightStealCooldownEvolved ?? 3,
-      themeNeedLevel: THEME_NEED_LEVEL,
-      // ---- 主题成就 / 进化 ----
-      achvShardPerEvolve: db.config.achvShardPerEvolve ?? 2,
-      achvRedTrendTarget: db.config.achvRedTrendTarget ?? 20,
-      achvRedBonusTarget: db.config.achvRedBonusTarget ?? 5000000,
-      achvBearTrendTarget: db.config.achvBearTrendTarget ?? 20,
-      achvBearBonusTarget: db.config.achvBearBonusTarget ?? 5000000,
-      achvDarkHandTarget: db.config.achvDarkHandTarget ?? 10000000,
-      achvDarkHandCount: db.config.achvDarkHandCount ?? 1,
-      achvDarkPushTarget: db.config.achvDarkPushTarget ?? 1,
-      achvDarkPushWindowTicks: db.config.achvDarkPushWindowTicks ?? 200,
-      achvTycoonProphetTarget: db.config.achvTycoonProphetTarget ?? 1,
-      achvTycoonProphetLeverage: db.config.achvTycoonProphetLeverage ?? 10,
-      achvTycoonProfitTarget: db.config.achvTycoonProfitTarget ?? 5000000,
-      achvHermitFollowTarget: db.config.achvHermitFollowTarget ?? 1,
-      achvHermitPosTarget: db.config.achvHermitPosTarget ?? 10000000,
-      achvHermitFollowWindowTicks: db.config.achvHermitFollowWindowTicks ?? 100,
-      achvProbeWeakTarget: db.config.achvProbeWeakTarget ?? 1,
-      achvProbeWindowTicks: db.config.achvProbeWindowTicks ?? 100,
-      achvProbeTarget: db.config.achvProbeTarget ?? 20,
-      achvMindReadTarget: db.config.achvMindReadTarget ?? 1,
-      achvMindExtreme: db.config.achvMindExtreme ?? 0.8,
-      achvMindProfitTarget: db.config.achvMindProfitTarget ?? 10000000,
-      achvNightBigSteal: db.config.achvNightBigSteal ?? 9500,
-      achvNightStealTarget: db.config.achvNightStealTarget ?? 200,
-      themeEvolveSkillMult: db.config.themeEvolveSkillMult ?? 1.5,
-      themeEvolveImpact: db.config.themeEvolveImpact ?? 1.08,
-      themeEvolveImpactRefund: db.config.themeEvolveImpactRefund ?? 0.2,
-      tycoonLeadTicks: db.config.tycoonLeadTicks ?? 20,
-      tycoonLeadTicksEvolved: db.config.tycoonLeadTicksEvolved ?? 30,
-      hermitHideChance: db.config.hermitHideChance ?? 0.5,
-      hermitHideChanceEvolved: db.config.hermitHideChanceEvolved ?? 0.75,
-      investigateCooldownEvolved: db.config.investigateCooldownEvolved ?? 20,
-      themeEvolveBearMarginCut: db.config.themeEvolveBearMarginCut ?? 0.2,
-      themeEvolveFeeFreeRed: db.config.themeEvolveFeeFreeRed ?? 1,
-      // ---- 全局成就 ----
-      achvValueDeviation: db.config.achvValueDeviation ?? 0.3,
-      achvValueOpenMin: db.config.achvValueOpenMin ?? 5000000,
-      achvValueHoldTicks: db.config.achvValueHoldTicks ?? 17280,
-      achvValueProfitPct: db.config.achvValueProfitPct ?? 100,
-      achvValueCrossTarget: db.config.achvValueCrossTarget ?? 1,
-      achvValueHoldTarget: db.config.achvValueHoldTarget ?? 1,
-      achvShortOpenMin: db.config.achvShortOpenMin ?? 1000000,
-      achvShortNextPnlPct: db.config.achvShortNextPnlPct ?? 20,
-      achvShortWindowTicks: db.config.achvShortWindowTicks ?? 120,
-      achvShortPnlPct: db.config.achvShortPnlPct ?? 100,
-      achvDragonNextTarget: db.config.achvDragonNextTarget ?? 1,
-      achvDragonFastTarget: db.config.achvDragonFastTarget ?? 1,
-      achvGlobalRequireAll: db.config.achvGlobalRequireAll ?? 1,
-      // 表情互动的目录（前端拼 /assets/<dir>/<file>）
-      emojiDirs: { 1: 'emo_lv1' },
-      // 道具/其他的等级门槛：前端照这个渲染「Lv.N 解锁」，服务端照这个拦
+      ...configWire(db.config),
+      // 三个对象型配置：唯一真相就在这个文件里（等级门槛 / 表情目录）
       shopItems: SHOP_NEED_LEVEL,
-      shopBgPrice: db.config.shopBgPrice ?? 5000000,
-      shopRenamePrice: db.config.shopRenamePrice ?? 1000000,
-      shopRenameCooldown: db.config.shopRenameCooldown ?? 2000,
-      levelBaseAsset: db.config.levelBaseAsset ?? 10000000,
-      levelGrowth: db.config.levelGrowth ?? 2,
-      levelUpRatio: db.config.levelUpRatio ?? 0.6,
-      levelFillBonus: db.config.levelFillBonus ?? 1000000,
-      shopChannelBasePrice: db.config.shopChannelBasePrice ?? 300000,
-      shopChannelRatio: db.config.shopChannelRatio ?? 1.5,
-      shopChannelStep: db.config.shopChannelStep ?? 100000,
-      shopAutoDcaPrice: db.config.shopAutoDcaPrice ?? 5000000,
-      shopAutoDcaPremium: db.config.shopAutoDcaPremium ?? 0.03,
-      bankPoorThreshold: db.config.bankPoorThreshold ?? 100000,
-      bankWithdrawRateMin: db.config.bankWithdrawRateMin ?? 0.01,
-      bankWithdrawRateMax: db.config.bankWithdrawRateMax ?? 0.20,
-      bankWithdrawFloor: db.config.bankWithdrawFloor ?? 100000,
-      investigateCooldownTicks: db.config.investigateCooldownTicks ?? 30,
-      maxFillNotionalPerTick: db.config.maxFillNotionalPerTick ?? 300000,
-      redBonusRate: db.config.redBonusRate ?? 0.01,
-      redBonusMinTicks: db.config.redBonusMinTicks ?? 12,
-    bearBonusRate: db.config.bearBonusRate ?? 0.01,
-    bearBonusMinTicks: db.config.bearBonusMinTicks ?? 12,
-      limitOrderEnabled: db.config.limitOrderEnabled ?? 1,
-      orderTtlTicks: db.config.orderTtlTicks ?? 2000,
-      // 早市冲量（LU 个股特性）的力度
-      morningRallyEnabled: db.config.morningRallyEnabled ?? 1,
-      morningRallyStartHour: db.config.morningRallyStartHour ?? 6,
-      morningRallyEndHour: db.config.morningRallyEndHour ?? 10,
-      morningRallyTotal: db.config.morningRallyTotal ?? 0.25,
-      morningRallyPull: db.config.morningRallyPull ?? 0.02,
-      maxPendingOrders: db.config.maxPendingOrders ?? 5,
-      playerImpactEnabled: db.config.playerImpactEnabled ?? 1,
-      playerImpactRef: db.config.playerImpactRef ?? 1000000,
-      impactRefFreeCap: db.config.impactRefFreeCap ?? 10000000000,
-      playerImpactStrength: db.config.playerImpactStrength ?? 0.0009,
-      playerImpactFlowMax: db.config.playerImpactFlowMax ?? 12,
-      workRatePerTick: db.config.workRatePerTick ?? 50,
-      workOnlineMultiplier: db.config.workOnlineMultiplier ?? 2,
-      workBankTicks: db.config.workBankTicks ?? 1440,
-      stealMin: db.config.stealMin ?? 100,
-      dividendRate: db.config.dividendRate ?? 1,
-      dividendCap: db.config.dividendCap ?? 0.015,
-      growthCeiling: db.config.growthCeiling ?? 8,
-      maxPremium: db.config.maxPremium ?? 2.5,
-      rallyMin: db.config.rallyMin ?? 0.05,
-      rallyMax: db.config.rallyMax ?? 0.2,
-      indexRebalanceTicks: db.config.indexRebalanceTicks ?? 2160,
-      stealMax: db.config.stealMax ?? 10000,
-      stealCapRatio: db.config.stealCapRatio ?? 0.001,
-      stealCooldownTicks: db.config.stealCooldownTicks ?? 60,
-      startingCash: db.config.startingCash
+      themeNeedLevel: THEME_NEED_LEVEL,
+      emojiDirs: EMOJI_DIRS,
     }
   };
 }
@@ -1458,7 +1221,7 @@ export async function handleApi(ctx) {
       return {
         id: t.id,
         at: t.at,
-        playerId: t.playerId,
+        // 不下发 playerId：否则 F12 就能把每笔成交对回具体玩家（跟着大户抄单）
         nickname: t.nickname,
         avatar: owner ? owner.avatar || null : null,
         emoji: t.emoji || null,
@@ -1957,7 +1720,7 @@ export async function handleApi(ctx) {
     pos.tp = firstTp ? firstTp.price : null;
     pos.sl = firstSl ? firstSl.price : null;
     saveDb();
-    return json(res, 200, { ok: true, added, position: pos });
+    return json(res, 200, { ok: true, added, position: positionWire(pos, st) });
   }
 
   // 删掉一条止盈止损
@@ -1975,7 +1738,7 @@ export async function handleApi(ctx) {
     pos.tp = firstTp ? firstTp.price : null;
     pos.sl = firstSl ? firstSl.price : null;
     saveDb();
-    return json(res, 200, { ok: true, position: pos });
+    return json(res, 200, { ok: true, position: positionWire(pos, db.stocks[code]) });
   }
 
   return json(res, 404, { error: '接口不存在' });

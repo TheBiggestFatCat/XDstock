@@ -1,4 +1,4 @@
-# AGENTS.md · XDstock 维护须知
+﻿# AGENTS.md · XDstock 维护须知
 
 > 完整文档见 [`docs/开发者文档.md`](docs/开发者文档.md)。本文件是速查版，**动手前至少读完「铁律」一节**。
 
@@ -27,6 +27,7 @@ node tests/gold-stock.mjs            # 矿工银行 MB 金价驱动 + 退市清�
 node tests/kfc-stock.mjs             # 肯德基 反向跟随 + 疯狂星期四（改新股必跑，48 条）
 node tests/tpsl.mjs                  # 止盈止损全流程（改平仓/委托必跑，75 条）
 node tests/market-money.mjs          # 虚假成交推动股价 + 游资轮动（改行情/流水必跑，73 条）
+node tests/payload-wire.mjs          # 前端数据包白名单（加字段/改 payload 必跑，120 条）
 node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占比/天花板（不是断言套，看表格）
 ```
 
@@ -40,6 +41,9 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 
 3. **新增字段要同时改两处 payload**：`src/api.js#marketPayload`（首屏）**和** `server.js#tickPayload`（每轮推送）。
    只改一处 = 「刷新才有 / 平时不更新」。
+   → **个股/配置字段一律走 `src/wire.js` 的白名单**，两处共用，别各写一份。
+   **引擎内部状态（volMult/漂移/抽奖概率/情绪真值/金价系数/fair/资金压力）绝不下发**，
+   加字段前先在 `public/app.js` 确认有读取，然后跑 `node tests/payload-wire.mjs`。
 
 4. **改 `public/` 下任何文件后，必须把 `public/sw.js` 的 `CACHE` 版本号 +1**，否则用户看不到更新。
 
@@ -49,7 +53,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 6. **发布流程**：改代码 → `node --check` → 本地跑通 → SFTP 上传 → 改线上数据（先备份）→
    `systemctl restart xdstock` → curl 验证 → `git commit` → `git push`（需代理 `127.0.0.1:4780`）。
 
-## 最容易踩的 10 个坑
+## 最容易踩的 12 个坑
 
 | 坑 | 症状 | 正解 |
 |---|---|---|
@@ -64,12 +68,13 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 | 押金漏算冲击成本 | 全仓挂单成交那一刻报「现金不足」并自动撤单 | `estimateReserve()` 里加 `impactCost` |
 | 跨模块函数忘了 import | `node --check` 只查语法 → 上线后每个 tick 抛 ReferenceError、systemd 重启循环 | 跑 `node tests/imports.mjs`；新写的分支本地一定要**真的走一遍**（2026-11 踩过：`isNightWindow`） |
 | 两套资金冲击混用 | 游资砸钱占满玩家上限 / 玩家单子推不动 | 玩家走 `st.flow`、虚假成交与游资走 `st.mflow`，公式各自一份、互不抢上限 |
+| payload 把引擎参数抖出去 | F12 里能看到 `trait.lotteryChance` / `volMult` / `fair` / `sentimentStrength`，等于把价格模型交给玩家 | 所有下发字段必须过 `src/wire.js` 白名单；跑 `node tests/payload-wire.mjs` |
 
 ## 新增配置参数（四处都要改）
 
 1. `src/config.js` — 默认值
 2. `src/api.js` — 管理员白名单数组加 key
-3. `src/api.js` — `marketPayload` 的 `config` 里下发
+3. `src/wire.js` — `CONFIG_KEYS` 里加 key（**只有前端真的要读的才加**；管理面板读的是 `/api/admin/state`，不需要放这里）
 4. `public/app.js` — 管理面板参数分组加 `['key', '中文标签']`
 
 ## 新增个股参数
@@ -91,6 +96,7 @@ src/bars15.js      15 分钟 K 线单独打包（48 小时）
 src/notify.js      站内通知（止盈止损/强平/被偷）
 src/steal.js       偷钱金额（上限按对方现金）
 src/api.js         全部 REST + payload 组装 + 管理接口
+src/wire.js        前端数据包白名单（什么能发给浏览器只在这里定义；防作弊）+ positionWire
 src/fundamentals.js 财报生成、估值 fair、预览
 src/gold.js        金价（MB 的财报驱动源）
 src/kfc.js         肯德基：反向跟随麦当劳 + 疯狂星期四

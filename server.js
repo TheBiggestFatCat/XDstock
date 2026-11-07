@@ -4,23 +4,23 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getDb, saveDb, now, backupDb } from './src/store.js';
 import { getBuild } from './src/build.js';
-import { stepMarket, seedHistory, changesFor, noticeAlive, sentimentView, liveIndexWeights } from './src/engine.js';
+import { stepMarket, seedHistory, changesFor, noticeAlive, liveIndexWeights } from './src/engine.js';
+import { stockWire, positionWire } from './src/wire.js';
 import { stealCooldownFor, nightInfoFor, isNightWindow } from './src/theme.js';
 import { TIMEFRAMES } from './src/config.js';
-import { checkPositions, playerEquity, positionPnl, logTrade } from './src/trading.js';
+import { checkPositions, playerEquity, logTrade } from './src/trading.js';
 import { processOrders, fillCapFor } from './src/orders.js';
 import { autoDcaTick } from './src/autoDca.js';
 import { checkDelist } from './src/delist.js';
 import { fetchAudJpy } from './src/fx.js';
 import { handleApi } from './src/api.js';
 import { NEWS_POOL } from './src/news.js';
-import { dividendPerShare, dividendPayout, tycoonPreviewPayload, previewInTicks, isTycoonSector } from './src/fundamentals.js';
-import { pushNotify, notifyList, unreadCount } from './src/notify.js';
+import { pushNotify, notifyList } from './src/notify.js';
 import { visibleEmotes } from './src/emoji.js';
 import { latestVersionPost } from './src/version.js';
 import { stealAmount } from './src/steal.js';
 import {
-  achvPayload, ensureAchvState, bumpAchv, tycoonLeadTicks, isEvolved
+  achvPayload, ensureAchvState, bumpAchv, isEvolved
 } from './src/achievements.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -205,34 +205,10 @@ const server = http.createServer(async (req, res) => {
 function tickPayload(forPlayerId) {
   const d = getDb();
   const tp = forPlayerId ? d.players[forPlayerId] : null;
-  // 注意：皮肤和技能已经拆开了，这里判断的是「技能」不是「皮肤」
-  const isTycoon = tp && (tp.skill || tp.theme) === 'tycoon';
-  const isMind = tp && (tp.skill || tp.theme) === 'mind';
   const stocks = {};
   for (const [code, st] of Object.entries(d.stocks)) {
-    const prev = st.series.length > 1 ? st.series[st.series.length - 2] : st.price;
-    stocks[code] = {
-      price: Number(st.price.toFixed(4)),
-      changePct: prev ? ((st.price - prev) / prev) * 100 : 0,
-      changes: changesFor(st.series, TIMEFRAMES),
-      status: st.status,
-      // 本期每股股息（跟着现价每轮变，前端财报面板直接显示）
-      dps: st.isIndex ? 0 : dividendPerShare(st, { rate: d.config.dividendRate, cap: d.config.dividendCap }),
-      payout: st.isIndex ? 0 : dividendPayout(st, d.config.dividendRate)
-    };
-    // 金融大鳄：只有金融板块有预览/倒计时，每轮下发否则开着页面不刷新就看不到
-    // 进化后提前量 20 → 30，所以按这个玩家的阶数算
-    const lead = tycoonLeadTicks(d, tp);
-    if (!st.isIndex && isTycoonSector(st)) {
-      stocks[code].previewIn = previewInTicks(st, d.tick, lead);
-      if (isTycoon && (Number(st.nextReportTick) - d.tick) <= lead) {
-        stocks[code].preview = tycoonPreviewPayload(st, d.tick, lead);
-      }
-    }
-    // 情绪读心：只有这个主题能看到当前情绪
-    if (isMind && !st.isIndex) {
-      stocks[code].sent = sentimentView(st, d, tp);
-    }
+    // 字段白名单见 src/wire.js：trait / fair / 情绪真值 / 资金压力都不下发
+    stocks[code] = stockWire(d, st, tp);
   }
   let me = null;
   if (forPlayerId && d.players[forPlayerId]) {
@@ -240,26 +216,9 @@ function tickPayload(forPlayerId) {
     const positions = {};
     for (const [code, pos] of Object.entries(p.positions || {})) {
       const st = d.stocks[code];
-      positions[code] = {
-        code,
-        side: pos.side,
-        qty: pos.qty,
-        entry: pos.entry,
-        price: st.price,
-        pnl: positionPnl(pos, st.price),
-        pnlPct: pos.margin > 0 ? (positionPnl(pos, st.price) / pos.margin) * 100 : 0,
-        margin: pos.margin,
-        leverage: pos.leverage,
-        tp: pos.tp,
-        tpsl: Array.isArray(pos.tpsl)
-          ? pos.tpsl.filter((x) => !x.fired).map((x) => ({
-            id: x.id, kind: x.kind, price: x.price, qty: x.qty || null
-          }))
-          : [],
-        sl: pos.sl,
-        // 分批平仓中的状态，前端要显示「止损中」
-        closing: pos.closing || null
-      };
+      if (!st) continue;
+      // 和首屏 / 止盈止损接口用同一个下发格式（src/wire.js）
+      positions[code] = positionWire(pos, st);
     }
     me = {
       cash: p.cash,
@@ -302,9 +261,8 @@ function tickPayload(forPlayerId) {
       })),
       // 主题成就 / 进化（进度、结晶、阶数）
       achv: achvPayload(d, p),
-      // 站内通知：每轮都带最新一份，前端据此铃铛亮起、对新的弹提示
-      notices: notifyList(p, 20),
-      notifyUnread: unreadCount(p)
+      // 站内通知：最新一份（安卓壳靠它发系统通知；网页端不显示）
+      notices: notifyList(p, 20)
     };
   }
   return {
@@ -323,13 +281,11 @@ function tickPayload(forPlayerId) {
       const live = liveIndexWeights(d, 'index');
       return Object.entries(d.index.weights || {}).map(([code, w]) => {
         const st2 = d.stocks[code] || {};
-        const sh = Number(st2.shares) || 0;
         const px2 = Number(st2.price) || 0;
         return {
-          code, name: st2.name || code, weight: w, price: px2,
+          code, name: st2.name || code, weight: w,
           liveWeight: Number(live[code]) || 0,
-          marketCap: px2 * sh,
-          freeCap: px2 * sh * (Number(st2.freeFloat) || 0.45)
+          freeCap: px2 * (Number(st2.shares) || 0) * (Number(st2.freeFloat) || 0.45)
         };
       }).sort((a, b) => b.weight - a.weight);
     })(),
@@ -339,25 +295,16 @@ function tickPayload(forPlayerId) {
         const live = liveIndexWeights(d, 'smallIndex');
         return Object.entries(d.smallIndex?.weights || {}).map(([code, w]) => {
           const st2 = d.stocks[code] || {};
-          const sh = Number(st2.shares) || 0;
           const px2 = Number(st2.price) || 0;
           return {
-            code, name: st2.name || code, weight: w, price: px2,
+            code, name: st2.name || code, weight: w,
             liveWeight: Number(live[code]) || 0,
-            marketCap: px2 * sh,
-            freeCap: px2 * sh * (Number(st2.freeFloat) || 0.45)
+            freeCap: px2 * (Number(st2.shares) || 0) * (Number(st2.freeFloat) || 0.45)
           };
         }).sort((a, b) => b.weight - a.weight);
       })(),
       nextRebalanceTick: Number(d.smallIndex?.nextRebalanceTick) || 0,
       rebalanceTick: Number(d.smallIndex?.rebalanceTick) || 0
-    },
-    fx: {
-      rate: Number(d.fx?.rate) || 0,
-      prevRate: Number(d.fx?.prevRate) || 0,
-      base: Number(d.fx?.base) || 0,
-      at: d.fx?.at || 0,
-      stale: !!d.fx?.stale
     },
     stocks,
     config: {
@@ -365,7 +312,6 @@ function tickPayload(forPlayerId) {
       maxLeverage: d.config.maxLeverage,
       feeRate: d.config.feeRate,
       stampDuty: d.config.stampDuty,
-      maxOrdersPerTick: d.config.maxOrdersPerTick,
       workRatePerTick: d.config.workRatePerTick ?? 50,
       workOnlineMultiplier: d.config.workOnlineMultiplier ?? 2,
       workBankTicks: d.config.workBankTicks ?? 1440

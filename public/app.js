@@ -614,7 +614,8 @@ function liveValuation(st) {
   const shares = Number(r.shares || (st && st.shares)) || 0;
   const eps = Number(r.eps) || 0;
   const bps = Number(r.bps) || 0;
-  const fair = Number(r.fair || (st && st.fair)) || 0;
+  // 估值线用财报里的 fair（引擎做均值回归用的 st.fair 不再下发，那是内部锚点）
+  const fair = Number(r.fair) || 0;
   return {
     cap: price * shares,
     pe: eps > 0 ? price / eps : 0,
@@ -904,7 +905,7 @@ function renderTycoonSlot(st) {
   if (st.previewIn === null || st.previewIn === undefined) return '';
   const left = Number(st.previewIn);
   if (!Number.isFinite(left)) return '';
-  const secLeft = left * ((state.market?.config?.tickMs || 5000) / 1000);
+  const secLeft = left * ((state.market?.tickMs || 5000) / 1000);
   const mins = Math.max(1, Math.round(secLeft / 60));
   if (left > 0) {
     return `
@@ -941,7 +942,7 @@ function renderTycoonPreview(st) {
   const growth = (Number(p.growth) || 0) * 100;
   const expected = (Number(p.expected) || 0) * 100;
   const tickLeft = Math.max(0, Number(p.tickLeft) || 0);
-  const secLeft = tickLeft * ((state.market?.config?.tickMs || 5000) / 1000);
+  const secLeft = tickLeft * ((state.market?.tickMs || 5000) / 1000);
 
   const cls = (x) => (x > 0.0001 ? 'up' : x < -0.0001 ? 'down' : 'flat');
   const signed = (x, digits = 2) => `${x >= 0 ? '+' : ''}${x.toFixed(digits)}%`;
@@ -1977,7 +1978,7 @@ function renderShop() {
   const btn = $('#fakeNewsBuy');
   if (btn) {
     if (cdLeft > 0) {
-      const sec = Math.ceil(cdLeft * ((state.market?.config?.tickMs || 5000) / 1000));
+      const sec = Math.ceil(cdLeft * ((state.market?.tickMs || 5000) / 1000));
       btn.disabled = true;
       btn.textContent = `冷却中 · 还有 ${cdLeft} 轮（约 ${Math.ceil(sec / 60)} 分钟）`;
     } else {
@@ -2000,7 +2001,7 @@ function renderShop() {
   const gs = $('#guardStatus');
   if (gs) {
     if (guardLeft > 0) {
-      const mins = Math.ceil((guardLeft * (state.market?.config?.tickMs || 5000)) / 60000);
+      const mins = Math.ceil((guardLeft * (state.market?.tickMs || 5000)) / 60000);
       gs.textContent = `🛡️ 保护中 · 还剩 ${guardLeft} 轮（约 ${mins} 分钟）`;
       gs.classList.add('on');
     } else {
@@ -2030,7 +2031,7 @@ function renderShop() {
   }
   const bg10Hint = $('#bodyguardBulkHint');
   if (bg10Hint) {
-    const hours = ((bgTicks * 10 * (state.market?.config?.tickMs || 5000)) / 3600000).toFixed(1);
+    const hours = ((bgTicks * 10 * (state.market?.tickMs || 5000)) / 3600000).toFixed(1);
     bg10Hint.textContent = `十份 = 保护 ${bgTicks * 10} 轮（约 ${hours} 小时），保护期内再买继续叠加`;
   }
 
@@ -2144,7 +2145,7 @@ function renderShop() {
   document.querySelectorAll('[data-cd-for]').forEach((el) => {
     if (themeLeft > 0) {
       el.classList.remove('hidden');
-      const sec = Math.ceil(themeLeft * ((state.market?.config?.tickMs || 5000) / 1000));
+      const sec = Math.ceil(themeLeft * ((state.market?.tickMs || 5000) / 1000));
       el.innerHTML = `换技能冷却中 <b>${themeLeft} 轮</b>（约 ${Math.ceil(sec / 60)} 分钟）｜外观随时可换`;
     } else {
       el.classList.add('hidden');
@@ -4895,6 +4896,8 @@ async function loadAdmin() {
     return;
   }
   const d = await res.json();
+  // 管理端自己的那份完整 config（玩家 payload 只带界面用得到的白名单）
+  state.adminCfg = d.config || {};
   $('#adminLock').classList.add('hidden');
   $('#adminPanel').classList.remove('hidden');
 
@@ -5535,7 +5538,8 @@ function renderTraitForm(stocks) {
     box.innerHTML = '<div class="trait-empty">没有可配置的标的</div>';
     return;
   }
-  const cfg = state.market?.config || {};
+  // 个股面板是管理端，配置取 /api/admin/state 那一份（玩家 payload 已不再下发情绪参数）
+  const cfg = state.adminCfg || {};
 
   box.innerHTML = list.map((st) => {
     const trait = st.trait || {};

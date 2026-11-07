@@ -303,22 +303,22 @@ log('=== 12 走真实 runReports：金价涨 → 这期财报是正增长 ===');
 
 // ---------------------------------------------------------------- 13
 log('');
-log('=== 13 对外隐藏：不显示金价条、不下发金价、不给特性说明 ===');
+log('=== 13 对外隐藏：不显示金价条、不下发金价、不给特性参数 ===');
 {
   const db = mkDb();
   const payload = marketPayload(db, null);
   check('marketPayload 里没有 gold 字段', payload.gold === undefined, JSON.stringify(Object.keys(payload).filter((k) => k === 'gold')));
   const mb = payload.stocks.MB;
-  check('MB 的 trait 只剩 id / 波动参数',
-    Object.keys(mb.trait || {}).sort().join(',') === 'id,revMult,volMult',
-    JSON.stringify(mb.trait));
+  // 2026-11 数据包白名单（src/wire.js）：所有的 trait 参数都不再下发，
+  // 「金价驱动」这种隐藏特性连 id 都不给（见 tests/payload-wire.mjs）
+  check('MB 的 trait 不下发任何参数',
+    Object.keys(mb.trait || {}).length === 0, JSON.stringify(mb.trait));
   check('MB 不再有 traitName', !mb.traitName, String(mb.traitName));
   check('MB 的特性还在内部（引擎能判定）', db.stocks.MB.trait.id === 'gold' && db.stocks.MB.traitHidden === true);
-  check('其它票的特性照旧下发',
-    payload.stocks.TGW.traitName === '老钱' && payload.stocks.TGW.trait.drift === undefined
-      ? payload.stocks.TGW.traitName === '老钱'
-      : payload.stocks.TGW.traitName === '老钱',
-    payload.stocks.TGW.traitName);
+  check('其它票也不再下发特性参数（连名字都不给）',
+    Object.keys(payload.stocks.TGW.trait || {}).length === 0
+    && !payload.stocks.TGW.traitName,
+    JSON.stringify(payload.stocks.TGW.trait));
   check('MB 的公司简介保留（不是特性）', String(mb.desc || '').length > 0, mb.desc);
 }
 
