@@ -170,7 +170,19 @@
               <label><input type="checkbox" data-ma="10" checked /><span class="ma-dot" style="--c:#3b82f6"></span>MA10</label>
               <label><input type="checkbox" data-ma="30" /><span class="ma-dot" style="--c:#a855f7"></span>MA30</label>
             </div>
+            <div class="ov-group">
+              <button id="ovBtn" class="ov-btn" type="button" title="把另一份 K 线叠到这张图上">＋ 叠加</button>
+              <div id="ovPanel" class="ov-panel hidden">
+                <div class="ov-head">
+                  <b>叠加对比</b>
+                  <span>同一周期 · 左轴单独缩放</span>
+                </div>
+                <div id="ovList" class="ov-list"></div>
+              </div>
+            </div>
           </div>
+
+          <div id="ovChip" class="ov-chip hidden"></div>
 
           <div id="chartSub" class="chart-sub hidden"></div>
 

@@ -64,6 +64,10 @@ const state = {
   shopCat: 'theme',
   tickBucket: null,
   tickKey: '',
+  // K 线叠加：把另一只票 / 指数的同周期 K 线画在同一张图上（左轴单独缩放）
+  overlay: null,           // { code, name, candles: [], tickBucket: null }
+  overlaySeries: null,
+  overlayAt: 0,            // 上一次拉叠加数据的时间戳（用于节流）
   eqFitted: false,
   eqLastCount: 0,
   eqLastTime: 0,
@@ -336,6 +340,8 @@ async function enterGame() {
   syncShellSession();          // 安卓壳：把 token 交给原生层，止盈止损通知由它发
   await refreshMarket();
   buildChart();
+  bindOverlayControls();
+  restoreOverlay();
   selectStock(state.code);
   connectStream();
   switchView('market');
@@ -3116,6 +3122,8 @@ function selectStock(code) {
   clearEmoteFloats();
   const changed = state.code !== code;
   state.code = code;
+  // 叠加的正好是这只票：不能自己叠自己，直接取消
+  if (state.overlay && state.overlay.code === code) clearOverlay(true);
   // 换股票了：输入框内容重新按新持仓回填
   if (changed) {
     state.tpslEdited = false;
@@ -3379,40 +3387,280 @@ function resyncCandles() {
   }, 800);
 }
 
+// ---------------- K 线叠加（同花顺式：同一张图上叠另一份 K 线）----------------
+
+/** 叠加用的蓝色 K 线（和主图的红绿区分开） */
+const OVERLAY_STYLE = {
+  upColor: 'rgba(59,130,246,.85)',
+  downColor: 'rgba(148,163,184,.9)',
+  borderVisible: false,
+  wickUpColor: 'rgba(59,130,246,.7)',
+  wickDownColor: 'rgba(148,163,184,.75)'
+};
+
+/** 拉 K 线的地址：15 分钟单独一个包，其它走 /api/candles */
+function candlesUrlFor(code, tf) {
+  return tf === '15m'
+    ? `/api/candles15?code=${encodeURIComponent(code)}`
+    : `/api/candles?code=${encodeURIComponent(code)}&tf=${tf}`;
+}
+
+/** 清洗 K 线：时间必须递增且唯一（图表库按时间查不到会直接不画） */
+function cleanCandles(list) {
+  const seen = new Set();
+  const out = [];
+  for (const c of (list || [])) {
+    if (!c || !Number.isFinite(c.time) || c.time <= 0) continue;
+    if (!Number.isFinite(c.open) || !Number.isFinite(c.high)
+      || !Number.isFinite(c.low) || !Number.isFinite(c.close)) continue;
+    const t = Math.floor(c.time);
+    if (seen.has(t)) continue;
+    seen.add(t);
+    out.push({
+      time: t,
+      open: c.open,
+      high: Math.max(c.high, c.open, c.close, c.low),
+      low: Math.min(c.low, c.open, c.close, c.high),
+      close: c.close
+    });
+  }
+  out.sort((a, b) => a.time - b.time);
+  return out;
+}
+
+/** 叠加上去的那根 K 线：左轴单独缩放，和主图上下错开一点 */
+function ensureOverlaySeries() {
+  const chart = state.chart;
+  if (!chart) return null;
+  if (!state.overlaySeries) {
+    state.overlaySeries = chart.addCandlestickSeries({
+      ...OVERLAY_STYLE,
+      priceScaleId: 'left',
+      lastValueVisible: true,
+      priceLineVisible: false
+    });
+  }
+  chart.applyOptions({
+    leftPriceScale: {
+      visible: true,
+      borderColor: 'rgba(59,130,246,.35)',
+      scaleMargins: { top: 0.06, bottom: 0.32 }
+    },
+    rightPriceScale: {
+      borderColor: 'rgba(230,240,237,.9)',
+      scaleMargins: { top: 0.32, bottom: 0.06 }
+    }
+  });
+  return state.overlaySeries;
+}
+
+/** 关掉叠加：清数据 + 隐藏左轴 + 恢复主图的上下留白 */
+function clearOverlay(silent) {
+  state.overlay = null;
+  if (state.overlaySeries) state.overlaySeries.setData([]);
+  if (state.chart) {
+    state.chart.applyOptions({
+      leftPriceScale: { visible: false },
+      rightPriceScale: { borderColor: 'rgba(230,240,237,.9)', scaleMargins: { top: 0.2, bottom: 0.1 } }
+    });
+  }
+  try { localStorage.removeItem('xd_overlay'); } catch { /* 隐私模式 */ }
+  renderOverlayChip();
+  renderOverlayList();
+  closeOverlayPanel();
+  if (!silent) toast('已取消叠加', 'ok');
+}
+
+/** 拉叠加标的的同周期 K 线 */
+async function loadOverlay() {
+  const ov = state.overlay;
+  if (!ov || !state.chart) return;
+  const tf = state.tf;
+  const code = ov.code;
+  const series = ensureOverlaySeries();
+  if (!series) return;
+  try {
+    const d = await api(candlesUrlFor(code, tf));
+    // 竞态：期间用户换了周期/换了叠加标的就别画
+    if (!state.overlay || state.overlay.code !== code || state.tf !== tf) return;
+    const clean = cleanCandles(d.candles);
+    // 叠加数据比主图长（比如主图上市晚）：只保留主图时间范围内的那段，
+    // 否则时间轴被撑长，主图会被挤到右边
+    const t0 = state.candles[0]?.time;
+    ov.candles = t0 ? clean.filter((c) => c.time >= t0) : clean;
+    ov.tickBucket = Math.floor((state.market?.tick || 0) / (TF_SECONDS[tf] || 12));
+    state.overlayAt = Date.now();
+    series.setData(clean);
+    renderOverlayChip();
+  } catch (e) {
+    toast('叠加 K 线加载失败：' + e.message, 'err');
+  }
+}
+
+/** 刷新页面后恢复上次叠加的那份 K 线 */
+function restoreOverlay() {
+  let saved = '';
+  try { saved = localStorage.getItem('xd_overlay') || ''; } catch { /* 隐私模式 */ }
+  if (!saved || saved === state.code) return;
+  const st = state.market?.stocks?.[saved];
+  if (!st) return;
+  state.overlay = { code: saved, name: st.name || saved, candles: [], tickBucket: null };
+  renderOverlayChip();
+}
+
+/** 选/取消叠加标的 */
+async function setOverlay(code) {
+  if (!code) { clearOverlay(); return; }
+  if (state.overlay && state.overlay.code === code) { clearOverlay(); return; }
+  const st = state.market?.stocks?.[code];
+  state.overlay = { code, name: st?.name || code, candles: [], tickBucket: null };
+  try { localStorage.setItem('xd_overlay', code); } catch { /* 隐私模式 */ }
+  renderOverlayList();
+  renderOverlayChip();
+  closeOverlayPanel();
+  await loadOverlay();
+}
+
+/** 叠加标的下拉列表：指数 + 个股，当前标的置灰 */
+function renderOverlayList() {
+  const box = $('#ovList');
+  if (!box) return;
+  const stocks = state.market?.stocks || {};
+  const cur = state.code;
+  const active = state.overlay?.code || '';
+  const items = [];
+  items.push(`<button class="ov-item ${active ? '' : 'on'}" data-ov="" type="button">
+      <span class="ov-name">不叠加</span><span class="ov-sub">只看本标的</span></button>`);
+  for (const [code, st] of Object.entries(stocks)) {
+    const isCur = code === cur;
+    items.push(`<button class="ov-item ${active === code ? 'on' : ''} ${isCur ? 'disabled' : ''}"
+        data-ov="${escapeHtml(code)}" type="button" ${isCur ? 'disabled' : ''}>
+        <span class="ov-name">${escapeHtml(st.name || code)}</span>
+        <span class="ov-sub">${escapeHtml(code)}${st.isIndex ? ' · 指数' : ''}${isCur ? ' · 当前标的' : ''}</span>
+      </button>`);
+  }
+  box.innerHTML = items.join('');
+}
+
+/** 图上的「叠加：xxx ← 点掉」小胶囊，颜色跟左轴一致 */
+function renderOverlayChip() {
+  const el = $('#ovChip');
+  if (!el) return;
+  const ov = state.overlay;
+  if (!ov) {
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+  const st = state.market?.stocks?.[ov.code];
+  const price = Number(st?.price);
+  const chg = Number(st?.changePct);
+  el.classList.remove('hidden');
+  el.innerHTML = `
+    <span class="ov-dot"></span>
+    <b>${escapeHtml(ov.name)}</b>
+    <span class="ov-code">${escapeHtml(ov.code)}</span>
+    <span class="ov-price">${Number.isFinite(price) ? price.toFixed(2) : '—'}</span>
+    ${Number.isFinite(chg) ? `<span class="${chg >= 0 ? 'up' : 'down'}">${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%</span>` : ''}
+    <span class="ov-axis">左轴</span>
+    <button class="ov-clear" type="button" title="取消叠加">×</button>`;
+}
+
+function openOverlayPanel() {
+  renderOverlayList();
+  $('#ovPanel')?.classList.remove('hidden');
+  $('#ovBtn')?.classList.add('active');
+}
+function closeOverlayPanel() {
+  $('#ovPanel')?.classList.add('hidden');
+  $('#ovBtn')?.classList.remove('active');
+}
+function toggleOverlayPanel() {
+  const p = $('#ovPanel');
+  if (!p) return;
+  if (p.classList.contains('hidden')) openOverlayPanel(); else closeOverlayPanel();
+}
+
+/** 每轮 tick：用行情里的最新价推一下叠加标的的最后一根 K 线 */
+function applyTickToOverlay() {
+  const ov = state.overlay;
+  if (!ov || !state.overlaySeries) return;
+  const st = state.market?.stocks?.[ov.code];
+  const price = Number(st?.price);
+  if (!Number.isFinite(price) || price <= 0) return;
+  const group = TF_SECONDS[state.tf] || 12;
+  const tickMs = state.market?.tickMs || 5000;
+  const tick = Number(state.market?.tick);
+  if (!Number.isFinite(tick) || tick < 0) return;
+  const bucket = Math.floor(tick / group);
+  const last = ov.candles[ov.candles.length - 1];
+  if (last && (ov.tickBucket === null || bucket <= ov.tickBucket)) {
+    last.close = price;
+    last.high = Math.max(last.high, price);
+    last.low = Math.min(last.low, price);
+    state.overlaySeries.update(last);
+    ov.tickBucket = bucket;
+    renderOverlayChip();
+    return;
+  }
+  // 新的一根：时间接着上一根走
+  const bucketSec = (group * tickMs) / 1000;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const time = last ? Math.max(last.time + bucketSec, nowSec) : nowSec;
+  const c = { time, open: price, high: price, low: price, close: price };
+  ov.candles.push(c);
+  if (ov.candles.length > 1200) ov.candles.shift();
+  state.overlaySeries.update(c);
+  ov.tickBucket = bucket;
+  renderOverlayChip();
+}
+
+/** 绑定叠加按钮 / 列表 / 胶囊 */
+function bindOverlayControls() {
+  const btn = $('#ovBtn');
+  if (btn && !btn.dataset.bound) {
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', (e) => { e.stopPropagation(); toggleOverlayPanel(); });
+  }
+  const list = $('#ovList');
+  if (list && !list.dataset.bound) {
+    list.dataset.bound = '1';
+    list.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ov]');
+      if (!b || b.disabled) return;
+      setOverlay(b.dataset.ov || null);
+    });
+  }
+  const chip = $('#ovChip');
+  if (chip && !chip.dataset.bound) {
+    chip.dataset.bound = '1';
+    chip.addEventListener('click', (e) => {
+      if (e.target.closest('.ov-clear')) clearOverlay();
+    });
+  }
+  if (!document.body.dataset.ovBound) {
+    document.body.dataset.ovBound = '1';
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('.ov-group') || e.target.closest('#ovChip')) return;
+      closeOverlayPanel();
+    });
+  }
+}
+
 async function loadCandles(opts = {}) {
   const code = state.code;
   const tf = state.tf;
   state.resyncing = true;
   try {
     // 15 分钟单独一个包（服务端存了 48 小时 = 192 根）；其它周期还是老接口
-    const url = tf === '15m'
-      ? `/api/candles15?code=${encodeURIComponent(code)}`
-      : `/api/candles?code=${encodeURIComponent(code)}&tf=${tf}`;
-    const d = await api(url);
+    const d = await api(candlesUrlFor(code, tf));
     // 防竞态：切股票/切周期时前一个请求可能后到，直接把新数据覆盖成旧股票
     if (code !== state.code || tf !== state.tf) return;
   updateTycoonChips();
 
     // 清洗：时间必须递增且唯一，否则图表库内部按时间查不到数据会抛
     // 「Value is null」，整块 K 线画不出来
-    const seen = new Set();
-    const clean = [];
-    for (const c of (d.candles || [])) {
-      if (!c || !Number.isFinite(c.time) || c.time <= 0) continue;
-      if (!Number.isFinite(c.open) || !Number.isFinite(c.high)
-        || !Number.isFinite(c.low) || !Number.isFinite(c.close)) continue;
-      const t = Math.floor(c.time);
-      if (seen.has(t)) continue;
-      seen.add(t);
-      clean.push({
-        time: t,
-        open: c.open,
-        high: Math.max(c.high, c.open, c.close, c.low),
-        low: Math.min(c.low, c.open, c.close, c.high),
-        close: c.close
-      });
-    }
-    clean.sort((a, b) => a.time - b.time);
+    const clean = cleanCandles(d.candles);
 
     const before = opts.keepRange && state.chart
       ? state.chart.timeScale().getVisibleLogicalRange()
@@ -3446,6 +3694,8 @@ async function loadCandles(opts = {}) {
       }
     }
     $('#chartEmpty').classList.toggle('hidden', state.candles.length > 0);
+    // 换了标的/周期：叠加的那一份也跟着换
+    if (state.overlay) loadOverlay(); else renderOverlayChip();
   } catch (e) {
     toast('K 线加载失败：' + e.message, 'err');
   } finally {
@@ -3591,6 +3841,7 @@ function applyTickToChart(price) {
       state.maSeries[period].update({ time: last.time, value: Number((sum / period).toFixed(4)) });
     }
     state.tickBucket = bucket;
+    applyTickToOverlay();
     return;
   }
 
@@ -3603,6 +3854,7 @@ function applyTickToChart(price) {
   state.candleSeries.update(c);
   renderMAs();
   state.tickBucket = bucket;
+  applyTickToOverlay();
 }
 
 // ---------------- K 线上的止盈止损 ----------------
