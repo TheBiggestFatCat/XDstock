@@ -7,7 +7,8 @@
  *       一档  1 万 ~   10 万
  *       二档 10 万 ~  100 万
  *       三档 100 万 ~ 1000 万
- *   - 方向跟着本轮涨跌走：涨了偏买、跌了偏卖（追涨系数 marketTradesChase 可调）
+ *   - 方向跟着本轮涨跌走：涨了偏买（marketTradesChase 追涨系数）、
+ *     跌了偏卖（marketTradesPanic 杀跌系数），两个系数分开调可以做非对称手感
  *   - 成交额通过 trading.js#addMarketFlow 记进 st.mflow（市场资金通道），
  *     由 engine.js#stepStock 逐轮释放到价格上；指数标的按权重拆给成分股
  *
@@ -76,6 +77,31 @@ export function pickMarketNotional(cfg = {}, rnd = Math.random) {
   return { tier: t.key, lo: t.lo, hi: t.hi, notional };
 }
 
+const coefOf = (v, fb) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : fb;
+};
+
+/**
+ * 本轮这一笔「偏向买入」的概率（0.1~0.9，0.5 = 买卖各半）。
+ *
+ * - 涨（chg > 0）用**追涨系数** `marketTradesChase`：涨 1%、系数 25 → 买盘概率 0.75
+ * - 跌（chg < 0）用**杀跌系数** `marketTradesPanic`：跌 1%、系数 25 → 卖盘概率 0.75（买盘 0.25）
+ * - 杀跌系数没配时**跟随追涨系数**（老存档 / 老行为原样保留）
+ * - 两个都填 0 → 永远 0.5，买卖各半
+ *
+ * @param {number} chg 本轮涨跌幅（小数，0.01 = 1%）
+ * @param {object} cfg db.config
+ * @returns {number} 买入概率
+ */
+export function marketBuyProb(chg, cfg = {}) {
+  const c = Number.isFinite(Number(chg)) ? Number(chg) : 0;
+  const chase = coefOf(cfg.marketTradesChase, 25);
+  const panic = coefOf(cfg.marketTradesPanic, chase);
+  const coef = c >= 0 ? chase : panic;
+  return Math.max(0.1, Math.min(0.9, 0.5 + c * coef));
+}
+
 /**
  * 统一的「散户身份」：虚假成交和游资共用，成交记录里看起来没有区别。
  * rnd 可注入，方便测试拿到确定性结果。
@@ -104,9 +130,6 @@ export function genMarketTrades(db, maxTrades = 2) {
   if (!(rate > 0)) return [];
 
   const base = Math.max(1, Math.round(rand(1, maxTrades) * rate));
-  // 追涨系数：越大越跟着本轮涨跌下单（0 = 买卖各半）
-  const chaseRaw = Number(cfg.marketTradesChase);
-  const chase = Number.isFinite(chaseRaw) && chaseRaw >= 0 ? chaseRaw : 25;
 
   const out = [];
   for (let i = 0; i < base; i++) {
@@ -115,8 +138,8 @@ export function genMarketTrades(db, maxTrades = 2) {
     const prev = ser.length > 1 ? ser[ser.length - 2] : st.price;
     const chg = prev > 0 ? (st.price / prev - 1) : 0;
 
-    // 涨了偏买，跌了偏卖
-    const buyProb = Math.max(0.1, Math.min(0.9, 0.5 + chg * chase));
+    // 涨了偏买（追涨系数），跌了偏卖（杀跌系数）
+    const buyProb = marketBuyProb(chg, cfg);
     const isBuy = Math.random() < buyProb;
 
     // 三档金额：越低档越常见

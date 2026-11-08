@@ -13,7 +13,7 @@ import { createDb, migrate } from '../src/store.js';
 import { stepMarket, rebalanceIndex } from '../src/engine.js';
 import {
   MARKET_TIERS, MARKET_NAMES, MARKET_EMOJIS,
-  marketTierWeights, pickMarketNotional, marketIdentity, genMarketTrades
+  marketTierWeights, pickMarketNotional, marketIdentity, genMarketTrades, marketBuyProb
 } from '../src/marketTrades.js';
 import {
   hotMoneySectors, ensureHotMoney, hotMoneySwitchInterval, hotMoneyAmount,
@@ -426,6 +426,64 @@ log('=== 6 引擎集成：跑一段，价格不炸、流水里有游资 ===');
     Object.entries(db.stocks)
       .filter(([, s]) => Math.abs(Number(s.mflow) || 0) >= 0.02)
       .map(([c, s]) => `${c}=${s.mflow}`).join(',') || '干净');
+}
+
+// ================================================================ 8
+log('');
+log('=== 8 追涨 / 杀跌系数：涨了偏买、跌了偏卖 ===');
+{
+  const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
+  // 默认 25 / 25：完全对称，和改之前一模一样
+  check('默认：涨 1% → 买盘 75%', near(marketBuyProb(0.01, {}), 0.75), String(marketBuyProb(0.01, {})));
+  check('默认：跌 1% → 买盘 25%（= 卖盘 75%）', near(marketBuyProb(-0.01, {}), 0.25));
+  check('默认：不涨不跌 → 买卖各半', near(marketBuyProb(0, {}), 0.5));
+
+  // 杀跌系数单独调大 → 跌的时候砸得更狠
+  check('杀跌 50：跌 1% → 买盘 10%（打到下限）', near(marketBuyProb(-0.01, { marketTradesPanic: 50 }), 0.1));
+  check('杀跌 50：涨 1% 不受影响（还是追涨 25）',
+    near(marketBuyProb(0.01, { marketTradesPanic: 50, marketTradesChase: 25 }), 0.75));
+  check('杀跌 0：跌了也不偏卖', near(marketBuyProb(-0.01, { marketTradesPanic: 0 }), 0.5));
+  check('追涨 0：涨了也不偏买', near(marketBuyProb(0.01, { marketTradesChase: 0 }), 0.5));
+
+  // 非对称：同样幅度，杀跌系数更大 → 卖盘更重
+  const asym = { marketTradesChase: 10, marketTradesPanic: 60 };
+  const sellP = 1 - marketBuyProb(-0.01, asym);
+  const buyP = marketBuyProb(0.01, asym);
+  check('非对称：跌 1% 的卖压 > 涨 1% 的买压', sellP > buyP,
+    '卖 ' + (sellP * 100).toFixed(0) + '% vs 买 ' + (buyP * 100).toFixed(0) + '%');
+
+  // 边界与兜底
+  check('大跌（-5%）→ 买盘打到 10% 下限', near(marketBuyProb(-0.05, {}), 0.1));
+  check('大涨（+5%）→ 买盘打到 90% 上限', near(marketBuyProb(0.05, {}), 0.9));
+  check('没配杀跌时跟随追涨（老存档行为不变）',
+    near(marketBuyProb(-0.02, { marketTradesChase: 30 }), marketBuyProb(-0.02, { marketTradesChase: 30, marketTradesPanic: 30 })));
+  check('负数 / 非法系数按兜底处理不炸',
+    Number.isFinite(marketBuyProb(-0.01, { marketTradesPanic: -5, marketTradesChase: 'x' })));
+
+  // 真跑一轮：只留一只票可交易，方向比才不会被指数（chg≈0）摊薄
+  const runDir = (cfgPatch, series) => {
+    const d = calmDb({ marketTradesEnabled: 1, marketTradesRate: 40, ...cfgPatch });
+    for (const st of Object.values(d.stocks)) if (st.code !== 'TGW') st.status = 'suspended';
+    const only = d.stocks.TGW;
+    only.status = 'normal';
+    only.price = 100;
+    only.series = series;
+    const rows = [];
+    for (let i = 0; i < 40; i++) rows.push(...genMarketTrades(d, 1));
+    return rows.filter((r) => r.code === 'TGW');
+  };
+  const downRows = runDir({ marketTradesChase: 0, marketTradesPanic: 80 }, [104, 100]);   // 本轮 -3.8%
+  const downSells = downRows.filter((r) => r.side === 'short').length;
+  const downRatio = downRows.length ? downSells / downRows.length : 0;
+  // 理论值：chg=-3.8%、杀跌 80 → 0.5-3.04 → 夹到 0.1（90% 卖），1600 笔的二项波动约 ±0.75%
+  check('杀跌 80 + 跌 3.8% → 卖单占绝对多数（>85%）', downRatio > 0.85,
+    downRows.length + ' 笔里卖 ' + downSells + ' 笔（' + (downRatio * 100).toFixed(0) + '%）');
+
+  const upRows = runDir({ marketTradesChase: 80, marketTradesPanic: 0 }, [96, 100]);      // 本轮 +4.2%
+  const upBuys = upRows.filter((r) => r.side === 'long').length;
+  const upRatio = upRows.length ? upBuys / upRows.length : 0;
+  check('追涨 80 + 涨 4.2% → 买单占绝对多数（>85%）', upRatio > 0.85,
+    upRows.length + ' 笔里买 ' + upBuys + ' 笔（' + (upRatio * 100).toFixed(0) + '%）');
 }
 
 console.log = realLog;
