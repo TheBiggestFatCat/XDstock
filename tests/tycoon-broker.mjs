@@ -218,7 +218,12 @@ log('=== 5 券商估值跟着动（不再是死票）===');
     }
   });
   const distinct = new Set(fairs.map((f) => Math.round(f))).size;
-  check('fair 每期都在变（不是一条直线）', distinct >= 7, `${distinct}/10 种`);
+  const lo = Math.min(...fairs);
+  const hi = Math.max(...fairs);
+  const spread = lo > 0 ? (hi - lo) / lo : 0;
+  // 涨价口径改成「最近 8 期拟合」之后 fair 更平滑，取整后偶尔只有 6~7 种；
+  // 这里真正想兜的是「fair 不是一条直线」，所以看区间而不是取整后的种类数
+  check('fair 每期都在变（不是一条直线）', spread > 0.02, `${distinct}/10 种，区间 ${(spread * 100).toFixed(1)}%`);
   check('盈亏/价格能跟着动', xd.price > 0 && fairs.every((f) => f > 0));
   check('fair 和财报自洽（fair ≈ fairFromReport）',
     Math.abs(fairFromReport(xd) - xd.fair) / xd.fair < 0.35,

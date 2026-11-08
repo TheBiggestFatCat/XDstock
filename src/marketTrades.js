@@ -85,10 +85,15 @@ const coefOf = (v, fb) => {
 /**
  * 本轮这一笔「偏向买入」的概率（0.1~0.9，0.5 = 买卖各半）。
  *
- * - 涨（chg > 0）用**追涨系数** `marketTradesChase`：涨 1%、系数 25 → 买盘概率 0.75
- * - 跌（chg < 0）用**杀跌系数** `marketTradesPanic`：跌 1%、系数 25 → 卖盘概率 0.75（买盘 0.25）
- * - 杀跌系数没配时**跟随追涨系数**（老存档 / 老行为原样保留）
- * - 两个都填 0 → 永远 0.5，买卖各半
+ * 三个参数一起决定：
+ *   `marketTradesTrigger` 涨跌多少算「一档」（默认 0.01 = 1%）
+ *   `marketTradesChase`   涨的时候每档偏移几个百分点（默认 25）
+ *   `marketTradesPanic`   跌的时候每档偏移几个百分点（默认 25，没配时跟随追涨）
+ *
+ * 公式：`0.5 + (chg / trigger) × (系数 / 100)`，结果夹在 0.1~0.9。
+ * 默认值算下来：涨 1% → 买盘 0.75、跌 1% → 卖盘 0.75（和改造前完全一致）。
+ * 觉得 1% 太容易触发就把 trigger 调大（0.03 = 涨跌 3% 才算一档），
+ * 行情波动 1% 时只会偏移 1/3 档，不会一有风吹草动就贴到 0.9。
  *
  * @param {number} chg 本轮涨跌幅（小数，0.01 = 1%）
  * @param {object} cfg db.config
@@ -98,8 +103,11 @@ export function marketBuyProb(chg, cfg = {}) {
   const c = Number.isFinite(Number(chg)) ? Number(chg) : 0;
   const chase = coefOf(cfg.marketTradesChase, 25);
   const panic = coefOf(cfg.marketTradesPanic, chase);
+  const trigRaw = Number(cfg.marketTradesTrigger);
+  const trig = Number.isFinite(trigRaw) && trigRaw > 0 ? trigRaw : 0.01;
   const coef = c >= 0 ? chase : panic;
-  return Math.max(0.1, Math.min(0.9, 0.5 + c * coef));
+  const steps = c / trig;          // 涨跌了几个「档」
+  return Math.max(0.1, Math.min(0.9, 0.5 + steps * (coef / 100)));
 }
 
 /**

@@ -5581,8 +5581,9 @@ async function loadAdmin() {
             ['marketTradesSmallP', '一档 1万~10万 权重'],
             ['marketTradesMidP', '二档 10万~100万 权重'],
             ['marketTradesBigP', '三档 100万~1000万 权重'],
-            ['marketTradesChase', '追涨系数(25=涨1%买盘+25pp)'],
-            ['marketTradesPanic', '杀跌系数(25=跌1%卖盘+25pp)']
+            ['marketTradesTrigger', '触发幅度(0.01=涨跌1%算一档)'],
+            ['marketTradesChase', '追涨系数(每档偏移的百分点)'],
+            ['marketTradesPanic', '杀跌系数(每档偏移的百分点)']
           ]
         },
         {

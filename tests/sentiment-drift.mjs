@@ -191,7 +191,8 @@ log('=== 7 引擎确实按 config.sentimentEdge 抽（集成）===');
     console.log = () => {};
     const vals = [];
     try {
-      for (let i = 0; i < 400; i++) {
+      // 1600 次：|U(-1,1)| 均值的标准差 ≈ 0.0144，卡 0.05 就是 ±3.5σ（400 次时只有 ±1.7σ，会抖）
+      for (let i = 0; i < 1600; i++) {
         st.sentiment.nextRoll = 0;      // 每轮强制重掷
         stepMarket(db);
         vals.push(Math.abs(Number(st.sentiment.v) || 0));

@@ -438,6 +438,25 @@ log('=== 8 追涨 / 杀跌系数：涨了偏买、跌了偏卖 ===');
   check('默认：跌 1% → 买盘 25%（= 卖盘 75%）', near(marketBuyProb(-0.01, {}), 0.25));
   check('默认：不涨不跌 → 买卖各半', near(marketBuyProb(0, {}), 0.5));
 
+  // 触发幅度：涨跌多少算「一档」（0.01 = 1%，默认就是它，行为和以前一致）
+  check('默认触发幅度 1%', near(marketBuyProb(0.01, {}), 0.75));
+  check('触发幅度 3%：涨 1% 只偏移 1/3 档（0.583）',
+    near(marketBuyProb(0.01, { marketTradesTrigger: 0.03 }), 0.5 + (0.01 / 0.03) * 0.25));
+  check('触发幅度 3%：涨 3% 才到一档（0.75）',
+    near(marketBuyProb(0.03, { marketTradesTrigger: 0.03 }), 0.75));
+  check('触发幅度 3%：涨 0.5% 只偏一点点（< 0.56）',
+    marketBuyProb(0.005, { marketTradesTrigger: 0.03 }) < 0.56);
+  check('触发幅度 3%：跌 1% 也只有 0.417（不再无脑杀跌）',
+    near(marketBuyProb(-0.01, { marketTradesTrigger: 0.03 }), 0.5 - (0.01 / 0.03) * 0.25));
+  check('触发幅度调大后仍然会被 0.1/0.9 夹住',
+    near(marketBuyProb(0.5, { marketTradesTrigger: 0.03 }), 0.9) && near(marketBuyProb(-0.5, { marketTradesTrigger: 0.03 }), 0.1));
+  check('触发幅度 0 / 负数 / 非法 → 回退 1%，不炸',
+    near(marketBuyProb(0.01, { marketTradesTrigger: 0 }), 0.75) &&
+    near(marketBuyProb(0.01, { marketTradesTrigger: -1 }), 0.75) &&
+    near(marketBuyProb(0.01, { marketTradesTrigger: 'x' }), 0.75));
+  check('触发幅度 1% + 系数 50 → 涨 1% 直接到 0.9 上限',
+    near(marketBuyProb(0.01, { marketTradesChase: 50 }), 0.9));
+
   // 杀跌系数单独调大 → 跌的时候砸得更狠
   check('杀跌 50：跌 1% → 买盘 10%（打到下限）', near(marketBuyProb(-0.01, { marketTradesPanic: 50 }), 0.1));
   check('杀跌 50：涨 1% 不受影响（还是追涨 25）',
