@@ -535,6 +535,37 @@ log('=== 8 追涨 / 杀跌：1 分钟动量 + 三段式限幅（防刹不住车�
   check('12 轮跌 6% → 卖单约 75%（压力清零后的纯概率）', downRatio > 0.65,
     downRows.length + ' 笔里卖 ' + downSells + ' 笔（' + (downRatio * 100).toFixed(0) + '%）');
 
+  // ---- 个股覆盖：trait 里有就用个股的，留空跟随全局 ----
+  {
+    const mk = (trait) => {
+      const d = calmDb({ marketTradesEnabled: 1, marketTradesRate: 60, marketTradesWindow: 12, marketTradesTrigger: 0.03 });
+      for (const st of Object.values(d.stocks)) if (st.code !== 'TGW') st.status = 'suspended';
+      const only = d.stocks.TGW;
+      only.status = 'normal';
+      only.trait = { ...(only.trait || {}), ...trait };
+      // 12 轮里涨 6%（= 两档）：全局口径下买盘 75%
+      only.price = 106;
+      only.series = [...new Array(11).fill(100), 106];
+      only.mflow = 0;
+      const rows = [];
+      for (let i = 0; i < 60; i++) { only.mflow = 0; rows.push(...genMarketTrades(d, 1)); }
+      const mine = rows.filter((r) => r.code === 'TGW');
+      return mine.length ? mine.filter((r) => r.side === 'long').length / mine.length : 0;
+    };
+
+    const base = mk({});                                   // 跟随全局：75%
+    const noBias = mk({ mktChase: 0 });                    // 个股把追涨系数填 0 → 各半
+    const hotWindow = mk({ mktWindow: 1 });                // 个股窗口改成 1 轮：只看最后 6% 那一格 → 还是两档
+    const highTrigger = mk({ mktTrigger: 0.5 });           // 个股触发幅度 50% → 6% 不到一档 → 各半
+    const weakChase = mk({ mktChase: 10 });                // 个股系数 10 → 满幅 0.6
+
+    check('个股不填 → 跟随全局（约 75%）', base > 0.65, (base * 100).toFixed(0) + '%');
+    check('个股 mktChase=0 → 不再追涨（各半）', Math.abs(noBias - 0.5) < 0.12, (noBias * 100).toFixed(0) + '%');
+    check('个股 mktTrigger=0.5 → 6% 不够一档（各半）', Math.abs(highTrigger - 0.5) < 0.12, (highTrigger * 100).toFixed(0) + '%');
+    check('个股 mktChase=10 → 偏向明显变弱（55~65%）', weakChase > 0.52 && weakChase < 0.68, (weakChase * 100).toFixed(0) + '%');
+    check('个股 mktWindow=1 仍能识别 6% 的跳涨', hotWindow > 0.6, (hotWindow * 100).toFixed(0) + '%');
+  }
+
   // 同样的行情，但让压力自然累积（不清零）：偏向会被自限幅压下去 —— 这就是「不会刹不住车」
   const brakeRows = runDir({}, upSeries, false);
   const brakeBuys = brakeRows.filter((r) => r.side === 'long').length;

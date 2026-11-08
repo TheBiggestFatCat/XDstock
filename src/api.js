@@ -865,6 +865,8 @@ export async function handleApi(ctx) {
       'floorRatio', 'floorBoost',
       // 散户情绪：只在这个个股上覆盖全局参数（留空 = 跟随全局）
       'sentStrength', 'sentTicks', 'sentRollMin', 'sentRollMax', 'sentRollTicks', 'sentDrift', 'sentEdge',
+      // 追涨杀跌：判定窗口 / 触发幅度 / 追涨系数 / 杀跌系数，留空 = 跟随全局
+      'mktWindow', 'mktTrigger', 'mktChase', 'mktPanic',
       // 实时汇率（留美外汇）
       'coef', 'lev', 'fxEnabled', 'refreshMs', 'track'
     ];

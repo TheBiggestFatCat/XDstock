@@ -6068,11 +6068,17 @@ const TRAIT_LABELS = {
   sentRollMin: ['情绪重掷周期下限(轮)', '每次重掷从「下限~上限」里随机抽一个周期，480=40分钟'],
   sentRollMax: ['情绪重掷周期上限(轮)', '和下限一起决定随机区间，960=80分钟'],
   sentDrift: ['情绪方向分量', '0=纯随机（只决定抖多大），1=纯方向（情绪直接决定涨跌），留空跟随全局'],
-  sentEdge: ['情绪顶端难度', '越靠 ±1 越难抽到；0=均匀，3=默认（|v| 均值 0.50→0.39），留空跟随全局']
+  sentEdge: ['情绪顶端难度', '越靠 ±1 越难抽到；0=均匀，3=默认（|v| 均值 0.50→0.39），留空跟随全局'],
+  // 追涨杀跌（虚假成交的方向）：每只票可以单独覆盖，留空跟随全局
+  mktWindow: ['追涨杀跌·判定窗口(轮)', '看最近多少轮的涨跌幅，12 轮 = 1 分钟；留空跟随全局'],
+  mktTrigger: ['追涨杀跌·触发幅度', '窗口内涨跌多少算一档，0.03 = 1 分钟 3%；留空跟随全局'],
+  mktChase: ['追涨杀跌·追涨系数', '满幅时买盘概率 = 0.5 + 这个数/100，25 → 0.75；留空跟随全局'],
+  mktPanic: ['追涨杀跌·杀跌系数', '满幅时卖盘概率 = 0.5 + 这个数/100，25 → 0.75；留空跟随全局']
 };
 
 /** 这些个股参数是「可选覆盖」：留空就跟随全局参数 */
-const OPTIONAL_TRAITS = ['sentStrength', 'sentTicks', 'sentRollMin', 'sentRollMax', 'sentDrift', 'sentEdge'];
+const OPTIONAL_TRAITS = ['sentStrength', 'sentTicks', 'sentRollMin', 'sentRollMax', 'sentDrift', 'sentEdge',
+  'mktWindow', 'mktTrigger', 'mktChase', 'mktPanic'];
 
 function renderTraitForm(stocks) {
   const box = $('#traitForm');
@@ -6097,7 +6103,12 @@ function renderTraitForm(stocks) {
       sentRollMin: cfg.sentimentRollMin,
       sentRollMax: cfg.sentimentRollMax,
       sentDrift: cfg.sentimentDrift,
-      sentEdge: cfg.sentimentEdge
+      sentEdge: cfg.sentimentEdge,
+      // 追涨杀跌的全局兜底值（个股留空时生效），显示在输入框占位里
+      mktWindow: cfg.marketTradesWindow,
+      mktTrigger: cfg.marketTradesTrigger,
+      mktChase: cfg.marketTradesChase,
+      mktPanic: cfg.marketTradesPanic
     };
     const fields = keys.map((k) => {
       const [label, hint] = TRAIT_LABELS[k];

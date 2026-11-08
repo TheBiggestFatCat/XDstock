@@ -173,14 +173,20 @@ export function genMarketTrades(db, maxTrades = 2) {
   const out = [];
   for (let i = 0; i < base; i++) {
     const st = pick(list);
-    // 判定窗口：默认 12 轮（1 分钟）的涨跌幅，而不是单轮；指数本轮还没重算时退回单轮口径
+    // 判定参数：个股 trait 里有覆盖就用个股的（管理面板「个股 → 每只票」里填），否则跟随全局
+    const eff = {
+      marketTradesWindow: st.trait?.mktWindow ?? cfg.marketTradesWindow,
+      marketTradesTrigger: st.trait?.mktTrigger ?? cfg.marketTradesTrigger,
+      marketTradesChase: st.trait?.mktChase ?? cfg.marketTradesChase,
+      marketTradesPanic: st.trait?.mktPanic ?? cfg.marketTradesPanic
+    };
     const ser = st.series || [];
-    const win = Number(cfg.marketTradesWindow) || 12;
+    const win = Number(eff.marketTradesWindow) || 12;
     const prev = ser.length > 1 ? ser[ser.length - 2] : st.price;
     const chg = marketWindowChange(ser, win) || (prev > 0 ? st.price / prev - 1 : 0);
 
     // 涨了偏买（追涨），跌了偏卖（杀跌）；pressure = 这只票当前的市场资金压力，越大越不追
-    const buyProb = marketBuyProb(chg, cfg, st.mflow);
+    const buyProb = marketBuyProb(chg, eff, st.mflow);
     const isBuy = Math.random() < buyProb;
 
     // 三档金额：越低档越常见
