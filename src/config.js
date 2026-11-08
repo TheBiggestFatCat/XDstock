@@ -22,9 +22,8 @@ export const DEFAULT_CONFIG = {
 
   // ---- 新闻 ----
   eventChance: 0.012,       // 每 tick 触发一条新新闻的概率
-  // 每条新闻总时长 80~200 轮（见 engine.js 的两阶段机制）
-  eventDurationMin: 80,
-  eventDurationMax: 200,
+  // 每条新闻总时长写死在 engine.js 的 NEWS_DURATION（80~200 轮，两阶段机制）：
+  // 以前这里有两个 eventDurationMin/Max 配置项，面板上能改但引擎根本没读，2026-11 删掉了
 
   // ---- 打工（自动积累）----
   workRatePerTick: 50,      // 每轮自动往钱袋里攒多少

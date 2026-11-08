@@ -5525,501 +5525,486 @@ async function loadAdmin() {
 
   // 参数（按大类分组渲染）
   const CFG_CATS = [
-    {
-      key: 'market',
-      name: '行情节奏',
-      desc: '价格怎么动、天花板在哪',
-      groups: [
-        {
-          title: '行情节奏',
-          desc: '所有标的共用的底层参数',
-          fields: [
-            ['tickMs', 'tick 间隔(ms)'],
-            ['baseVolatility', '基础波动率'],
-            ['meanReversion', '均值回归强度'],
-            ['indexRebalanceTicks', '指数调仓间隔(轮)']
-          ]
-        },
-        {
-          title: '成长 / 估值上限',
-          desc: '给每家公司一条「无限接近但不超过」的线',
-          fields: [
-            ['growthCeiling', '营收天花板(基准的几倍)'],
-            ['maxPremium', '股价上限(合理价的几倍)'],
-            ['rallyMin', '整点拉升下限(0.05=5%)'],
-            ['rallyMax', '整点拉升上限(0.2=20%)']
-          ]
-        },
-        {
-          title: '早市冲量（LU 专属）',
-          desc: '每天 6~10 点按斜坡往上托，力度在这里调',
-          fields: [
-            ['morningRallyEnabled', '开关(1=开 0=关)'],
-            ['morningRallyStartHour', '开始小时(0~23)'],
-            ['morningRallyEndHour', '结束小时(0~23)'],
-            ['morningRallyTotal', '窗口累计涨幅(0.25=+25%)'],
-            ['morningRallyPull', '每轮最多贴近(0.02)']
-          ]
-        },
-        {
-          title: '新闻',
-          desc: '消息怎么影响价格',
-          fields: [
-            ['eventChance', '新闻概率/tick'],
-            ['eventImpactScale', '影响倍率(1=标准)'],
-            ['eventDurationMin', '最短持续(轮)'],
-            ['eventDurationMax', '最长持续(轮)'],
-            ['globalEventScale', '全市场新闻折扣(0.2=20%)']
-          ]
-        },
-        {
-          title: '虚假成交（会推动股价）',
-          desc: '成交记录里带小动物头像的散户单：三档金额，越低档越常见',
-          fields: [
-            ['marketTradesEnabled', '开关(1=开 0=关)'],
-            ['marketTradesRate', '每轮笔数倍率(3=三倍)'],
-            ['marketTradesSmallP', '一档 1万~10万 权重'],
-            ['marketTradesMidP', '二档 10万~100万 权重'],
-            ['marketTradesBigP', '三档 100万~1000万 权重'],
-            ['marketTradesTrigger', '触发幅度(0.01=涨跌1%算一档)'],
-            ['marketTradesChase', '追涨系数(每档偏移的百分点)'],
-            ['marketTradesPanic', '杀跌系数(每档偏移的百分点)']
-          ]
-        },
-        {
-          title: '游资资金',
-          desc: '在板块间轮动：换板块时卖旧的、买新的，成交记录混在散户里',
-          fields: [
-            ['hotMoneyEnabled', '开关(1=开 0=关)'],
-            ['hotMoneySwitchMin', '换板块最短间隔(轮)'],
-            ['hotMoneySwitchMax', '换板块最长间隔(轮)'],
-            ['hotMoneyMin', '每笔金额下限(元)'],
-            ['hotMoneyMax', '每笔金额上限(元)']
-          ]
-        },
-        {
-          title: '市场资金 → 价格',
-          desc: '虚假成交 / 游资推动价格的力度（和玩家冲击是两套独立通道）',
-          fields: [
-            ['marketImpactEnabled', '开关(1=开 0=关)'],
-            ['marketImpactRef', '压力基准金额(一笔算1单位)'],
-            ['marketImpactStrength', '每单位压力每轮推动'],
-            ['marketImpactMax', '单轮封顶(0.008=0.8%)'],
-            ['marketImpactDecay', '压力每轮衰减(0.85)'],
-            ['marketImpactFlowMax', '压力上限(单位)']
-          ]
-        }
-      ]
-    },
-    {
-      key: 'achv',
-      name: '主题成就 / 进化',
-      desc: '每个主题两条成就，集齐后消耗结晶进化到 Ⅱ 阶',
-      groups: [
-        {
-          title: '通用',
-          desc: '进化要花多少结晶',
-          fields: [
-            ['achvShardPerEvolve', '进化消耗结晶数']
-          ]
-        },
-        {
-          title: '🐂 红红的牛 / 🐻 绿绿的熊',
-          desc: '趋势里平仓的次数 + 返现累计',
-          fields: [
-            ['achvRedTrendTarget', '红牛：多头排列平仓次数'],
-            ['achvRedBonusTarget', '红牛：返现累计金额'],
-            ['achvBearTrendTarget', '绿熊：空头排列平仓次数'],
-            ['achvBearBonusTarget', '绿熊：返现累计金额']
-          ]
-        },
-        {
-          title: '🕶️ 暗黑大手',
-          desc: '同股同方向累计开仓 → 换技能平仓；反方向推价',
-          fields: [
-            ['achvDarkHandTarget', '黑手：同股同方向累计开仓额'],
-            ['achvDarkHandCount', '黑手：需要成功的次数'],
-            ['achvDarkPushTarget', '推土机：成功次数'],
-            ['achvDarkPushWindowTicks', '判定「别人刚开仓」的窗口(轮)']
-          ]
-        },
-        {
-          title: '🐊 金融大鳄',
-          desc: '财报前后的一进一出 + 金融板块累计盈利',
-          fields: [
-            ['achvTycoonProphetTarget', '先知：命中次数'],
-            ['achvTycoonProphetLeverage', '先知：要求的最低杠杆'],
-            ['achvTycoonProfitTarget', '信息差：金融板块累计盈利']
-          ]
-        },
-        {
-          title: '🧙 隐世仙人',
-          desc: '跟随别人成交 + 单票持仓市值',
-          fields: [
-            ['achvHermitFollowTarget', '来去无踪：跟随次数'],
-            ['achvHermitFollowWindowTicks', '跟随判定窗口(轮)'],
-            ['achvHermitPosTarget', '孤狼：单票持仓市值']
-          ]
-        },
-        {
-          title: '🕵️ 暗中调查 / 🧠 情绪读心',
-          desc: '调查与情绪相关的门槛',
-          fields: [
-            ['achvProbeWeakTarget', '软柿子：次数'],
-            ['achvProbeWindowTicks', '软柿子判定窗口(轮)'],
-            ['achvProbeTarget', '情报网：累计调查次数'],
-            ['achvMindReadTarget', '读心：命中次数'],
-            ['achvMindExtreme', '读心：情绪门槛(0.8=±80%)'],
-            ['achvMindProfitTarget', '情绪交易员：累计盈利']
-          ]
-        },
-        {
-          title: '🌙 夜行者',
-          desc: '偷钱金额与次数',
-          fields: [
-            ['achvNightBigSteal', '很会偷：单次金额门槛'],
-            ['achvNightStealTarget', '趁人不备：夜里得手次数']
-          ]
-        },
-        {
-          title: '🌍 全局成就：价值投资',
-          desc: '远离价值线建仓，等它回归；或者长线拿住',
-          fields: [
-            ['achvValueDeviation', '偏离价值线门槛(0.3=30%)'],
-            ['achvValueOpenMin', '单笔建仓门槛'],
-            ['achvValueCrossTarget', '价值回归任务次数'],
-            ['achvValueHoldTicks', '长线持有轮数(17280=24h)'],
-            ['achvValueProfitPct', '长线收益率门槛(%)'],
-            ['achvValueHoldTarget', '长线价值任务次数']
-          ]
-        },
-        {
-          title: '🐉 全局成就：短线擒龙',
-          desc: '快进快出，只吃最猛的一段',
-          fields: [
-            ['achvShortOpenMin', '单笔建仓门槛'],
-            ['achvShortNextPnlPct', '下一轮平仓收益率门槛(%)'],
-            ['achvShortWindowTicks', '短线窗口轮数(120=10分钟)'],
-            ['achvShortPnlPct', '窗口内收益率门槛(%)'],
-            ['achvDragonNextTarget', '一击即走任务次数'],
-            ['achvDragonFastTarget', '十分钟翻倍任务次数'],
-            ['achvGlobalRequireAll', '两个任务都完成才发放(0=任一即可)']
-          ]
-        },
-        {
-          title: 'Ⅰ 阶：主题技能数值',
-          desc: '买了主题就生效的数值（改完商城卡片文案会自动跟着变）',
-          fields: [
-            ['redBonusRate', '红牛：多头排列平仓返现率(0.01=1%)'],
-            ['redBonusMinTicks', '红牛：返现要求的最少持仓轮数(12)'],
-            ['bearBonusRate', '绿熊：空头排列平仓返现率(0.01=1%)'],
-            ['bearBonusMinTicks', '绿熊：返现要求的最少持仓轮数(12)'],
-            ['darkImpactBase', '暗黑：成交冲击倍率(1.05)'],
-            ['tycoonLeadTicks', '大鳄：财报提前量(轮, 20)'],
-            ['hermitHideChance', '隐世：成交隐身概率(0.75)'],
-            ['investigateCooldownTicks', '调查：冷却(轮, 30)'],
-            ['mindFakeChance', '读心：假读数概率(0.5=50%)'],
-            ['nightStartHour', '夜行：夜里开始小时(20)'],
-            ['nightEndHour', '夜行：夜里结束小时(4)'],
-            ['nightStealCooldown', '夜行：夜里偷钱冷却(轮, 3)'],
-            ['stealCooldownTicks', '偷钱：白天冷却(轮, 60)'],
-            ['stealCapRatio', '偷钱：上限占对方现金比例']
-          ]
-        },
-        {
-          title: 'Ⅱ 阶：进化后数值',
-          desc: '进化（消耗结晶）之后才生效的更强数值',
-          fields: [
-            ['themeEvolveSkillMult', '红牛/绿熊：返现倍率(1.5, 1%→1.5%)'],
-            ['themeEvolveImpact', '暗黑：成交冲击倍率(1.1)'],
-            ['themeEvolveImpactRefund', '暗黑：冲击成本返还比例(0.2=20%)'],
-            ['tycoonLeadTicksEvolved', '大鳄：财报提前量(轮, 40)'],
-            ['hermitHideChanceEvolved', '隐世：成交隐身概率(1=100%)'],
-            ['investigateCooldownEvolved', '调查：冷却(轮, 20)'],
-            ['mindAccurateChanceEvolved', '读心：看到真值的概率(0.7=70%)'],
-            ['nightStealCooldownEvolved', '夜行：夜里偷钱冷却(轮, 1)']
-          ]
-        },
-      ]
-    },
-    {
-      key: 'trade',
-      name: '交易规则',
-      desc: '开平仓、挂单、押金',
-      groups: [
-        {
-          title: '交易规则',
-          desc: '开仓平仓的代价',
-          fields: [
-            ['startingCash', '新开户资金'],
-            ['feeRate', '手续费率'],
-            ['stampDuty', '印花税率'],
-            ['minLeverage', '最小杠杆'],
-            ['maxLeverage', '最大杠杆'],
-            ['maxOrdersPerTick', '每轮最多下单'],
-            ['maxFillNotionalPerTick', '每轮最多成交(金额)'],
-            ['liquidationBuffer', '爆仓缓冲(0=不留头)']
-          ]
-        },
-        {
-          title: '挂单',
-          desc: '限价单的有效期与名额',
-          fields: [
-            ['limitOrderEnabled', '允许限价挂单(1=开)'],
-            ['orderTtlTicks', '挂单有效期(轮)'],
-            ['maxPendingOrders', '最多同时挂几笔']
-          ]
-        },
-        {
-          title: '市场冲击',
-          desc: '玩家大单怎么影响价格',
-          fields: [
-            ['playerImpactEnabled', '开关(1=开 0=关)'],
-            ['playerImpactRef', '参考成交额'],
-            ['playerImpactStrength', '推力系数'],
-            ['playerImpactDecay', '每轮衰减'],
-            ['playerImpactTail', '后续影响倍率(1=不变)'],
-            ['playerImpactMax', '单轮最大影响'],
-            ['playerImpactFlowMax', '压力上限'],
-            ['impactCostCoef', '冲击成本系数(0=不收)'],
-            ['impactCostMax', '冲击成本封顶(0.06=6%)']
-          ]
-        }
-      ]
-    },
-    {
-      key: 'economy',
-      name: '经济与成长',
-      desc: '分红、等级、打工、银行',
-      groups: [
-        {
-          title: '分红派息',
-          desc: '每期财报按行业派息率 × EPS 派息，派完即除权',
-          fields: [
-            ['dividendRate', '派息倍率(1=标准 0=停发)'],
-            ['dividendCap', '单期股息率封顶(0=不限)']
-          ]
-        },
-        {
-          title: '账号等级',
-          desc: '升级门槛与花费',
-          fields: [
-            ['levelBaseAsset', '升级门槛基数(1000万)'],
-            ['levelGrowth', '每级门槛倍数(2=翻倍)'],
-            ['levelUpRatio', '升级花费比例(0.6=60%)'],
-            ['levelFillBonus', '每级成交上限加成']
-          ]
-        },
-        {
-          title: '打工',
-          desc: '自动积累的钱袋',
-          fields: [
-            ['workRatePerTick', '每轮积累'],
-            ['workOnlineMultiplier', '在线倍率(2=双倍)'],
-            ['workBankTicks', '钱袋上限(轮)']
-          ]
-        },
-        {
-          title: '银行',
-          desc: '升级费用存这里，破产时可取',
-          fields: [
-            ['bankPoorThreshold', '取钱门槛(总资产低于)'],
-            ['bankWithdrawRateMin', '取款比例下限(0.01=1%)'],
-            ['bankWithdrawRateMax', '取款比例上限(0.2=20%)'],
-            ['bankWithdrawFloor', '单次取款下限']
-          ]
-        },
-        {
-          title: '主题返现',
-          desc: '红牛 / 绿熊 平仓返利',
-          fields: [
-            ['redBonusRate', '红牛返现比例'],
-            ['redBonusMinTicks', '红牛最少持轮'],
-            ['bearBonusRate', '绿熊返现比例'],
-            ['bearBonusMinTicks', '绿熊最少持轮']
-          ]
-        }
-      ]
-    },
-    {
-      key: 'shop',
-      name: '商城',
-      desc: '道具、主题、夜行者',
-      groups: [
-        {
-          title: '道具价格',
-          desc: '假新闻 / 保镖 / 背景 / 改名 / 通道 / 定投',
-          fields: [
-            ['shopFakeNewsPrice', '假新闻售价'],
-            ['shopFakeNewsChance', '生效概率(0.2=20%)'],
-            ['shopFakeNewsCooldown', '假新闻冷却(轮)'],
-            ['shopBodyguardPrice', '保镖售价'],
-            ['shopBodyguardTicks', '保镖时长(轮)'],
-            ['shopBgPrice', '自定义背景价格'],
-            ['shopRenamePrice', '改名卡价格'],
-            ['shopRenameCooldown', '改名冷却(轮)'],
-            ['shopChannelBasePrice', '通道首价'],
-            ['shopChannelRatio', '通道涨价倍率'],
-            ['shopChannelStep', '通道每级加成(会×玩家等级)'],
-            ['shopAutoDcaPrice', '自动定投售价'],
-            ['shopAutoDcaPremium', '定投挂单溢价(0.03=+3%)'],
-            ['shopFreeFeePrice', '咸鱼代下单售价'],
-            ['shopFreeFeeTicks', '免手续费时长(轮,60=5分钟)'],
-            ['shopFreeFeeCooldown', '咸鱼代下单冷却(轮)'],
-            ['shopHotTipPrice', '游资情报售价'],
-            ['shopHotTipCooldown', '游资情报冷却(轮)']
-          ]
-        },
-        {
-          title: '主题与技能',
-          desc: '主题售价、读心、夜行者、调查',
-          fields: [
-            ['shopThemePrice', '主题售价'],
-            ['mindThemePrice', '情绪读心售价'],
-            ['mindFakeChance', '读心假值概率(0~1)'],
-          ['mindAccurateChanceEvolved', '读心 Ⅱ 阶准确率(0.7=70%)'],
-            ['nightStartHour', '夜行者开始(点)'],
-            ['nightEndHour', '夜行者结束(点)'],
-            ['nightStealCooldown', '夜里偷钱CD(轮)'],
-            ['investigateCooldownTicks', '调查冷却(轮)']
-          ]
-        }
-      ]
-    },
-    {
-      key: 'social',
-      name: '社交玩法',
-      desc: '偷钱、情绪',
-      groups: [
-        {
-          title: '偷钱',
-          desc: '从别人口袋里拿（上限按现金算）',
-          fields: [
-            ['stealMin', '最少金额'],
-            ['stealMax', '最多金额'],
-            ['stealCapRatio', '上限比例(占对方现金)'],
-            ['stealCooldownTicks', '冷却(轮)']
-          ]
-        },
-        {
-          title: '散户情绪',
-          desc: '全局默认值；个股面板填了才覆盖',
-          fields: [
-            ['sentimentEnabled', '开关(1=开 0=关)'],
-            ['sentimentStrength', '基准偏移(0.004=0.4%)'],
-            ['sentimentTicks', '每多少轮施加一次'],
-            ['sentimentDrift', '方向分量(0=纯随机 1=纯方向)'],
-            ['sentimentEdge', '顶端难度(0=均匀, 3=默认)'],
-            ['sentimentRollMin', '重掷周期下限(轮)'],
-            ['sentimentRollMax', '重掷周期上限(轮)']
-          ]
-        }
-      ]
-    },
-    {
-      key: 'advanced',
-      name: '高级',
-      desc: '券商特质、收益曲线、ST 等冷门项',
-      groups: [
-        {
-          title: '财报随机偏移',
-          desc: '每期财报 = 上期基础上随机抖一下（零期望，体量越大抖得越小）',
-          fields: [
-            ['reportVol', '基准偏移(1000亿公司)'],
-            ['reportVolMin', '偏移下限(巨无霸)'],
-            ['reportVolMax', '偏移上限(小公司)'],
-            ['fairLookback', '价值线拟合期数'],
-            ['reportRefCap', '基准体量(市值)']
-          ]
-        },
-        {
-          title: '金价（矿工银行）',
-          desc: '游戏内模拟的金价：每轮随机游走 + 向基准回归，MB 的财报就跟着它走',
-          fields: [
-            ['goldBase', '基准金价(美元/盎司)'],
-            ['goldVol', '每轮波动(0.0012=0.12%)'],
-            ['goldRev', '向基准回归速度'],
-            ['goldCoef', '金价→财报系数(2.2)'],
-            ['goldJitter', '财报随机浮动(0.03=±3%)']
-          ]
-        },
-        {
-          title: '券商特质',
-          desc: '小灯证券的业绩效应',
-          fields: [
-            ['brokerSensitivity', '灵敏度'],
-            ['brokerCap', '单轮上限'],
-            ['brokerMidpoint', '成交中枢'],
-            ['brokerMidFloor', '中枢地板'],
-            ['brokerAlpha', '追踪速度']
-          ]
-        },
-        {
-          title: '收益曲线',
-          desc: '快照记录频率',
-          fields: [
-            ['equitySampleTicks', '采样间隔(轮)'],
-            ['equityMaxPoints', '最多保留点数']
-          ]
-        },
-        {
-          title: 'ST / 退市',
-          desc: '跌破阈值进 ST，长期不回升就退市',
-          fields: [
-            ['stPrice', 'ST 价格线'],
-            ['stDelistTicks', '退市观察期(轮)']
-          ]
-        },
-        {
-          title: '汇率',
-          desc: '留美外汇（AUD/JPY）驱动',
-          fields: [
-            ['fxEnabled', '开关(1=开)'],
-            ['fxCoef', '汇率系数'],
-            ['fxLeverage', '汇率杠杆'],
-            ['fxRefreshMs', '抓取间隔(ms)'],
-            ['fxTrack', '靠拢比例']
-          ]
-        }
-      ]
-    },
-    {
-      key: 'admin',
-      name: '账号',
-      desc: '登录与注册',
-      groups: [
-        {
-          title: '管理与账号',
-          desc: '改口令要谨慎，改完自己记住',
-          fields: [
-            ['adminPin', '管理员口令', 'text'],
-            ['pinLength', 'PIN 位数'],
-            ['allowRegister', '开放注册(1/0)']
-          ]
-        }
-      ]
-    }
-  ];
+  {
+    key: 'market',
+    name: '行情节奏',
+    desc: '价格怎么动、天花板在哪',
+    groups: [
+      {
+        title: '行情节奏',
+        desc: '所有标的共用的底层参数',
+        fields: [
+          ['tickMs', 'tick 间隔(ms)', '每轮多少毫秒，5000 = 5 秒一轮。改小行情更快，但玩家操作也更容易跟不上'],
+          ['baseVolatility', '基础波动率', '每轮基础随机波动，0.0022 ≈ ±0.22%'],
+          ['meanReversion', '均值回归强度', '价格偏离价值线时每轮拉回多少，0.00017 = 极慢'],
+          ['indexRebalanceTicks', '指数调仓间隔(轮)', '指数多久重算一次成分股权重，2160 轮 = 3 小时'],
+          ['historyTicks', 'K 线历史长度(轮)', '首屏给前端的 K 线根数，3600 = 5 小时']
+        ]
+      },
+      {
+        title: '新闻',
+        desc: '消息怎么影响价格',
+        fields: [
+          ['eventChance', '新闻概率/tick', '每轮生成一条新闻的概率，0.012 ≈ 每 83 轮一条'],
+          ['eventImpactScale', '影响倍率(1=标准)', '新闻对价格的冲击倍率，1 = 标准，0 = 新闻不影响价格'],
+          ['globalEventScale', '全市场新闻折扣(0.2=20%)', '全市场新闻的影响折扣，0.2 = 只按 20% 生效（避免一条新闻全盘涨跌）']
+        ]
+      },
+      {
+        title: '虚假成交（会推动股价）',
+        desc: '成交记录里带小动物头像的散户单：三档金额，越低档越常见',
+        fields: [
+          ['marketTradesEnabled', '开关(1=开 0=关)'],
+          ['marketTradesRate', '每轮笔数倍率(3=三倍)', '每轮生成 rand(1,2)×倍率 笔虚假成交，3 = 每轮 3~6 笔，0 = 关掉'],
+          ['marketTradesSmallP', '一档 1万~10万 权重', '三档金额只是权重，会自动归一化；全填 0 = 等概率'],
+          ['marketTradesMidP', '二档 10万~100万 权重'],
+          ['marketTradesBigP', '三档 100万~1000万 权重'],
+          ['marketTradesTrigger', '触发幅度(0.01=涨跌1%算一档)', '涨跌多少算「一档」，0.01 = 1%。调大 → 只有大波动才一边倒'],
+          ['marketTradesChase', '追涨系数(每档偏移的百分点)', '每档偏移多少个百分点，25 = 涨一档买盘 +25pp'],
+          ['marketTradesPanic', '杀跌系数(每档偏移的百分点)', '每档偏移多少个百分点，25 = 跌一档卖盘 +25pp']
+        ]
+      },
+      {
+        title: '游资资金',
+        desc: '在板块间轮动：换板块时卖旧的、买新的，成交记录混在散户里',
+        fields: [
+          ['hotMoneyEnabled', '开关(1=开 0=关)'],
+          ['hotMoneySwitchMin', '换板块最短间隔(轮)', '游资在这只票待多久换下一个板块，20 = 最短 100 秒'],
+          ['hotMoneySwitchMax', '换板块最长间隔(轮)'],
+          ['hotMoneyMin', '每笔金额下限(元)', '游资每笔金额下限，1000 万 = 1e7'],
+          ['hotMoneyMax', '每笔金额上限(元)']
+        ]
+      },
+      {
+        title: '市场资金 → 价格',
+        desc: '虚假成交 / 游资推动价格的力度（和玩家冲击是两套独立通道）',
+        fields: [
+          ['marketImpactEnabled', '开关(1=开 0=关)'],
+          ['marketImpactRef', '压力基准金额(一笔算1单位)'],
+          ['marketImpactStrength', '每单位压力每轮推动', '每单位压力每轮推动价格的百分比，0.002 = 0.2%'],
+          ['marketImpactMax', '单轮封顶(0.008=0.8%)', '单轮最多被市场资金推动多少，0.008 = 0.8%'],
+          ['marketImpactDecay', '压力每轮衰减(0.85)', '压力每轮衰减比例，0.85 = 每轮剩 85%'],
+          ['marketImpactFlowMax', '压力上限(单位)', '压力上限（单位），一笔基准金额算 1 单位']
+        ]
+      }
+    ]
+  },
+  {
+    key: 'achv',
+    name: '主题成就 / 进化',
+    desc: '每个主题两条成就，集齐后消耗结晶进化到 Ⅱ 阶',
+    groups: [
+      {
+        title: '通用',
+        desc: '进化要花多少结晶',
+        fields: [
+          ['achvShardPerEvolve', '进化消耗结晶数', '进化到 Ⅱ 阶需要几枚该主题的结晶']
+        ]
+      },
+      {
+        title: '🐂 红红的牛 / 🐻 绿绿的熊',
+        desc: '趋势里平仓的次数 + 返现累计',
+        fields: [
+          ['achvRedTrendTarget', '红牛：多头排列平仓次数'],
+          ['achvRedBonusTarget', '红牛：返现累计金额'],
+          ['achvBearTrendTarget', '绿熊：空头排列平仓次数'],
+          ['achvBearBonusTarget', '绿熊：返现累计金额']
+        ]
+      },
+      {
+        title: '🕶️ 暗黑大手',
+        desc: '同股同方向累计开仓 → 换技能平仓；反方向推价',
+        fields: [
+          ['achvDarkHandTarget', '黑手：同股同方向累计开仓额'],
+          ['achvDarkHandCount', '黑手：需要成功的次数'],
+          ['achvDarkPushTarget', '推土机：成功次数'],
+          ['achvDarkPushWindowTicks', '判定「别人刚开仓」的窗口(轮)']
+        ]
+      },
+      {
+        title: '🐊 金融大鳄',
+        desc: '财报前后的一进一出 + 金融板块累计盈利',
+        fields: [
+          ['achvTycoonProphetTarget', '先知：命中次数'],
+          ['achvTycoonProphetLeverage', '先知：要求的最低杠杆'],
+          ['achvTycoonProfitTarget', '信息差：金融板块累计盈利']
+        ]
+      },
+      {
+        title: '🧙 隐世仙人',
+        desc: '跟随别人成交 + 单票持仓市值',
+        fields: [
+          ['achvHermitFollowTarget', '来去无踪：跟随次数'],
+          ['achvHermitFollowWindowTicks', '跟随判定窗口(轮)'],
+          ['achvHermitPosTarget', '孤狼：单票持仓市值']
+        ]
+      },
+      {
+        title: '🕵️ 暗中调查 / 🧠 情绪读心',
+        desc: '调查与情绪相关的门槛',
+        fields: [
+          ['achvProbeWeakTarget', '软柿子：次数'],
+          ['achvProbeWindowTicks', '软柿子判定窗口(轮)'],
+          ['achvProbeTarget', '情报网：累计调查次数'],
+          ['achvMindReadTarget', '读心：命中次数'],
+          ['achvMindExtreme', '读心：情绪门槛(0.8=±80%)'],
+          ['achvMindProfitTarget', '情绪交易员：累计盈利']
+        ]
+      },
+      {
+        title: '🌙 夜行者',
+        desc: '偷钱金额与次数',
+        fields: [
+          ['achvNightBigSteal', '很会偷：单次金额门槛'],
+          ['achvNightStealTarget', '趁人不备：夜里得手次数']
+        ]
+      },
+      {
+        title: '🌍 全局成就：价值投资',
+        desc: '远离价值线建仓，等它回归；或者长线拿住',
+        fields: [
+          ['achvValueDeviation', '偏离价值线门槛(0.3=30%)'],
+          ['achvValueOpenMin', '单笔建仓门槛'],
+          ['achvValueCrossTarget', '价值回归任务次数'],
+          ['achvValueHoldTicks', '长线持有轮数(17280=24h)'],
+          ['achvValueProfitPct', '长线收益率门槛(%)'],
+          ['achvValueHoldTarget', '长线价值任务次数']
+        ]
+      },
+      {
+        title: '🐉 全局成就：短线擒龙',
+        desc: '快进快出，只吃最猛的一段',
+        fields: [
+          ['achvShortOpenMin', '单笔建仓门槛'],
+          ['achvShortNextPnlPct', '下一轮平仓收益率门槛(%)'],
+          ['achvShortWindowTicks', '短线窗口轮数(120=10分钟)'],
+          ['achvShortPnlPct', '窗口内收益率门槛(%)'],
+          ['achvDragonNextTarget', '一击即走任务次数'],
+          ['achvDragonFastTarget', '十分钟翻倍任务次数'],
+          ['achvGlobalRequireAll', '两个任务都完成才发放(0=任一即可)']
+        ]
+      },
+      {
+        title: 'Ⅰ 阶：主题技能数值',
+        desc: '买了主题就生效的数值（改完商城卡片文案会自动跟着变）',
+        fields: [
+          ['redBonusRate', '红牛：多头排列平仓返现率(0.01=1%)'],
+          ['redBonusMinTicks', '红牛：返现要求的最少持仓轮数(12)'],
+          ['bearBonusRate', '绿熊：空头排列平仓返现率(0.01=1%)'],
+          ['bearBonusMinTicks', '绿熊：返现要求的最少持仓轮数(12)'],
+          ['darkImpactBase', '暗黑：成交冲击倍率(1.05)'],
+          ['tycoonLeadTicks', '大鳄：财报提前量(轮, 20)'],
+          ['hermitHideChance', '隐世：成交隐身概率(0.75)'],
+          ['investigateCooldownTicks', '调查：冷却(轮, 30)'],
+          ['mindFakeChance', '读心：假读数概率(0.5=50%)'],
+          ['nightStartHour', '夜行：夜里开始小时(20)'],
+          ['nightEndHour', '夜行：夜里结束小时(4)'],
+          ['nightStealCooldown', '夜行：夜里偷钱冷却(轮, 3)']
+        ]
+      },
+      {
+        title: 'Ⅱ 阶：进化后数值',
+        desc: '进化（消耗结晶）之后才生效的更强数值',
+        fields: [
+          ['themeEvolveSkillMult', '红牛/绿熊：返现倍率(1.5, 1%→1.5%)'],
+          ['themeEvolveImpact', '暗黑：成交冲击倍率(1.1)'],
+          ['themeEvolveImpactRefund', '暗黑：冲击成本返还比例(0.2=20%)'],
+          ['tycoonLeadTicksEvolved', '大鳄：财报提前量(轮, 40)'],
+          ['hermitHideChanceEvolved', '隐世：成交隐身概率(1=100%)'],
+          ['investigateCooldownEvolved', '调查：冷却(轮, 20)'],
+          ['mindAccurateChanceEvolved', '读心：看到真值的概率(0.7=70%)'],
+          ['nightStealCooldownEvolved', '夜行：夜里偷钱冷却(轮, 1)']
+        ]
+      }
+    ]
+  },
+  {
+    key: 'trade',
+    name: '交易规则',
+    desc: '开平仓、挂单、押金',
+    groups: [
+      {
+        title: '交易规则',
+        desc: '开仓平仓的代价',
+        fields: [
+          ['startingCash', '新开户资金', '新玩家初始现金，100000 = 10 万'],
+          ['feeRate', '手续费率', '单边手续费率，0.0005 = 万分之五'],
+          ['stampDuty', '印花税率', '卖出印花税，0.0005 = 万分之五（只有卖出收）'],
+          ['minLeverage', '最小杠杆', '杠杆滑条的下限，1 = 不带杠杆'],
+          ['maxLeverage', '最大杠杆', '杠杆滑条的上限，也是「先知」等成就的达标线参考'],
+          ['maxOrdersPerTick', '每轮最多下单', '每人每轮最多下几次单（只限制个人，全服不限）'],
+          ['maxFillNotionalPerTick', '每轮最多成交(金额)'],
+          ['liquidationBuffer', '爆仓缓冲(0=不留头)', '权益亏到多少以下强平，0 = 亏光才平，留正数 = 留一点缓冲']
+        ]
+      },
+      {
+        title: '挂单',
+        desc: '限价单的有效期与名额',
+        fields: [
+          ['limitOrderEnabled', '允许限价挂单(1=开)'],
+          ['orderTtlTicks', '挂单有效期(轮)', '挂单多久没成交自动撤，2000 轮 ≈ 2.8 小时'],
+          ['maxPendingOrders', '最多同时挂几笔', '每人同时挂着的单子上限（止盈止损单不占名额）']
+        ]
+      },
+      {
+        title: '市场冲击',
+        desc: '玩家大单怎么影响价格',
+        fields: [
+          ['playerImpactEnabled', '开关(1=开 0=关)'],
+          ['playerImpactRef', '参考成交额'],
+          ['playerImpactStrength', '推力系数'],
+          ['playerImpactDecay', '每轮衰减'],
+          ['playerImpactTail', '后续影响倍率(1=不变)'],
+          ['playerImpactMax', '单轮最大影响'],
+          ['playerImpactFlowMax', '压力上限'],
+          ['impactCostCoef', '冲击成本系数(0=不收)', '玩家成交的冲击成本系数，6 = 成交额的 6 倍再被上限夹'],
+          ['impactCostMax', '冲击成本封顶(0.06=6%)', '冲击成本最高占成交额的比例，0.06 = 6%'],
+          ['impactRefFreeCap', '冲击免费额度(市值)', '玩家冲击的参考额度，1e10 = 100 亿']
+        ]
+      }
+    ]
+  },
+  {
+    key: 'economy',
+    name: '经济与成长',
+    desc: '分红、等级、打工、银行',
+    groups: [
+      {
+        title: '分红派息',
+        desc: '每期财报按行业派息率 × EPS 派息，派完即除权',
+        fields: [
+          ['dividendRate', '派息倍率(1=标准 0=停发)'],
+          ['dividendCap', '单期股息率封顶(0=不限)']
+        ]
+      },
+      {
+        title: '账号等级',
+        desc: '升级门槛与花费',
+        fields: [
+          ['levelBaseAsset', '升级门槛基数(1000万)'],
+          ['levelGrowth', '每级门槛倍数(2=翻倍)'],
+          ['levelUpRatio', '升级花费比例(0.6=60%)'],
+          ['levelFillBonus', '每级成交上限加成']
+        ]
+      },
+      {
+        title: '打工',
+        desc: '自动积累的钱袋',
+        fields: [
+          ['workRatePerTick', '每轮积累', '每轮自动往钱袋里攒多少'],
+          ['workOnlineMultiplier', '在线倍率(2=双倍)', '在线时打工速度翻几倍'],
+          ['workBankTicks', '钱袋上限(轮)', '钱袋上限按多少轮收入算']
+        ]
+      },
+      {
+        title: '银行',
+        desc: '升级费用存这里，破产时可取',
+        fields: [
+          ['bankPoorThreshold', '取钱门槛(总资产低于)'],
+          ['bankWithdrawRateMin', '取款比例下限(0.01=1%)'],
+          ['bankWithdrawRateMax', '取款比例上限(0.2=20%)'],
+          ['bankWithdrawFloor', '单次取款下限']
+        ]
+      },
+      {
+        title: '收益曲线',
+        desc: '快照记录频率',
+        fields: [
+          ['equitySampleTicks', '采样间隔(轮)', '收益曲线多久记一个点，12 轮 = 1 分钟'],
+          ['equityMaxPoints', '最多保留点数', '收益曲线最多保留多少个点']
+        ]
+      }
+    ]
+  },
+  {
+    key: 'shop',
+    name: '商城',
+    desc: '道具、主题、夜行者',
+    groups: [
+      {
+        title: '道具价格',
+        desc: '假新闻 / 保镖 / 背景 / 改名 / 通道 / 定投',
+        fields: [
+          ['shopFakeNewsPrice', '假新闻售价', '假新闻道具价格'],
+          ['shopFakeNewsChance', '生效概率(0.2=20%)', '假新闻生效概率，0.2 = 20%'],
+          ['shopFakeNewsCooldown', '假新闻冷却(轮)'],
+          ['shopBodyguardPrice', '保镖售价', '保镖道具价格（防偷）'],
+          ['shopBodyguardTicks', '保镖时长(轮)', '保镖保护时长，720 轮 = 1 小时'],
+          ['shopBgPrice', '自定义背景价格'],
+          ['shopRenamePrice', '改名卡价格'],
+          ['shopRenameCooldown', '改名冷却(轮)'],
+          ['shopChannelBasePrice', '通道首价', '交易通道第一级价格'],
+          ['shopChannelRatio', '通道涨价倍率', '通道每级涨价倍率，1.5 = 每级 ×1.5'],
+          ['shopChannelStep', '通道每级加成(会×玩家等级)', '通道每级增加的单笔成交上限增量（再乘玩家等级）'],
+          ['shopAutoDcaPrice', '自动定投售价', '自动定投道具价格'],
+          ['shopAutoDcaPremium', '定投挂单溢价(0.03=+3%)'],
+          ['shopFreeFeePrice', '咸鱼代下单售价', '咸鱼代下单（免手续费）价格'],
+          ['shopFreeFeeTicks', '免手续费时长(轮,60=5分钟)'],
+          ['shopFreeFeeCooldown', '咸鱼代下单冷却(轮)', '免手续费冷却时间（轮）'],
+          ['shopHotTipPrice', '游资情报售价', '游资情报价格'],
+          ['shopHotTipCooldown', '游资情报冷却(轮)', '游资情报冷却（轮）']
+        ]
+      },
+      {
+        title: '主题与技能',
+        desc: '主题售价、读心、夜行者、调查',
+        fields: [
+          ['shopThemePrice', '主题售价', '主题（外观 + 技能）价格，默认 200 万'],
+          ['shopThemeCooldown', '换技能冷却(轮)', '换外观不吃冷却，只有换技能要等，100 轮 ≈ 8 分钟'],
+          ['mindThemePrice', '情绪读心售价', '情绪读心主题的单独定价，5e6 = 500 万']
+        ]
+      }
+    ]
+  },
+  {
+    key: 'social',
+    name: '社交玩法',
+    desc: '偷钱、情绪',
+    groups: [
+      {
+        title: '偷钱',
+        desc: '从别人口袋里拿（上限按现金算）',
+        fields: [
+          ['stealMin', '最少金额', '每次偷钱最少偷多少'],
+          ['stealMax', '最多金额', '每次偷钱最多偷多少（还受对方现金比例限制）'],
+          ['stealCapRatio', '上限比例(占对方现金)', '最多偷走对方现金的比例，0.3 = 30%'],
+          ['stealCooldownTicks', '冷却(轮)', '偷钱冷却（轮），白天用这个，夜里用夜行者那条']
+        ]
+      },
+      {
+        title: '散户情绪',
+        desc: '全局默认值；个股面板填了才覆盖',
+        fields: [
+          ['sentimentEnabled', '开关(1=开 0=关)'],
+          ['sentimentStrength', '基准偏移(0.004=0.4%)', '情绪 ±1 时的基准偏移量，0.004 = 0.4%'],
+          ['sentimentTicks', '每多少轮施加一次', '12 轮 = 1 分钟施加一次偏移'],
+          ['sentimentRollTicks', '重掷周期(轮)', '多少轮重新抽一次情绪值，720 = 1 小时'],
+          ['sentimentDrift', '方向分量(0=纯随机 1=纯方向)'],
+          ['sentimentEdge', '顶端难度(0=均匀, 3=默认)'],
+          ['sentimentRollMin', '重掷周期下限(轮)'],
+          ['sentimentRollMax', '重掷周期上限(轮)']
+        ]
+      }
+    ]
+  },
+  {
+    key: 'admin',
+    name: '账号',
+    desc: '登录与注册',
+    groups: [
+      {
+        title: '管理与账号',
+        desc: '改口令要谨慎，改完自己记住',
+        fields: [
+          ['adminPin', '管理员口令', 'text'],
+          ['pinLength', 'PIN 位数', '登录 PIN 的位数，6 = 六位数字'],
+          ['allowRegister', '开放注册(1/0)', '0 = 关闭注册（只能管理员手动开号）']
+        ]
+      }
+    ]
+  }
+];;
 
-  const groupHtml = (g) => `
+const STOCK_CFG_GROUPS = [
+  {
+    title: '财报节奏与噪声',
+    desc: '所有票共用的财报参数：多久发一期、数值抖多大、价值线看几期',
+    fields: [
+      ['reportIntervalTicks', '财报间隔(轮)', '720 轮 = 1 小时。改小 = 财报更频繁、基本面变动更快'],
+      ['reportVol', '基准偏移(1000亿公司)', '每期财报在对数空间抖一下，0.05 = ±5%。体量越大抖得越小'],
+      ['reportVolMin', '偏移下限(巨无霸)', '市值很大的公司最少也抖这么多，0.01 = ±1%'],
+      ['reportVolMax', '偏移上限(小公司)', '小盘股最多抖这么多，0.1 = ±10%'],
+      ['fairLookback', '价值线拟合期数', '价值线用最近几期 EPS 的趋势拟合；8 期噪声传递约一半，5 期几乎等于只看最后一期'],
+      ['reportRefCap', '基准体量(市值)', 'σ 的基准：这个市值对应「基准偏移」，1000 亿 = 1e11']
+    ]
+  },
+  {
+    title: '成长 / 估值上限',
+    desc: '给每家公司一条「无限接近但不超过」的线',
+    fields: [
+      ['growthCeiling', '营收天花板(基准的几倍)', '营收最多涨到基准营收的几倍，8 = 8 倍'],
+      ['maxPremium', '股价上限(合理价的几倍)', '价格最多是价值线的几倍，2.5 = 250%，防泡沫的最后一道夹子'],
+      ['rallyMin', '整点拉升下限(0.05=5%)', '整点拉升（每小时一次）最小幅度'],
+      ['rallyMax', '整点拉升上限(0.2=20%)', '整点拉升最大幅度，实际在 min~max 之间随机']
+    ]
+  },
+  {
+    title: '早市冲量（瑞幸 LU 专属）',
+    desc: '每天固定时段按斜坡往上托，只有瑞幸咖啡吃这个机制',
+    fields: [
+      ['morningRallyEnabled', '开关(1=开 0=关)', '关掉之后 LU 的早市冲量完全消失'],
+      ['morningRallyStartHour', '开始小时(0~23)', '按服务器本地时间，6 = 早上 6 点'],
+      ['morningRallyEndHour', '结束小时(0~23)', '窗口结束时间，10 = 上午 10 点'],
+      ['morningRallyTotal', '窗口累计涨幅(0.25=+25%)', '整个窗口最多托上去多少，0.25 = 25%'],
+      ['morningRallyPull', '每轮最多贴近(0.02)', '每轮最多往上贴近目标多少，0.02 = 2%']
+    ]
+  },
+  {
+    title: '金价（矿工银行 MB 专属）',
+    desc: '游戏内模拟的金价：每轮随机游走 + 向基准回归，MB 的财报跟着它走',
+    fields: [
+      ['goldBase', '基准金价(美元/盎司)', '金价长期回归的中枢'],
+      ['goldVol', '每轮波动(0.0012=0.12%)', '每轮随机游走的标准差'],
+      ['goldRev', '向基准回归速度', '每轮往基准拉回多少，0.002 = 0.2%'],
+      ['goldCoef', '金价→财报系数(2.2)', 'MB 的财报增速 = 金价涨跌 × 这个数（个股 trait 可覆盖）'],
+      ['goldJitter', '财报随机浮动(0.03=±3%)', '金价之外额外的随机抖动（个股 trait 可覆盖）']
+    ]
+  },
+  {
+    title: '券商特质（小灯证券 XD 专属）',
+    desc: '券商业绩跟随成交活跃度，活跃度是相对口径（和最近几小时比）',
+    fields: [
+      ['brokerSensitivity', '灵敏度', '成交活跃度变化对营收的影响强度'],
+      ['brokerCap', '单轮上限', '每期最多调整多少，防止一次报表跳太猛'],
+      ['brokerMidpoint', '成交中枢', '活跃度 = 1 对应的收费基数'],
+      ['brokerMidFloor', '中枢地板', '营收相对基准营收的最低比例，0.05 = 5%'],
+      ['brokerAlpha', '追踪速度', '向目标营收靠近的速度，0.05 = 每期 5%']
+    ]
+  },
+  {
+    title: 'ST / 退市',
+    desc: '跌破阈值进 ST，长期不回升就退市（对所有票生效）',
+    fields: [
+      ['stPrice', 'ST 价格线', '股价跌破这个值就进 ST（涨跌幅限制更严）'],
+      ['stDelistTicks', '退市观察期(轮)', '在 ST 状态待满这么多轮还不回升就退市']
+    ]
+  },
+  {
+    title: '汇率（留美外汇 AUD/JPY 专属）',
+    desc: '留美外汇的股价由游戏内模拟的汇率驱动',
+    fields: [
+      ['fxEnabled', '开关(1=开 0=关)', '关掉后留美外汇改回纯随机'],
+      ['fxCoef', '汇率系数', '汇率涨跌放大倍数'],
+      ['fxLeverage', '汇率杠杆', '和系数相乘，越大越猛'],
+      ['fxRefreshMs', '抓取间隔(ms)', '多久拉一次汇率，最小 15000'],
+      ['fxTrack', '靠拢比例', '每轮向目标价靠近多少，0.06 = 6%']
+    ]
+  }
+];
+
+  // 一个参数格：元组第 3 位是 'text' 时表示输入框类型，其它字符串当作「说明」显示在下面
+  const cfgFieldHtml = ([k, label, meta]) => {
+    const type = meta === 'text' ? 'text' : 'number';
+    const hint = meta && meta !== 'text' ? meta : '';
+    let v = d.config[k];
+    if (typeof v === 'boolean') v = v ? 1 : 0;
+    if (v === undefined || v === null) v = '';
+    return `<label class="field cfg-field">
+            <span>${label}</span>
+            <input type="${type}"
+                   ${type === 'text' ? '' : 'step="0.0001"'}
+                   data-cfg="${k}" value="${v}" />
+            ${hint ? `<i class="cfg-hint">${hint}</i>` : ''}
+          </label>`;
+  };
+
+  const cfgGroupHtml = (g) => `
     <section class="cfg-group">
       <div class="cfg-group-head">
         <h4>${g.title}</h4>
         <span>${g.desc}</span>
       </div>
-      <div class="cfg-grid">
-        ${g.fields.map(([k, label, type]) => {
-          let v = d.config[k];
-          if (typeof v === 'boolean') v = v ? 1 : 0;
-          if (v === undefined || v === null) v = '';
-          return `<label class="field cfg-field">
-            <span>${label}</span>
-            <input type="${type || 'number'}"
-                   ${type === 'text' ? '' : 'step="0.0001"'}
-                   data-cfg="${k}" value="${v}" />
-          </label>`;
-        }).join('')}
-      </div>
+      <div class="cfg-grid">${g.fields.map(cfgFieldHtml).join('')}</div>
     </section>`;
 
   $('#cfgCats').innerHTML = CFG_CATS.map((c) => (
@@ -6028,8 +6013,12 @@ async function loadAdmin() {
 
   // 全部渲染进 DOM（保存时一次读全），只按大类显隐
   $('#configForm').innerHTML = CFG_CATS.map((c) => (
-    `<div class="cfg-cat-pane" data-cfg-pane="${c.key}">${c.groups.map(groupHtml).join('')}</div>`
+    `<div class="cfg-cat-pane" data-cfg-pane="${c.key}">${c.groups.map(cfgGroupHtml).join('')}</div>`
   )).join('');
+
+  // 「个股」页顶部：所有票共用的个股参数（财报 / 成长 / 各票专属机制 / ST / 汇率）
+  const stockBox = $('#stockGlobalCfg');
+  if (stockBox) stockBox.innerHTML = STOCK_CFG_GROUPS.map(cfgGroupHtml).join('');
 
   if (!state.cfgCat || !CFG_CATS.some((c) => c.key === state.cfgCat)) {
     state.cfgCat = CFG_CATS[0].key;
@@ -6214,7 +6203,8 @@ async function saveTraits() {
 
 async function saveConfig() {
   const patch = {};
-  $$('#configForm [data-cfg]').forEach((inp) => {
+  // 「参数」页和「个股」页的全局个股参数都在同一个管理面板里，一次收全
+  $$('#adminPanel [data-cfg]').forEach((inp) => {
     const k = inp.dataset.cfg;
     if (k === 'adminPin') patch[k] = String(inp.value);
     else if (k === 'allowRegister') patch[k] = Boolean(Number(inp.value));
@@ -6528,6 +6518,8 @@ function bind() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
   $('#configSaveBtn').addEventListener('click', saveConfig);
+  // 「个股」页顶部那组全局个股参数也用同一个保存接口
+  $('#stockCfgSaveBtn')?.addEventListener('click', saveConfig);
   document.querySelectorAll('.dir-btn').forEach((b) => {
     b.addEventListener('click', () => {
       state.shopDir = Number(b.dataset.dir) || 1;

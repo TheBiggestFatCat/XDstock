@@ -15,6 +15,15 @@ import { now } from './store.js';
 const NOTICE_MAX = 20;
 /** 抽奖型个股（原哈基蜂业那种）盘面异动公告的固定显示时长（轮）：30 轮 = 2.5 分钟 */
 export const LOTTERY_NOTICE_TICKS = 30;
+/**
+ * 新闻的两阶段时长（轮）：先 leak 期「只有内部人知道」，再公开、到期消失。
+ * 2026-11 起写死在这里 —— 以前 config 里有 eventDurationMin/Max，面板上能改但引擎从来没读过
+ * （两个摆设），干脆收进代码，改动要动这里。
+ */
+const NEWS_LEAK_MIN = 5;
+const NEWS_LEAK_MAX = 10;
+const NEWS_DURATION_MIN = 80;
+const NEWS_DURATION_MAX = 200;
 
 /**
  * 公告是否还该显示。
@@ -575,8 +584,8 @@ export function spawnNews(db) {
   const tpl = pool[Math.floor(Math.random() * pool.length)];
   const dir = tpl.dir >= 0 ? 1 : -1;
 
-  const leakTicks = Math.round(uniform(5, 10));
-  const total = Math.round(uniform(80, 200));
+  const leakTicks = Math.round(uniform(NEWS_LEAK_MIN, NEWS_LEAK_MAX));
+  const total = Math.round(uniform(NEWS_DURATION_MIN, NEWS_DURATION_MAX));
 
   const ev = {
     id: 'ev_' + Math.random().toString(36).slice(2, 10),

@@ -35,6 +35,7 @@ node tests/index-suspension.mjs      # 成分股停牌不影响指数（改指�
 node tests/tycoon-broker.mjs         # 券商营收/大鳄预览（改财报/券商必跑，26 条）
 node tests/report-trend-expectation.mjs  # 市场预期=最近5期走势拟合（改财报预期必跑，25 条）
 node tests/skill-text.mjs            # 主题技能文案跟着配置走（改技能/文案必跑，47 条）
+node tests/admin-panel.mjs           # 参数面板一致性：幽灵键/重复键/漏白名单（改设置面板必跑，18 条）
 node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占比/天花板（不是断言套，看表格）
 ```
 
@@ -60,7 +61,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 6. **发布流程**：改代码 → `node --check` → 本地跑通 → SFTP 上传 → 改线上数据（先备份）→
    `systemctl restart xdstock` → curl 验证 → `git commit` → `git push`（需代理 `127.0.0.1:4780`）。
 
-## 最容易踩的 18 个坑
+## 最容易踩的 19 个坑
 
 | 坑 | 症状 | 正解 |
 |---|---|---|
@@ -76,6 +77,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 | 跨模块函数忘了 import | `node --check` 只查语法 → 上线后每个 tick 抛 ReferenceError、systemd 重启循环 | 跑 `node tests/imports.mjs`；新写的分支本地一定要**真的走一遍**（2026-11 踩过：`isNightWindow`） |
 | 两套资金冲击混用 | 游资砸钱占满玩家上限 / 玩家单子推不动 | 玩家走 `st.flow`、虚假成交与游资走 `st.mflow`，公式各自一份、互不抢上限 |
 | 价值线只用最后一期财报算 | 一期财报抽到 ±6%，整条价值线被拽走 6%，均值回归再把价格拖过去，玩家说「价值线跟着单期财报乱跳」 | 用 `fairFromHistory()`（最近 `fairLookback` 期 EPS 对数回归，默认 8）；**5 期端点权重 60%、几乎没降噪**，别为了「五期」这个数字改回去 |
+| 面板上的设置项没进 api 白名单 | 管理面板能改、点保存没报错，但值根本没存进 db（静默丢弃） | 面板字段必须同时在 `src/api.js#/api/admin/config` 的 allowed 数组里；跑 `tests/admin-panel.mjs` |
 | 成就判定写成「必须装备技能」 | 玩家买了主题、换用别的技能，成就再也不涨 | 判定用 `achievements.js#ownsTheme()`；技能效果（返现/冲击/隐身/冷却）仍然只看 `player.skill` |
 | 技能描述写死在 HTML 里 | 后台把「大鳄提前 20 轮」改成 12，商城还写 20，玩家按错误信息做决策 | 文案只在 `src/skillText.js` 生成（读 config），前端经 /api/skill-text 取；跑 `tests/skill-text.mjs` |
 | 市场预期写死成 0 | 玩家看不到「预期」，超预期/不及预期成了内部参数的游戏 | 用 `expectedGrowthFromHistory()`（最近 5 期营收回归外推），不够 3 期才回退模型口径 |
@@ -88,7 +90,11 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 1. `src/config.js` — 默认值
 2. `src/api.js` — 管理员白名单数组加 key
 3. `src/wire.js` — `CONFIG_KEYS` 里加 key（**只有前端真的要读的才加**；管理面板读的是 `/api/admin/state`，不需要放这里）
-4. `public/app.js` — 管理面板参数分组加 `['key', '中文标签']`
+4. `public/app.js` — 面板字段：`CFG_CATS`（参数页，全局）或 `STOCK_CFG_GROUPS`（个股页，个股相关）
+   元组写法 `['key', '中文标签', '一句说明']`，说明会显示在输入框下面
+
+> 有个股的设置**一律放「个股」页**（财报/估值/各票专属机制/ST/汇率），别塞进参数页。
+> 同一个 key 不能出现两次；改完跑 `node tests/admin-panel.mjs`（会查幽灵键、重复键、漏白名单的键）。
 
 ## 新增个股参数
 

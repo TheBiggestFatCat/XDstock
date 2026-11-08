@@ -1572,6 +1572,15 @@ input.tpsl-input {
 }
 .cfg-field span { font-size: 11px; }
 .cfg-field input { padding: 7px 10px; font-size: 12.5px; }
+/* 参数说明：渲染在输入框下面的一行小字（字段元组第 3 位传字符串就会出现） */
+.cfg-field .cfg-hint {
+  font-style: normal;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--ink-3);
+  margin-top: -2px;
+}
+.cfg-field { align-items: flex-start; }
 
 @media (max-width: 760px) {
   .cfg-grid { grid-template-columns: repeat(2, 1fr); }
