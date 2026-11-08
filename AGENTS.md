@@ -134,7 +134,7 @@ public/styles.css  全部样式（主题变量 + 移动端媒体查询）
 - `tickMs = 5000`，1 轮 5 秒
 - `playerImpactRef = 1000000`、`impactRefFreeCap = 100亿`
 - `levelBaseAsset = 1000万`、`levelGrowth = 2`、`levelUpRatio = 0.6`
-- `marketTradesRate = 6`（每轮 6~12 笔虚假成交，2026-11 从 3 翻倍）、`sentimentRollTicks = 720`
+- `marketTradesRate = 6`（每轮 6~12 笔虚假成交）、`marketTradesWindow = 12`（追涨杀跌看 1 分钟动量）、`sentimentRollTicks = 720`
 - 市场资金（虚假成交 + 游资，2026-11）：虚假成交三档 1万~10万 / 10万~100万 / 100万~1000万（权重 70/24/6）；
   游资每笔 1000万~3000万、每 20~300 轮换一次板块；推动力 = 压力 × 0.002 × impactFactor，单轮封顶 0.8%
   → 实测一笔 1000 万 ≈ +0.3%~1%，一笔 3000 万 ≈ +1%~3%（大盘股取低值）

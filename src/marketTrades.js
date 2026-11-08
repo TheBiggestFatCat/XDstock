@@ -83,31 +83,62 @@ const coefOf = (v, fb) => {
 };
 
 /**
- * 本轮这一笔「偏向买入」的概率（0.1~0.9，0.5 = 买卖各半）。
+ * 这一笔「偏向买入」的概率（0.1~0.9，0.5 = 买卖各半）。
  *
- * 三个参数一起决定：
- *   `marketTradesTrigger` 涨跌多少算「一档」（默认 0.01 = 1%）
- *   `marketTradesChase`   涨的时候每档偏移几个百分点（默认 25）
- *   `marketTradesPanic`   跌的时候每档偏移几个百分点（默认 25，没配时跟随追涨）
+ * 2026-11 改版：信号从「本轮 vs 上一轮」换成**最近 `marketTradesWindow` 轮的涨跌幅**
+ * （默认 12 轮 = 1 分钟）。单轮噪声有 0.5%~1%，按单轮判定基本帧帧打满；
+ * 1 分钟动量把噪声摊平，触发一次能维持约一分钟，也不会被自己的单轮冲击带跑。
  *
- * 公式：`0.5 + (chg / trigger) × (系数 / 100)`，结果夹在 0.1~0.9。
- * 默认值算下来：涨 1% → 买盘 0.75、跌 1% → 卖盘 0.75（和改造前完全一致）。
- * 觉得 1% 太容易触发就把 trigger 调大（0.03 = 涨跌 3% 才算一档），
- * 行情波动 1% 时只会偏移 1/3 档，不会一有风吹草动就贴到 0.9。
+ * 三段式响应，专门防「追涨杀跌刹不住车」：
+ *   1. **死区**：`|chg| < 1 档` → 不偏（0.5），小抖动不触发
+ *   2. **线性**：1 档 → 0 偏移，2 档 → 满幅（追涨/杀跌系数）
+ *   3. **过热回落**：> 3 档开始减弱、≥ 5 档归零 —— 短时间涨太多反而没人敢追
  *
- * @param {number} chg 本轮涨跌幅（小数，0.01 = 1%）
+ * 另外按 `pressure`（该票当前市场资金压力 |st.mflow|）自限幅：已经被市场资金推得很狠的票，
+ * 偏向再乘 `1 - 0.6×busy`，避免「自己推自己」越推越猛。
+ *
+ * @param {number} chg 窗口内涨跌幅（小数，0.03 = 3%）
  * @param {object} cfg db.config
+ * @param {number} pressure 该票当前的市场资金压力（st.mflow，单位）
  * @returns {number} 买入概率
  */
-export function marketBuyProb(chg, cfg = {}) {
+export function marketBuyProb(chg, cfg = {}, pressure = 0) {
   const c = Number.isFinite(Number(chg)) ? Number(chg) : 0;
   const chase = coefOf(cfg.marketTradesChase, 25);
   const panic = coefOf(cfg.marketTradesPanic, chase);
   const trigRaw = Number(cfg.marketTradesTrigger);
-  const trig = Number.isFinite(trigRaw) && trigRaw > 0 ? trigRaw : 0.01;
-  const coef = c >= 0 ? chase : panic;
-  const steps = c / trig;          // 涨跌了几个「档」
-  return Math.max(0.1, Math.min(0.9, 0.5 + steps * (coef / 100)));
+  const trig = Number.isFinite(trigRaw) && trigRaw > 0 ? trigRaw : 0.03;
+  const coef = (c >= 0 ? chase : panic) / 100;
+
+  const steps = Math.abs(c) / trig;            // 涨跌了「几档」
+  if (steps < 1) return 0.5;                   // 死区
+
+  let amp;
+  if (steps <= 2) amp = steps - 1;             // 1~2 档：线性到满幅
+  else if (steps <= 3) amp = 1;                // 2~3 档：满幅
+  else amp = Math.max(0, 1 - (steps - 3) / 2); // 3~5 档：过热回落
+
+  // 已经推得很狠的票不再追（|压力| ≥ 2 单位时只剩 40%）
+  const busy = Math.min(1, Math.abs(Number(pressure) || 0) / 2);
+  amp *= 1 - 0.6 * busy;
+
+  const bias = amp * coef;
+  const p = c >= 0 ? 0.5 + bias : 0.5 - bias;
+  return Math.max(0.1, Math.min(0.9, p));
+}
+
+/**
+ * 判定用的涨跌幅：最近 `windowTicks` 轮的涨跌幅。
+ * 历史不够就用最早能给的那一格（比如刚上市的票）；不足两格返回 0。
+ */
+export function marketWindowChange(series, windowTicks) {
+  const ser = Array.isArray(series) ? series : [];
+  const w = Math.max(1, Math.floor(Number(windowTicks) || 12));
+  if (ser.length < 2) return 0;
+  const now = Number(ser[ser.length - 1]);
+  const back = Number(ser[Math.max(0, ser.length - 1 - w)]);
+  if (!(back > 0) || !Number.isFinite(now)) return 0;
+  return now / back - 1;
 }
 
 /**
@@ -142,12 +173,14 @@ export function genMarketTrades(db, maxTrades = 2) {
   const out = [];
   for (let i = 0; i < base; i++) {
     const st = pick(list);
+    // 判定窗口：默认 12 轮（1 分钟）的涨跌幅，而不是单轮；指数本轮还没重算时退回单轮口径
     const ser = st.series || [];
+    const win = Number(cfg.marketTradesWindow) || 12;
     const prev = ser.length > 1 ? ser[ser.length - 2] : st.price;
-    const chg = prev > 0 ? (st.price / prev - 1) : 0;
+    const chg = marketWindowChange(ser, win) || (prev > 0 ? st.price / prev - 1 : 0);
 
-    // 涨了偏买（追涨系数），跌了偏卖（杀跌系数）
-    const buyProb = marketBuyProb(chg, cfg);
+    // 涨了偏买（追涨），跌了偏卖（杀跌）；pressure = 这只票当前的市场资金压力，越大越不追
+    const buyProb = marketBuyProb(chg, cfg, st.mflow);
     const isBuy = Math.random() < buyProb;
 
     // 三档金额：越低档越常见

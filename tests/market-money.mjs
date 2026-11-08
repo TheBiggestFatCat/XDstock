@@ -13,7 +13,8 @@ import { createDb, migrate } from '../src/store.js';
 import { stepMarket, rebalanceIndex } from '../src/engine.js';
 import {
   MARKET_TIERS, MARKET_NAMES, MARKET_EMOJIS,
-  marketTierWeights, pickMarketNotional, marketIdentity, genMarketTrades, marketBuyProb
+  marketTierWeights, pickMarketNotional, marketIdentity, genMarketTrades,
+  marketBuyProb, marketWindowChange
 } from '../src/marketTrades.js';
 import {
   hotMoneySectors, ensureHotMoney, hotMoneySwitchInterval, hotMoneyAmount,
@@ -430,79 +431,116 @@ log('=== 6 引擎集成：跑一段，价格不炸、流水里有游资 ===');
 
 // ================================================================ 8
 log('');
-log('=== 8 追涨 / 杀跌系数：涨了偏买、跌了偏卖 ===');
+log('=== 8 追涨 / 杀跌：1 分钟动量 + 三段式限幅（防刹不住车）===');
 {
   const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
-  // 默认 25 / 25：完全对称，和改之前一模一样
-  check('默认：涨 1% → 买盘 75%', near(marketBuyProb(0.01, {}), 0.75), String(marketBuyProb(0.01, {})));
-  check('默认：跌 1% → 买盘 25%（= 卖盘 75%）', near(marketBuyProb(-0.01, {}), 0.25));
-  check('默认：不涨不跌 → 买卖各半', near(marketBuyProb(0, {}), 0.5));
+  const p = marketBuyProb;
+  const w = marketWindowChange;
 
-  // 触发幅度：涨跌多少算「一档」（0.01 = 1%，默认就是它，行为和以前一致）
-  check('默认触发幅度 1%', near(marketBuyProb(0.01, {}), 0.75));
-  check('触发幅度 3%：涨 1% 只偏移 1/3 档（0.583）',
-    near(marketBuyProb(0.01, { marketTradesTrigger: 0.03 }), 0.5 + (0.01 / 0.03) * 0.25));
-  check('触发幅度 3%：涨 3% 才到一档（0.75）',
-    near(marketBuyProb(0.03, { marketTradesTrigger: 0.03 }), 0.75));
-  check('触发幅度 3%：涨 0.5% 只偏一点点（< 0.56）',
-    marketBuyProb(0.005, { marketTradesTrigger: 0.03 }) < 0.56);
-  check('触发幅度 3%：跌 1% 也只有 0.417（不再无脑杀跌）',
-    near(marketBuyProb(-0.01, { marketTradesTrigger: 0.03 }), 0.5 - (0.01 / 0.03) * 0.25));
-  check('触发幅度调大后仍然会被 0.1/0.9 夹住',
-    near(marketBuyProb(0.5, { marketTradesTrigger: 0.03 }), 0.9) && near(marketBuyProb(-0.5, { marketTradesTrigger: 0.03 }), 0.1));
-  check('触发幅度 0 / 负数 / 非法 → 回退 1%，不炸',
-    near(marketBuyProb(0.01, { marketTradesTrigger: 0 }), 0.75) &&
-    near(marketBuyProb(0.01, { marketTradesTrigger: -1 }), 0.75) &&
-    near(marketBuyProb(0.01, { marketTradesTrigger: 'x' }), 0.75));
-  check('触发幅度 1% + 系数 50 → 涨 1% 直接到 0.9 上限',
-    near(marketBuyProb(0.01, { marketTradesChase: 50 }), 0.9));
+  // ---- 判定窗口：看最近 N 轮，不是单轮 ----
+  check('窗口涨幅：12 轮前 100 → 现价 103 = +3%', near(w([100, 101, 102, 103], 12), 0.03, 1e-9), (w([100, 101, 102, 103], 12) * 100).toFixed(2) + '%');
+  check('历史不足 12 轮时用最早那一格', near(w([100, 110], 12), 0.1, 1e-9), (w([100, 110], 12) * 100).toFixed(2) + '%');
+  check('window=1 就是单轮涨跌幅', near(w([100, 102], 1), 0.02, 1e-9));
+  check('空 / 单点 返回 0', w([], 12) === 0 && w([100], 12) === 0 && w(null, 12) === 0);
+  check('乱序脏数据不抛', Number.isFinite(w([100, 0, 105], 2)));
 
-  // 杀跌系数单独调大 → 跌的时候砸得更狠
-  check('杀跌 50：跌 1% → 买盘 10%（打到下限）', near(marketBuyProb(-0.01, { marketTradesPanic: 50 }), 0.1));
-  check('杀跌 50：涨 1% 不受影响（还是追涨 25）',
-    near(marketBuyProb(0.01, { marketTradesPanic: 50, marketTradesChase: 25 }), 0.75));
-  check('杀跌 0：跌了也不偏卖', near(marketBuyProb(-0.01, { marketTradesPanic: 0 }), 0.5));
-  check('追涨 0：涨了也不偏买', near(marketBuyProb(0.01, { marketTradesChase: 0 }), 0.5));
+  // ---- 死区：不到一档不偏 ----
+  check('死区：窗口涨 2%（0.67 档）→ 买卖各半', near(p(0.02, {}), 0.5));
+  check('死区：不涨不跌 → 各半', near(p(0, {}), 0.5));
+  check('死区：跌 2% 也不偏', near(p(-0.02, {}), 0.5));
 
-  // 非对称：同样幅度，杀跌系数更大 → 卖盘更重
+  // ---- 线性到满幅 ----
+  check('一档（3%）：偏移从 0 起，仍是 0.5', near(p(0.03, {}), 0.5));
+  check('两档（6%）：满幅 0.75（系数 25）', near(p(0.06, {}), 0.75), String(p(0.06, {})));
+  check('三档（9%）：仍满幅 0.75', near(p(0.09, {}), 0.75));
+  check('跌两档（-6%）：0.25（= 卖盘 75%）', near(p(-0.06, {}), 0.25));
+
+  // ---- 过热回落：涨太多反而没人追（这是防失控的关键）----
+  check('四档（12%）：回落到 0.625', near(p(0.12, {}), 0.625), String(p(0.12, {})));
+  check('五档（15%）：回到 0.5（完全不追）', near(p(0.15, {}), 0.5), String(p(0.15, {})));
+  check('六档（18%）：仍是 0.5，不会反向加注', near(p(0.18, {}), 0.5));
+  check('暴跌 -12% 也回落到 0.375（不无脑杀跌）', near(p(-0.12, {}), 0.375), String(p(-0.12, {})));
+
+  // ---- 压力自限幅：已经被推狠的票不再追 ----
+  check('两档 + 压力 0 → 0.75', near(p(0.06, {}, 0), 0.75));
+  check('两档 + 压力 1 单位 → 0.675', near(p(0.06, {}, 1), 0.675), String(p(0.06, {}, 1)));
+  check('两档 + 压力 2 单位 → 0.6（衰减 40%）', near(p(0.06, {}, 2), 0.6), String(p(0.06, {}, 2)));
+  check('压力再大也只衰减到 0.6（不会再低）', near(p(0.06, {}, 9), 0.6));
+
+  // ---- 追涨 / 杀跌可以不对称 ----
   const asym = { marketTradesChase: 10, marketTradesPanic: 60 };
-  const sellP = 1 - marketBuyProb(-0.01, asym);
-  const buyP = marketBuyProb(0.01, asym);
-  check('非对称：跌 1% 的卖压 > 涨 1% 的买压', sellP > buyP,
-    '卖 ' + (sellP * 100).toFixed(0) + '% vs 买 ' + (buyP * 100).toFixed(0) + '%');
+  check('杀跌系数更大 → 跌两档的卖压 > 涨两档的买压',
+    (1 - p(-0.06, asym)) > p(0.06, asym),
+    '卖 ' + ((1 - p(-0.06, asym)) * 100).toFixed(0) + '% vs 买 ' + (p(0.06, asym) * 100).toFixed(0) + '%');
+  check('两个系数都填 0 → 永远各半', near(p(0.30, { marketTradesChase: 0, marketTradesPanic: 0 }), 0.5));
 
-  // 边界与兜底
-  check('大跌（-5%）→ 买盘打到 10% 下限', near(marketBuyProb(-0.05, {}), 0.1));
-  check('大涨（+5%）→ 买盘打到 90% 上限', near(marketBuyProb(0.05, {}), 0.9));
-  check('没配杀跌时跟随追涨（老存档行为不变）',
-    near(marketBuyProb(-0.02, { marketTradesChase: 30 }), marketBuyProb(-0.02, { marketTradesChase: 30, marketTradesPanic: 30 })));
-  check('负数 / 非法系数按兜底处理不炸',
-    Number.isFinite(marketBuyProb(-0.01, { marketTradesPanic: -5, marketTradesChase: 'x' })));
+  // ---- 兜底 ----
+  check('触发幅度缺省用 0.03', near(p(0.06, {}), 0.75) && near(p(0.029, {}), 0.5));
+  check('触发幅度 0 / 负数 / 非法 → 回退 0.03',
+    near(p(0.06, { marketTradesTrigger: 0 }), 0.75) &&
+    near(p(0.06, { marketTradesTrigger: -1 }), 0.75) &&
+    near(p(0.06, { marketTradesTrigger: 'x' }), 0.75));
+  check('结果永远夹在 0.1~0.9', (() => {
+    for (const chg of [-0.5, -0.2, 0, 0.2, 0.5]) {
+      for (const coef of [0, 25, 200]) {
+        const v = p(chg, { marketTradesChase: coef, marketTradesPanic: coef });
+        if (!(v >= 0.1 - 1e-9 && v <= 0.9 + 1e-9)) return false;
+      }
+    }
+    return true;
+  })());
 
-  // 真跑一轮：只留一只票可交易，方向比才不会被指数（chg≈0）摊薄
-  const runDir = (cfgPatch, series) => {
+  // ---- 端到端：真的按 1 分钟窗口下单 ----
+  const runDir = (cfgPatch, series, resetFlow = true) => {
     const d = calmDb({ marketTradesEnabled: 1, marketTradesRate: 40, ...cfgPatch });
     for (const st of Object.values(d.stocks)) if (st.code !== 'TGW') st.status = 'suspended';
     const only = d.stocks.TGW;
     only.status = 'normal';
-    only.price = 100;
+    only.price = series[series.length - 1];
     only.series = series;
     const rows = [];
-    for (let i = 0; i < 40; i++) rows.push(...genMarketTrades(d, 1));
+    for (let i = 0; i < 40; i++) {
+      if (resetFlow) only.mflow = 0;   // 测「纯概率」时不让压力把偏向压下去
+      rows.push(...genMarketTrades(d, 1));
+    }
     return rows.filter((r) => r.code === 'TGW');
   };
-  const downRows = runDir({ marketTradesChase: 0, marketTradesPanic: 80 }, [104, 100]);   // 本轮 -3.8%
-  const downSells = downRows.filter((r) => r.side === 'short').length;
-  const downRatio = downRows.length ? downSells / downRows.length : 0;
-  // 理论值：chg=-3.8%、杀跌 80 → 0.5-3.04 → 夹到 0.1（90% 卖），1600 笔的二项波动约 ±0.75%
-  check('杀跌 80 + 跌 3.8% → 卖单占绝对多数（>85%）', downRatio > 0.85,
-    downRows.length + ' 笔里卖 ' + downSells + ' 笔（' + (downRatio * 100).toFixed(0) + '%）');
-
-  const upRows = runDir({ marketTradesChase: 80, marketTradesPanic: 0 }, [96, 100]);      // 本轮 +4.2%
+  // 12 轮里从 100 涨到 106（+6%，两档）→ 买盘 75%
+  const upSeries = [...new Array(11).fill(100), 106];
+  const upRows = runDir({}, upSeries);
   const upBuys = upRows.filter((r) => r.side === 'long').length;
   const upRatio = upRows.length ? upBuys / upRows.length : 0;
-  check('追涨 80 + 涨 4.2% → 买单占绝对多数（>85%）', upRatio > 0.85,
-    upRows.length + ' 笔里买 ' + upBuys + ' 笔（' + (upRatio * 100).toFixed(0) + '%）');
+  check('12 轮涨 6% → 买单约 75%（压力清零后的纯概率）', upRatio > 0.65, upRows.length + ' 笔里买 ' + upBuys + ' 笔（' + (upRatio * 100).toFixed(0) + '%）');
+
+  // 12 轮里来回震荡（净变化 0，但单轮抖 ±1.5%）→ 不该偏
+  const zigzag = [100, 101.5, 100, 101.5, 100, 101.5, 100, 101.5, 100, 101.5, 100, 100.2];
+  const zigRows = runDir({}, zigzag);
+  const zigBuys = zigRows.filter((r) => r.side === 'long').length;
+  const zigRatio = zigRows.length ? zigBuys / zigRows.length : 0;
+  check('1 分钟净变化只有 0.2% → 买卖接近各半（不追）', Math.abs(zigRatio - 0.5) < 0.15,
+    '买 ' + (zigRatio * 100).toFixed(0) + '%（单轮抖 ±1.5% 也不触发）');
+
+  // 12 轮涨 20%（过热）→ 回到各半，而不是继续追
+  const hotSeries = [...new Array(11).fill(100), 120];
+  const hotRows = runDir({}, hotSeries);
+  const hotBuys = hotRows.filter((r) => r.side === 'long').length;
+  const hotRatio = hotRows.length ? hotBuys / hotRows.length : 0;
+  check('1 分钟涨 20% → 不再追（买卖接近各半，防刹不住车）', Math.abs(hotRatio - 0.5) < 0.15,
+    '买 ' + (hotRatio * 100).toFixed(0) + '%');
+
+  // 跌 6% → 卖盘约 75%
+  const downRows = runDir({}, [...new Array(11).fill(100), 94]);
+  const downSells = downRows.filter((r) => r.side === 'short').length;
+  const downRatio = downRows.length ? downSells / downRows.length : 0;
+  check('12 轮跌 6% → 卖单约 75%（压力清零后的纯概率）', downRatio > 0.65,
+    downRows.length + ' 笔里卖 ' + downSells + ' 笔（' + (downRatio * 100).toFixed(0) + '%）');
+
+  // 同样的行情，但让压力自然累积（不清零）：偏向会被自限幅压下去 —— 这就是「不会刹不住车」
+  const brakeRows = runDir({}, upSeries, false);
+  const brakeBuys = brakeRows.filter((r) => r.side === 'long').length;
+  const brakeRatio = brakeRows.length ? brakeBuys / brakeRows.length : 0;
+  check('压力累积后偏向自动减弱（比 75% 明显低）', brakeRatio < upRatio - 0.05,
+    '累积压力后买 ' + (brakeRatio * 100).toFixed(0) + '% vs 无压力 ' + (upRatio * 100).toFixed(0) + '%');
 }
 
 console.log = realLog;
