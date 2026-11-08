@@ -5554,8 +5554,8 @@ async function loadAdmin() {
         title: '虚假成交（会推动股价）',
         desc: '成交记录里带小动物头像的散户单：三档金额，越低档越常见',
         fields: [
-          ['marketTradesEnabled', '开关(1=开 0=关)'],
-          ['marketTradesRate', '每轮笔数倍率(3=三倍)', '每轮生成 rand(1,2)×倍率 笔虚假成交，3 = 每轮 3~6 笔，0 = 关掉'],
+          ['marketTradesEnabled', '开关(1=开 0=关)', '关掉后成交记录里再也没有小动物头像的单子'],
+          ['marketTradesRate', '出现频率(每轮笔数倍率)', '每轮笔数 = 随机(1~2) × 这个数；6 = 每轮 6~12 笔（2026-11 从 3 翻倍到 6，原来只有 3~6 笔）'],
           ['marketTradesSmallP', '一档 1万~10万 权重', '三档金额只是权重，会自动归一化；全填 0 = 等概率'],
           ['marketTradesMidP', '二档 10万~100万 权重'],
           ['marketTradesBigP', '三档 100万~1000万 权重'],

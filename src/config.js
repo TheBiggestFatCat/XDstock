@@ -226,7 +226,8 @@ export const DEFAULT_CONFIG = {
 
   // 市场噪声成交：每轮编几笔「散户」成交，让成交列表看着像有人在交易
   marketTradesEnabled: 1,
-  marketTradesRate: 3,        // 噪声成交数量倍率（3 = 三倍）
+  // 出现频率：每轮笔数 = 随机(1~2) × 这个数，6 = 每轮 6~12 笔（2026-11 从 3 翻倍到 6）
+  marketTradesRate: 6,
   // 2026-11 起这些「虚假成交」会真的推动股价（走独立的 st.mflow 市场资金通道）
   // 金额分三档，越低档越常见；三个数字只是权重，会按比例归一化
   marketTradesSmallP: 70,     // 一档 1 万 ~ 10 万 的占比
