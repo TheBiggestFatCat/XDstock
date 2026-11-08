@@ -5,7 +5,7 @@ import { candlesFromSeries, changesFor, timeFromAxis, tickTimeAxis, pushNotice, 
 import { stockFullWire, configWire, positionWire } from './wire.js';
 import { bars15Candles } from './bars15.js';
 import { unlockedEmojis, pushEmote, visibleEmotes } from './emoji.js';
-import { pushVersionPost, latestVersionPost, listVersionPosts, deleteVersionPost } from './version.js';
+import { pushVersionPost, latestVersionPost, listVersionPosts, deleteVersionPost, updateVersionPost } from './version.js';
 import { nightInfoFor } from './theme.js';
 import { TIMEFRAMES } from './config.js';
 import { getBuild } from './build.js';
@@ -729,6 +729,14 @@ export async function handleApi(ctx) {
   if (pathname === '/api/admin/version-post' && method === 'POST') {
     const r = pushVersionPost(db, { version: body.version, title: body.title, body: body.body, tick: db.tick });
     if (!r.ok) return json(res, 400, { error: r.error });
+    saveDb();
+    return json(res, 200, { ok: true, post: r.post, posts: listVersionPosts(db) });
+  }
+
+  // 改一条已有的版本公告（只改 version/title/body，id/at/tick 保留）
+  if (pathname === '/api/admin/version-post/update' && method === 'POST') {
+    const r = updateVersionPost(db, body.id, { version: body.version, title: body.title, body: body.body });
+    if (!r.ok) return json(res, r.error === '没有这条版本公告' ? 404 : 400, { error: r.error });
     saveDb();
     return json(res, 200, { ok: true, post: r.post, posts: listVersionPosts(db) });
   }

@@ -48,6 +48,8 @@ const state = {
   emoPending: 0,           // 本轮还没回执的发送数
   cslOnlyTrade: true,
   adminSelected: new Set(),
+  adminVersionPosts: [],        // 管理页：已发的版本公告
+  editingVersionId: null,       // 正在编辑的版本公告 id
   prevPrices: {},
   myTrades: [],
   build: null,
@@ -5339,16 +5341,23 @@ function renderAdminVersionList() {
     return;
   }
   box.innerHTML = posts.slice().reverse().map((p) => `
-    <div class="notice-row">
-      <span class="notice-text"><b>${escapeHtml(p.version || '')}</b> ${escapeHtml(p.title || '')}</span>
+    <div class="notice-row${state.editingVersionId === p.id ? ' is-editing' : ''}">
+      <span class="notice-text"><b>${escapeHtml(p.version || '')}</b> ${escapeHtml(p.title || '')}
+        ${p.editedAt ? '<i class="ver-edited">已编辑</i>' : ''}</span>
       <span class="notice-left">${p.at ? new Date(p.at).toLocaleString('zh-CN', { hour12: false }) : ''}</span>
+      <button class="mini-btn" data-edit-ver="${p.id}">编辑</button>
       <button class="mini-btn danger" data-del-ver="${p.id}">删除</button>
     </div>`).join('');
+  box.querySelectorAll('[data-edit-ver]').forEach((b) => {
+    b.addEventListener('click', () => startEditVersion(b.dataset.editVer));
+  });
   box.querySelectorAll('[data-del-ver]').forEach((b) => {
     b.addEventListener('click', async () => {
       try {
         const r = await adminApi('/api/admin/version-post/delete', { id: b.dataset.delVer });
         state.adminVersionPosts = r.posts || [];
+        // 删的正好是正在编辑的那条 → 退出编辑态
+        if (state.editingVersionId === b.dataset.delVer) cancelEditVersion();
         renderAdminVersionList();
         toast('已删除', 'ok');
         refreshMarket();
@@ -5357,19 +5366,59 @@ function renderAdminVersionList() {
   });
 }
 
+/** 点「编辑」：把这条公告填回表单，按钮变「保存修改」 */
+function startEditVersion(id) {
+  const p = (state.adminVersionPosts || []).find((x) => x && x.id === id);
+  if (!p) { toast('这条公告已经不在了', 'err'); return; }
+  state.editingVersionId = id;
+  if ($('#verNum')) $('#verNum').value = p.version || '';
+  if ($('#verTitle')) $('#verTitle').value = p.title || '';
+  if ($('#verBody')) $('#verBody').value = p.body || '';
+  const btn = $('#verBtn');
+  if (btn) btn.textContent = '保存修改';
+  const hint = $('#verEditHint');
+  if (hint) {
+    hint.classList.remove('hidden');
+    const t = $('#verEditTitle');
+    if (t) t.textContent = `${p.version || ''} ${p.title || ''}`.trim() || p.id;
+  }
+  renderAdminVersionList();
+  const titleEl = $('#verTitle');
+  titleEl?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  titleEl?.focus();
+}
+
+/** 退出编辑态（清不清空输入框分开控制：已发布成功后只退出、不打断输入） */
+function cancelEditVersion(keepInput) {
+  state.editingVersionId = null;
+  const btn = $('#verBtn');
+  if (btn) btn.textContent = '发布版本公告';
+  $('#verEditHint')?.classList.add('hidden');
+  if (!keepInput) {
+    if ($('#verNum')) $('#verNum').value = '';
+    if ($('#verTitle')) $('#verTitle').value = '';
+    if ($('#verBody')) $('#verBody').value = '';
+  }
+  renderAdminVersionList();
+}
+
 async function publishVersionPost() {
   const version = $('#verNum')?.value.trim() || '';
   const title = $('#verTitle')?.value.trim() || '';
   const body = $('#verBody')?.value.trim() || '';
   if (!title) { toast('标题不能为空', 'err'); return; }
   if (!body) { toast('正文不能为空', 'err'); return; }
+  const editing = state.editingVersionId;
   try {
-    const r = await adminApi('/api/admin/version-post', { version, title, body });
+    const r = editing
+      ? await adminApi('/api/admin/version-post/update', { id: editing, version, title, body })
+      : await adminApi('/api/admin/version-post', { version, title, body });
     state.adminVersionPosts = r.posts || [];
-    renderAdminVersionList();
-    $('#verTitle').value = '';
-    $('#verBody').value = '';
-    toast('版本公告已发布，玩家下一轮就能看到', 'ok');
+    if ($('#verNum')) $('#verNum').value = '';
+    if ($('#verTitle')) $('#verTitle').value = '';
+    if ($('#verBody')) $('#verBody').value = '';
+    cancelEditVersion(true);
+    toast(editing ? '已保存修改，玩家下一轮就能看到' : '版本公告已发布，玩家下一轮就能看到', 'ok');
     refreshMarket();
   } catch (e) {
     toast(e.message, 'err');
@@ -6507,6 +6556,7 @@ function bind() {
     if (e.key === 'Escape') closeVersionModal();
   });
   $('#verBtn')?.addEventListener('click', publishVersionPost);
+  $('#verCancel')?.addEventListener('click', () => cancelEditVersion());
   bindAdminConsole();
   bindEmoteUi();
   switchAdminTab(state.adminTab || 'console');

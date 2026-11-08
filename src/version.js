@@ -67,3 +67,29 @@ export function deleteVersionPost(db, id) {
   db.versionPosts = db.versionPosts.filter((p) => p && p.id !== String(id));
   return db.versionPosts.length !== before;
 }
+
+/**
+ * 改一条已有的版本公告（2026-11 加）。
+ *
+ * - 只有 version / title / body 能改；`id` / `at` / `tick` 保留
+ * - 改过的会记 `editedAt`，列表里显示「已编辑」；玩家看到的就是改后的内容
+ * - 校验规则和发布完全一样（标题、正文都不能空）
+ */
+export function updateVersionPost(db, id, { version, title, body } = {}) {
+  if (!db || !Array.isArray(db.versionPosts)) return { ok: false, error: '还没有版本公告' };
+  const post = db.versionPosts.find((p) => p && p.id === String(id || ''));
+  if (!post) return { ok: false, error: '没有这条版本公告' };
+
+  // 没传的字段保持原样（允许只改一项）
+  const v = version === undefined ? post.version : clean(version, VERSION_MAX);
+  const t = title === undefined ? post.title : clean(title, TITLE_MAX);
+  const b = body === undefined ? post.body : clean(body, BODY_MAX);
+  if (!t) return { ok: false, error: '标题不能为空' };
+  if (!b) return { ok: false, error: '内容不能为空' };
+
+  post.version = v;
+  post.title = t;
+  post.body = b;
+  post.editedAt = Date.now();
+  return { ok: true, post };
+}
