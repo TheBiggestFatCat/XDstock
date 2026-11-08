@@ -1017,7 +1017,7 @@ export async function handleApi(ctx) {
       'shopBodyguardPrice', 'shopBodyguardTicks', 'shopThemePrice', 'mindThemePrice', 'mindFakeChance',
       'mindAccurateChanceEvolved',
       'goldBase', 'goldVol', 'goldRev', 'goldCoef', 'goldJitter',
-      'reportVol', 'reportVolMin', 'reportVolMax', 'reportRefCap',
+      'reportVol', 'reportVolMin', 'reportVolMax', 'fairLookback', 'reportRefCap',
       'nightStartHour', 'nightEndHour', 'nightStealCooldown',
       'shopChannelBasePrice', 'shopChannelRatio', 'shopChannelStep',
       'shopAutoDcaPrice', 'shopAutoDcaPremium',

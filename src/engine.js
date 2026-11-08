@@ -1,6 +1,6 @@
 import { INDEX_BASE, SMALL_INDEX_STOCK } from './stocks.js';
 import { pushBar15, BAR15_TICKS } from './bars15.js';
-import { TYCOON_LEAD_TICKS, isTycoonSector, genNextReport, fairFromReport, impactFactor, industryMidGrowth, rollWeather, dividendPerShare } from './fundamentals.js';
+import { TYCOON_LEAD_TICKS, isTycoonSector, genNextReport, fairFromReport, fairFromHistory, impactFactor, industryMidGrowth, rollWeather, dividendPerShare } from './fundamentals.js';
 export { TYCOON_LEAD_TICKS };
 import { genMarketTrades } from './marketTrades.js';
 import { stepHotMoney } from './hotmoney.js';
@@ -1097,8 +1097,10 @@ export function runReports(db) {
     if (db.gold) db.gold.reportBase = Number(db.gold.price) || 0;
     st.pendingReport = null;
 
-    // 合理价：新财报算出来的值 70% + 上期 30%，避免一次财报把线拉到天上
-    const computed = fairFromReport(st);
+    // 合理价：新财报算出来的值 70% + 上期 30%，避免一次财报把线拉到天上。
+    // 2026-11：优先用「最近 5 期 EPS 趋势拟合」出来的价值线，历史不够才退回只看最后一期
+    const lookback = Number(db.config.fairLookback) || 8;
+    const computed = fairFromHistory(st, lookback) ?? fairFromReport(st);
     const smoothed = before > 0 ? computed * 0.7 + before * 0.3 : computed;
     st.fair = Number(smoothed.toFixed(4));
 

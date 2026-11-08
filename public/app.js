@@ -5926,6 +5926,7 @@ async function loadAdmin() {
             ['reportVol', '基准偏移(1000亿公司)'],
             ['reportVolMin', '偏移下限(巨无霸)'],
             ['reportVolMax', '偏移上限(小公司)'],
+            ['fairLookback', '价值线拟合期数'],
             ['reportRefCap', '基准体量(市值)']
           ]
         },

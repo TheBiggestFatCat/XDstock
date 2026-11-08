@@ -114,6 +114,63 @@ export function expectedGrowthFromHistory(history, lookback = EXPECT_LOOKBACK) {
 }
 
 /**
+ * 价值线（fair）：用最近 N 期财报的**每股收益趋势**拟合出来，而不是只认最后一期。
+ *
+ * 为什么改（2026-11）：`fairFromReport` 只看最后一期 EPS，一期财报抽到 ±6% 的噪声，
+ * 整条价值线就被拽走 6%，再靠均值回归慢慢把价格拖过去 —— 玩家看到的是
+ * 「价值线跟着单期财报乱跳」。现在改成和「市场预期」同一套思路：
+ * 把最近 N 期 EPS 取对数做一元线性回归，取**拟合线在最后一期的值**当"当前盈利水平"，
+ * 再乘行业 PE 和成长溢价。
+ *
+ * 窗口默认 8 期（`FAIR_LOOKBACK`，可被 `cfg.fairLookback` 覆盖）：
+ * 端点杠杆 = 1/n + (x−x̄)²/Sxx，n=5 时最后一期占 60%（单期 ±5% 传 4.48%，几乎没降噪），
+ * n=8 降到 42%（传 2.1~2.7%），而且不像几何平均那样滞后趋势。选型数据见开发者文档 §6.2.0。
+ *
+ * - 成长溢价用**拟合出来的斜率**（每期对数增速），不是最后一期的 `growth`
+ * - 净资产底线仍然用当前 `bps × 0.8`（历史里没存 bps）
+ * - 有效样本 < 3 期 → 返回 `null`，调用方回退到 `fairFromReport`（只看最后一期）
+ *
+ * @returns {number|null} 估值价（元），历史不够返回 null
+ */
+export const FAIR_LOOKBACK = 8;
+
+export function fairFromHistory(st, lookback = FAIR_LOOKBACK) {
+  const rows = Array.isArray(st?.reportHistory) ? st.reportHistory.slice(-Math.max(2, Math.floor(lookback) || FAIR_LOOKBACK)) : [];
+  const pts = [];
+  for (let i = 0; i < rows.length; i++) {
+    const eps = Number(rows[i] && rows[i].eps);
+    if (Number.isFinite(eps) && eps > 0) pts.push({ x: pts.length, y: Math.log(eps) });
+  }
+  if (pts.length < 3) return null;
+  const n = pts.length;
+  const mx = pts.reduce((a, p) => a + p.x, 0) / n;
+  const my = pts.reduce((a, p) => a + p.y, 0) / n;
+  let sxy = 0;
+  let sxx = 0;
+  for (const p of pts) {
+    sxy += (p.x - mx) * (p.y - my);
+    sxx += (p.x - mx) * (p.x - mx);
+  }
+  const slope = sxx > 0 ? sxy / sxx : 0;
+  // 拟合线在**最后一期**（x = n - 1）的取值 = "按最近这 5 期看，现在大概赚多少"
+  const fittedY = my + slope * (n - 1 - mx);
+  if (!Number.isFinite(fittedY)) return null;
+  const epsFit = Math.exp(fittedY);
+  if (!(epsFit > 0) || !Number.isFinite(epsFit)) return null;
+
+  const ind = industryOf(st);
+  const f = st.fundamentals || {};
+  const bps = Number(f.bps) || 0;
+  // 成长溢价用拟合斜率（折成百分比），和 fairFromReport 的口径一致：max(0, g) × 1.5，上限 +50%
+  const growthFit = Math.exp(slope) - 1;
+  const premium = 1 + clamp(Math.max(0, growthFit) * 1.5, 0, 0.5);
+  const byEps = epsFit * ind.pe * premium;
+  const byBook = bps * 0.8;     // 净资产底线（和 fairFromReport 一致）
+  const out = Math.max(byEps, byBook, 0.01);
+  return Number.isFinite(out) ? out : null;
+}
+
+/**
  * 「金融大鳄」能看到哪些票：**只有金融板块**（券商 / 外汇）。
  * 引擎用它决定给谁生成 pendingReport，api/server 用它决定要不要下发 previewIn，
  * 三处必须用同一个判断，否则会出现「有倒计时但永远没有预览」。
