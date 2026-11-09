@@ -6512,6 +6512,13 @@ async function loadAdmin() {
           ['sentimentRollMin', '重掷周期下限(轮)'],
           ['sentimentRollMax', '重掷周期上限(轮)']
         ]
+      },
+      {
+        title: '聊天红包',
+        desc: '聊天大厅里的拼手气红包',
+        fields: [
+          ['packetTtlHours', '红包有效期(小时, 2)', '过了这个时间就不能再抢，气泡变「已过期」；消息本身还会留着']
+        ]
       }
     ]
   },

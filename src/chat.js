@@ -15,7 +15,15 @@ export const CHAT_TEXT_MAX = 200;         // 单条文字最长
 export const CHAT_GAP_MS = 3000;          // 同一人两条消息最小间隔（防刷屏）
 export const PACKET_MIN_AMOUNT = 100;     // 红包最少总额
 export const PACKET_MAX_COUNT = 20;       // 一个红包最多几份
-export const PACKET_TTL_MS = 10 * 60 * 1000;
+/** 红包有效期（毫秒）：由 config.packetTtlHours 决定，默认 2 小时 */
+export const PACKET_TTL_HOURS_DEFAULT = 2;
+export function packetTtlMs(cfg = {}) {
+  const hours = Number(cfg.packetTtlHours ?? PACKET_TTL_HOURS_DEFAULT);
+  const safe = Number.isFinite(hours) && hours > 0 ? Math.min(72, hours) : PACKET_TTL_HOURS_DEFAULT;
+  return safe * 3600 * 1000;
+}
+/** 兼容老代码：默认 2 小时 */
+export const PACKET_TTL_MS = PACKET_TTL_HOURS_DEFAULT * 3600 * 1000;
 export const PACKET_COOLDOWN_MS = 10 * 1000;
 
 /** 老存档 / 新库都补齐结构 */
@@ -47,7 +55,7 @@ function housekeep(db) {
   }
   for (const [id, pk] of Object.entries(db.redPackets)) {
     if (!pk || !referenced.has(id)) { delete db.redPackets[id]; continue; }
-    if (Number(pk.at) + PACKET_TTL_MS < nowMs) pk.dead = true;
+    if (Number(pk.at) + packetTtlMs(db.config || {}) < nowMs) pk.dead = true;
   }
 }
 
@@ -140,10 +148,15 @@ export function packetView(pk) {
   };
 }
 
-/** 抢红包：返回 { ok, amount?, error? } */
-export function grabPacket(pk, player) {
+/**
+ * 抢红包：返回 { ok, amount?, error? }
+ * @param {object} pk 红包
+ * @param {object} player 抢的人
+ * @param {object} [cfg] db.config（用来读 packetTtlHours）
+ */
+export function grabPacket(pk, player, cfg = {}) {
   if (!pk) return { ok: false, error: '红包不存在或已过期' };
-  if (pk.dead || Number(pk.at) + PACKET_TTL_MS < Date.now()) return { ok: false, error: '红包已过期' };
+  if (pk.dead || Number(pk.at) + packetTtlMs(cfg) < Date.now()) return { ok: false, error: '红包已过期' };
   if (pk.pid === player.id) return { ok: false, error: '不能抢自己发的红包' };
   if (pk.taken.length >= pk.parts.length) return { ok: false, error: '手慢了，红包已经被抢光了' };
   if (pk.taken.some((t) => t.pid === player.id)) return { ok: false, error: '这个红包你已经抢过了' };

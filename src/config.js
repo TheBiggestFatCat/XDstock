@@ -266,6 +266,9 @@ export const DEFAULT_CONFIG = {
   majorNewsReportBias: 0.4,
   // 公告挂多久（小时）：价格冲击只有前面几轮，公告本身在快讯里挂满这么久
   majorNewsAnnounceHours: 3,
+  // 聊天室红包有效期（小时）：默认 2 小时，到点不能再抢（消息和「已抢光/已过期」状态保留）
+  packetTtlHours: 2,
+
   // 两条重大新闻之间的最小间隔（小时）：默认 1 小时
   // 这是**硬闸**：不管概率参数怎么配，1 小时内最多出一条，避免「一下子刷出好几条」
   majorNewsMinGapHours: 1,

@@ -3,7 +3,7 @@
 
 import {
   ensureChat, pushChat, chatRows, splitPacket, createPacket, grabPacket, packetView,
-  CHAT_MAX, CHAT_TEXT_MAX
+  packetTtlMs, PACKET_TTL_HOURS_DEFAULT, CHAT_MAX, CHAT_TEXT_MAX
 } from '../src/chat.js';
 
 let fails = 0;
@@ -117,12 +117,33 @@ log('=== 5 抢红包规则 ===');
   check('view 里 left = 0', view.left === 0, String(view.left));
   check('view 带最近抢到的人', view.shares.length === 3, String(view.shares.length));
 
-  // 过期
+  // 过期：默认 2 小时
   const db2 = db0();
   const pk2 = createPacket(db2, owner, 500, 2);
-  pk2.at = Date.now() - 11 * 60 * 1000;
-  const r5 = grabPacket(pk2, a);
-  check('超过 10 分钟算过期', r5.ok === false && /过期/.test(r5.error), r5.error);
+  pk2.at = Date.now() - 121 * 60 * 1000;      // 2 小时 1 分
+  const r5 = grabPacket(pk2, a, {});
+  check('默认超过 2 小时算过期', r5.ok === false && /过期/.test(r5.error), r5.error);
+
+  const pk2b = createPacket(db2, owner, 500, 2);
+  pk2b.at = Date.now() - 110 * 60 * 1000;     // 1 小时 50 分（还在有效期内）
+  const r5b = grabPacket(pk2b, a, {});
+  check('1 小时 50 分还能抢', r5b.ok === true, r5b.error || '');
+
+  // 可配置
+  check('默认 TTL = 2 小时', PACKET_TTL_HOURS_DEFAULT === 2, String(PACKET_TTL_HOURS_DEFAULT));
+  check('packetTtlHours=2 → 7200000ms', packetTtlMs({ packetTtlHours: 2 }) === 2 * 3600 * 1000);
+  check('packetTtlHours=6 → 6 小时', packetTtlMs({ packetTtlHours: 6 }) === 6 * 3600 * 1000);
+  check('填 0/负数 → 回落默认 2 小时', packetTtlMs({ packetTtlHours: 0 }) === 2 * 3600 * 1000);
+  check('填 999 → 夹到 72 小时', packetTtlMs({ packetTtlHours: 999 }) === 72 * 3600 * 1000);
+
+  const pk2c = createPacket(db2, owner, 500, 2);
+  pk2c.at = Date.now() - 3 * 3600 * 1000;     // 3 小时前
+  const r6 = grabPacket(pk2c, a, { packetTtlHours: 6 });
+  check('后台把有效期改成 6 小时 → 3 小时前的还能抢', r6.ok === true, r6.error || '');
+  const pk2d = createPacket(db2, owner, 500, 2);
+  pk2d.at = Date.now() - 3 * 3600 * 1000;
+  const r7 = grabPacket(pk2d, a, { packetTtlHours: 1 });
+  check('改成 1 小时 → 3 小时前的就过期了', r7.ok === false && /过期/.test(r7.error), r7.error);
 }
 
 // ---------------------------------------------------------------- 6

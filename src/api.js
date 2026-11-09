@@ -1145,6 +1145,7 @@ export async function handleApi(ctx) {
       'marketTradesSmallP', 'marketTradesMidP', 'marketTradesBigP', 'marketTradesChase', 'marketTradesPanic', 'marketTradesTrigger', 'marketTradesWindow', 'marketTradesSizeExp', 'marketTradesSentBias', 'marketTradesSentVol', 'reopenSurgeMult', 'indexTradeScale',
     'majorNewsEnabled', 'majorNewsAvgHours', 'majorNewsPriceShock', 'majorNewsTicks',
     'majorNewsFairShift', 'majorNewsReportBias', 'majorNewsAnnounceHours', 'majorNewsMinGapHours',
+    'packetTtlHours',
       'hotMoneyEnabled', 'hotMoneySwitchMin', 'hotMoneySwitchMax', 'hotMoneyMin', 'hotMoneyMax',
       'marketImpactEnabled', 'marketImpactRef', 'marketImpactStrength', 'marketImpactMax',
       'marketImpactDecay', 'marketImpactFlowMax',
@@ -1468,7 +1469,7 @@ export async function handleApi(ctx) {
   if (pathname === '/api/chat/grab' && method === 'POST') {
     ensureChat(db);
     const pk = db.redPackets[String(body.id || '')];
-    const r = grabPacket(pk, me);
+    const r = grabPacket(pk, me, db.config || {});
     if (!r.ok) return json(res, 400, { error: r.error });
     me.cash = (Number(me.cash) || 0) + r.amount;
     me.chatGrabbed = (Number(me.chatGrabbed) || 0) + r.amount;
