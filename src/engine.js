@@ -4,7 +4,7 @@ import { TYCOON_LEAD_TICKS, isTycoonSector, genNextReport, fairFromReport, fairF
 export { TYCOON_LEAD_TICKS };
 import { genMarketTrades } from './marketTrades.js';
 import { stepHotMoney } from './hotmoney.js';
-import { logTrade } from './trading.js';
+import { logTrade, addVolume, indexTickVolume } from './trading.js';
 import { maskSentiment } from './mind.js';
 import { kfcRallyStep, kfcRallyInfo } from './kfc.js';
 
@@ -720,15 +720,29 @@ export function stepMarket(db) {
   stepHotMoney(db);
 
   // 3.65 成交量：把本轮攒下的 volTick 汇总进 volSeries（和 series 一一对应，K 线的成交量柱用）
+  // 指数不单独攒量：它的成交量 = 成分股本轮成交量之和（指数上的单子已经按权重拆到成分股了）
+  const tickVol = new Map();
   for (const st of stocks) {
     const vol = Math.max(0, Number(st.volTick) || 0);
     st.volTick = 0;
+    if (st.isIndex) continue;
+    tickVol.set(st.code, vol);
     if (!Array.isArray(st.volSeries)) st.volSeries = [];
     st.volSeries.push(vol);
     const vcap = cfg.historyTicks ?? 3600;
     if (st.volSeries.length > vcap) st.volSeries.splice(0, st.volSeries.length - vcap);
     // 15 分钟那根：价格在上面已经 push 过，这里只补成交量
-    if (!st.isIndex) pushBar15(st.bars15, Math.floor(db.tick / BAR15_TICKS), st.price, vol);
+    pushBar15(st.bars15, Math.floor(db.tick / BAR15_TICKS), st.price, vol);
+  }
+  for (const st of stocks) {
+    if (!st.isIndex) continue;
+    const key = st.code === SMALL_INDEX_STOCK.code ? 'smallIndex' : 'index';
+    const vol = indexTickVolume(db, key, tickVol);
+    if (!Array.isArray(st.volSeries)) st.volSeries = [];
+    st.volSeries.push(vol);
+    const vcap = cfg.historyTicks ?? 3600;
+    if (st.volSeries.length > vcap) st.volSeries.splice(0, st.volSeries.length - vcap);
+    pushBar15(st.bars15, Math.floor(db.tick / BAR15_TICKS), st.price, vol);
   }
 
   // 3.58 天气股对齐（共用天气、同时发报）

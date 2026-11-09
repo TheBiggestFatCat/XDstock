@@ -10,6 +10,49 @@ import { freeFeeActive, stampRateFor } from './perks.js';
 
 const TRADE_LOG_MAX = 4000;
 
+/**
+ * 记「这一轮的成交量」（股）：先攒在 st.volTick 上，引擎在一轮结束时汇总进 volSeries。
+ *
+ * 指数（DENG / DENGS）上的成交**不挂在指数自己身上**，而是按成分股权重拆给个股：
+ *   - 不然指数自己攒了一堆量、成分股一条柱子都没有（玩家看个股 K 线是空的）
+ *   - 拆开后指数成交量 = 成分股之和（见 indexTickVolume），不会重复计算
+ */
+export function addVolume(db, code, qty) {
+  if (!db || !code) return 0;
+  const st = db.stocks?.[code];
+  if (!st) return 0;
+  const q = Math.max(0, Number(qty) || 0);
+  if (!(q > 0)) return 0;
+
+  if (st.isIndex) {
+    let given = 0;
+    for (const { st: member, weight } of indexWeights(db, indexKeyFor(st))) {
+      if (!(weight > 0)) continue;
+      const leg = q * weight;
+      member.volTick = (Number(member.volTick) || 0) + leg;
+      given += leg;
+    }
+    return given;
+  }
+  st.volTick = (Number(st.volTick) || 0) + q;
+  return q;
+}
+
+/**
+ * 指数这一轮的成交量 = 各成分股（正常交易中的）本轮成交量之和。
+ * 指数的成交已经按权重拆进成分股了，所以这里只是求和，不会重复计。
+ */
+export function indexTickVolume(db, indexKey = 'index', tickVol = null) {
+  let total = 0;
+  for (const { st } of indexWeights(db, indexKey)) {
+    const v = tickVol && typeof tickVol.get === 'function'
+      ? tickVol.get(st.code)
+      : st.volTick;
+    total += Math.max(0, Number(v) || 0);
+  }
+  return total;
+}
+
 /** 记一条交易流水（超出上限就丢最老的） */
 export function logTrade(db, entry) {
   if (!Array.isArray(db.trades)) db.trades = [];
@@ -18,9 +61,8 @@ export function logTrade(db, entry) {
     at: now(),
     ...entry
   });
-  // 成交量（股）：每轮先攒在 st.volTick 上，引擎在一轮结束时汇总进 volSeries
-  const vst = entry && entry.code ? db.stocks?.[entry.code] : null;
-  if (vst) vst.volTick = (Number(vst.volTick) || 0) + (Number(entry.qty) || 0);
+  // 成交量（股）：指数单按权重拆给成分股，普通票记自己头上
+  if (entry && entry.code) addVolume(db, entry.code, entry.qty);
   if (db.trades.length > TRADE_LOG_MAX) {
     db.trades.splice(0, db.trades.length - TRADE_LOG_MAX);
   }

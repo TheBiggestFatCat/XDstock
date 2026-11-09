@@ -16,7 +16,7 @@
  * 两种资金来源在成交记录里长得完全一样，玩家分不出来。
  */
 
-import { addMarketFlow } from './trading.js';
+import { addMarketFlow, addVolume } from './trading.js';
 import { freeCap } from './fundamentals.js';
 
 /** 散户昵称池（虚假成交 / 游资共用） */
@@ -293,11 +293,8 @@ export function genMarketTrades(db, maxTrades = 2) {
   }
 
   db.trades.push(...out);
-  // 成交量：同样先攒在 st.volTick 上（和玩家 / 游资一路货）
-  for (const row of out) {
-    const vst = db.stocks?.[row.code];
-    if (vst) vst.volTick = (Number(vst.volTick) || 0) + (Number(row.qty) || 0);
-  }
+  // 成交量：指数上的单子按权重拆给成分股（addVolume 内部处理）
+  for (const row of out) addVolume(db, row.code, row.qty);
   const cap = Number(cfg.tradeLogMax) || 3000;
   if (db.trades.length > cap) db.trades.splice(0, db.trades.length - cap);
   return out;

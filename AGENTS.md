@@ -37,6 +37,7 @@ node tests/report-trend-expectation.mjs  # 市场预期=最近5期走势拟合�
 node tests/skill-text.mjs            # 主题技能文案跟着配置走（改技能/文案必跑，47 条）
 node tests/admin-panel.mjs           # 参数面板一致性：幽灵键/重复键/漏白名单（改设置面板必跑，18 条）
 node tests/market-schedule.mjs       # 定时休市 / 循环作息（改开市规则必跑，48 条断言）
+node tests/index-volume.mjs          # 指数成交量按权重拆到个股（改成交量/指数必跑，23 条断言）
 node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占比/天花板（不是断言套，看表格）
 ```
 
@@ -62,7 +63,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 6. **发布流程**：改代码 → `node --check` → 本地跑通 → SFTP 上传 → 改线上数据（先备份）→
    `systemctl restart xdstock` → curl 验证 → `git commit` → `git push`（需代理 `127.0.0.1:4780`）。
 
-## 最容易踩的 20 个坑
+## 最容易踩的 22 个坑
 
 | 坑 | 症状 | 正解 |
 |---|---|---|
@@ -84,6 +85,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 | 市场预期写死成 0 | 玩家看不到「预期」，超预期/不及预期成了内部参数的游戏 | 用 `expectedGrowthFromHistory()`（最近 5 期营收回归外推），不够 3 期才回退模型口径 |
 | 券商活跃度用绝对口径 | 线上成交笔数少 → 营收被 25% 地板夹死 → 每期财报 0%、大鳄预览永远是「符合预期 0%」 | 用 `volumeFactorOf()`（volumeAvg / 慢速 volumeRef），migrate 会给贴地板的券商重置基准营收 |
 | 指数只算「在交易」的成分股 | 一停牌指数就闪崩（麦当劳停牌时 DENG −32%），复牌还回不来 | 遍历 status !== 'delisted'，停牌按最后价计；只有退市才剔除并强制调仓 |
+| 成交量只记在指数自己头上 | 指数 K 线有量、点进成分股全是空的 | 指数单按权重拆给成分股（`trading.js#addVolume`），指数成交量 = 成分股之和（`indexTickVolume`），别各算一份 |
 | v5 之后 B/S 标记消失 | 图上没有 B/S，也不报错（老守卫 `typeof setMarkers !== 'function'` 直接 return） | v5 用 `LightweightCharts.createSeriesMarkers(series, markers)`，见 `markerApi()` |
 | 升级图表库忘了改 API | v5 没有 `addCandlestickSeries`，调了直接抛，整页白屏 | v5 一律 `chart.addSeries(LightweightCharts.XxxSeries, opts)`；窗格用 `addPane()` + `setStretchFactor()`，别和 `setHeight()` 混用 |
 | payload 把引擎参数抖出去 | F12 里能看到 `trait.lotteryChance` / `volMult` / `fair` / `sentimentStrength`，等于把价格模型交给玩家 | 所有下发字段必须过 `src/wire.js` 白名单；跑 `node tests/payload-wire.mjs` |
