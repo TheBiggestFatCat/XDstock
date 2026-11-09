@@ -1,12 +1,22 @@
 /**
- * 15 分钟 K 线（单独存一份，保留 48 小时）
+ * 单独打包的中长周期 K 线（2026-11：5 分钟也单独存了）
  *
- * 为什么要单独存：主 `series` 只留 `historyTicks`(3600) 个 tick = 5 小时，
- * 15 分钟一根要 180 个 tick，从 series 里最多凑出 20 根。
- * 而 48 小时的 15m 只有 192 根 —— 存这 192 根比把 series 拉到 48 小时省 20 多倍。
+ * 为什么不直接用 `series`：
+ *   主 `series` 只留 `historyTicks`(3600) 个 tick = 5 小时，
+ *   5 分钟一根要 60 个 tick，从 series 里最多凑出 60 根；
+ *   而 1 分钟图有 300 根 —— 切到 5 分钟就只剩一条小尾巴，看不出一整天。
  *
+ * 现在两档都单独存：
+ *   - 5 分钟：`bars5`，60 tick / 根，300 根 = 25 小时（和 1 分钟图的 300 根对齐）
+ *   - 15 分钟：`bars15`，180 tick / 根，192 根 = 48 小时
+ *
+ * 数组项：`[bucket, open, high, low, close, volume]`，bucket = floor(absTick / 每根 tick 数)。
  * 这个模块只做纯计算，不依赖 engine / store，避免循环引用。
  */
+
+export const BAR5_TICKS = 60;       // 5 分钟 = 60 tick
+export const BAR5_MAX = 300;        // 300 根 = 25 小时（和 1 分钟图的 300 根一样多）
+export const BAR5_SEED_VER = 1;
 
 export const BAR15_TICKS = 180;     // 15 分钟 = 180 tick
 export const BAR15_MAX = 192;       // 192 根 = 48 小时
@@ -14,11 +24,10 @@ export const BAR15_MAX = 192;       // 192 根 = 48 小时
 export const BAR15_SEED_VER = 2;
 
 /**
- * 往 15 分钟 K 线里塞一个价格。
- * 同一根就更新 high / low / close，跨桶就新开一根，超过 BAR15_MAX 丢最老的。
- * 数组项：`[bucket, open, high, low, close]`，bucket = floor(absTick / 180)。
+ * 往一份 K 线里塞一个价格（通用实现）。
+ * 同一根就更新 high / low / close，跨桶就新开一根，超过 max 丢最老的。
  */
-export function pushBar15(list, bucket, price, volume = 0) {
+export function pushBar(list, bucket, price, volume = 0, max = BAR15_MAX) {
   const p = Number(price);
   if (!Array.isArray(list) || !Number.isFinite(p) || p <= 0) return list;
   if (!Number.isFinite(bucket)) return list;
@@ -35,26 +44,26 @@ export function pushBar15(list, bucket, price, volume = 0) {
   // 只往未来开新的一根；乱序（理论上不该有）直接忽略
   if (!last || bucket > last[0]) {
     list.push([bucket, p, p, p, p, vol]);
-    if (list.length > BAR15_MAX) list.splice(0, list.length - BAR15_MAX);
+    if (list.length > max) list.splice(0, list.length - max);
   }
   return list;
 }
 
 /**
- * 冷启动 / 老存档升级时把 15 分钟 K 线铺满 192 根（从当前价往回随机走）。
+ * 冷启动 / 老存档升级时把一份 K 线铺满（从当前价往回随机走）。
  * 尾部必须接上当前价，否则图上最后一根会离现价很远。
  */
-export function seedBars15(list, price, tickNow, vol = 0.08) {
+export function seedBars(list, price, tickNow, vol = 0.08, max = BAR15_MAX, ticks = BAR15_TICKS) {
   const out = [];
   const sigma = Math.max(0.002, Math.min(0.25, Number(vol) || 0.08));
-  const bucketNow = Math.floor((Number(tickNow) || 0) / BAR15_TICKS);
+  const bucketNow = Math.floor((Number(tickNow) || 0) / ticks);
   const anchor = Number(price) > 0 ? Number(price) : 1;
   // 每根往回走完再往现价拉一点点：单根波动够大（跟真实盘面一个量级），
-  // 但 48 小时不至于跑飞成 10 倍
+  // 但整段不至于跑飞成 10 倍
   const kappa = 0.12;
   let cur = anchor;
 
-  for (let i = 0; i < BAR15_MAX; i++) {
+  for (let i = 0; i < max; i++) {
     const bucket = bucketNow - i;
     // 两段均匀分布相加 ≈ 正态，比纯 uniform 更像真行情
     const g = (Math.random() + Math.random() - 1) * sigma * 1.4;
@@ -79,18 +88,17 @@ export function seedBars15(list, price, tickNow, vol = 0.08) {
   return out;
 }
 
-/** 冷启动该用多大的单根波动：直接由 baseVolatility 推（每 tick σ × √180） */
-export function seedVolFromConfig(cfg) {
+/** 冷启动该用多大的单根波动：由 baseVolatility 推（每 tick σ × √根数） */
+export function seedVolFromConfig(cfg, ticks = BAR15_TICKS) {
   const tickVol = Math.max(0.0005, Number(cfg?.baseVolatility ?? 0.01));
-  // 理论上 √180 × 1% ≈ 13%，均值回归会削掉一部分，取 0.6 的系数
-  return Math.max(0.01, Math.min(0.2, tickVol * Math.sqrt(BAR15_TICKS) * 0.75));
+  return Math.max(0.01, Math.min(0.2, tickVol * Math.sqrt(ticks) * 0.75));
 }
 
 /**
- * 把 `[bucket,o,h,l,c]` 转成 K 线对象。
+ * 把 `[bucket,o,h,l,c,vol]` 转成 K 线对象。
  * @param {function} timeOf  (absTick) => 毫秒时间戳（由调用方用真实时间轴算）
  */
-export function bars15Candles(list, timeOf) {
+export function barsToCandles(list, timeOf, ticks = BAR15_TICKS) {
   const out = [];
   if (!Array.isArray(list)) return out;
   for (const b of list) {
@@ -102,7 +110,7 @@ export function bars15Candles(list, timeOf) {
     const c = Number(b[4]);
     if (![o, h, l, c].every((x) => Number.isFinite(x) && x > 0)) continue;
     if (!Number.isFinite(bucket)) continue;
-    const ms = typeof timeOf === 'function' ? timeOf(bucket * BAR15_TICKS) : 0;
+    const ms = typeof timeOf === 'function' ? timeOf(bucket * ticks) : 0;
     out.push({
       time: Math.floor(Number(ms) / 1000),
       open: Number(o.toFixed(4)),
@@ -113,4 +121,26 @@ export function bars15Candles(list, timeOf) {
     });
   }
   return out;
+}
+
+/* ---------- 15 分钟（老名字保留，老代码/测试还在用） ---------- */
+export function pushBar15(list, bucket, price, volume = 0) {
+  return pushBar(list, bucket, price, volume, BAR15_MAX);
+}
+export function seedBars15(list, price, tickNow, vol = 0.08) {
+  return seedBars(list, price, tickNow, vol, BAR15_MAX, BAR15_TICKS);
+}
+export function bars15Candles(list, timeOf) {
+  return barsToCandles(list, timeOf, BAR15_TICKS);
+}
+
+/* ---------- 5 分钟（2026-11 新增，根数和 1 分钟对齐） ---------- */
+export function pushBar5(list, bucket, price, volume = 0) {
+  return pushBar(list, bucket, price, volume, BAR5_MAX);
+}
+export function seedBars5(list, price, tickNow, vol = 0.03) {
+  return seedBars(list, price, tickNow, vol, BAR5_MAX, BAR5_TICKS);
+}
+export function bars5Candles(list, timeOf) {
+  return barsToCandles(list, timeOf, BAR5_TICKS);
 }

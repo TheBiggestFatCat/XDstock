@@ -19,7 +19,8 @@ function newDb() {
     feeRate: 0, stampDuty: 0, playerImpactEnabled: 0, impactCostCoef: 0,
     maxFillNotionalPerTick: 1e9, orderTtlTicks: 2000, maxPendingOrders: 5,
     maxOrdersPerTick: 9, liquidationBuffer: 0, limitOrderEnabled: 1,
-    levelFillBonus: 0, marketOpen: true, minLeverage: 1, maxLeverage: 10
+    levelFillBonus: 0, marketOpen: true, 
+    marketCycleEnabled: 0,   // 测试里别被「夜间休市」拦住minLeverage: 1, maxLeverage: 10
   });
   for (const st of Object.values(db.stocks)) { st.price = 100; st.fair = 100; }
   db.players.p = {

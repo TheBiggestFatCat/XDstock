@@ -37,6 +37,7 @@ function mkDb(patch = {}) {
   const db = migrate(createDb());
   // 先关掉跟这两个道具无关的随机性，再让测试自己覆盖
   Object.assign(db.config, {
+    marketCycleEnabled: 0,   // 测试里别被「夜间休市」拦住
     marketTradesEnabled: 0, hotMoneyEnabled: 0, sentimentEnabled: 0, playerImpactEnabled: 0,
     eventChance: 0, baseVolatility: 0, meanReversion: 0
   });

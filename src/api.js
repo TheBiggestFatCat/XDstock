@@ -3,7 +3,7 @@ import path from 'node:path';
 import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
 import { candlesFromSeries, changesFor, timeFromAxis, tickTimeAxis, pushNotice, noticeAlive, liveIndexWeights } from './engine.js';
 import { stockFullWire, configWire, positionWire } from './wire.js';
-import { bars15Candles } from './bars15.js';
+import { bars15Candles, bars5Candles } from './bars15.js';
 import { unlockedEmojis, pushEmote, visibleEmotes } from './emoji.js';
 import { pushVersionPost, latestVersionPost, listVersionPosts, deleteVersionPost, updateVersionPost } from './version.js';
 import { nightInfoFor } from './theme.js';
@@ -670,6 +670,16 @@ export async function handleApi(ctx) {
 
   // 15 分钟 K 线：单独一份 48 小时的包（192 根，约 10~16 KB）
   // 主 series 只有 5 小时，凑不出 48 小时的 15m，所以单独存、单独发
+  // 5 分钟 K 线：单独存一份（300 根 = 25 小时，和 1 分钟图一样多）
+  if (pathname === '/api/candles5' && method === 'GET') {
+    const code = String(query.code || '').toUpperCase();
+    const src = db.stocks[code];
+    if (!src) return json(res, 404, { error: '标的不存在' });
+    const axis = tickTimeAxis(db);
+    const candles = bars5Candles(src.bars5 || [], (absTick) => timeFromAxis(axis, absTick, db));
+    return json(res, 200, { code, tf: '5m', candles, max: candles.length });
+  }
+
   if (pathname === '/api/candles15' && method === 'GET') {
     const code = String(query.code || '').toUpperCase();
     const src = db.stocks[code];

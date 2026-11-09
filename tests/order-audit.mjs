@@ -26,6 +26,7 @@ const near = (a, b, eps = 1e-6) => Math.abs(a - b) < eps;
 function newDb(patch = {}) {
   const db = createDb();
   Object.assign(db.config, {
+    marketCycleEnabled: 0,   // 测试里别被「夜间休市」拦住
     feeRate: 0.0005,
     stampDuty: 0.0005,
     playerImpactEnabled: 0,

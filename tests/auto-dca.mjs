@@ -26,6 +26,7 @@ function newDb() {
   const db = createDb();
   db.tick = 100;
   Object.assign(db.config, {
+    marketCycleEnabled: 0,   // 测试里别被「夜间休市」拦住
     feeRate: 0.0005,
     stampDuty: 0.0005,
     impactCostCoef: 0,

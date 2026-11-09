@@ -23,7 +23,8 @@ function mkDb(patch = {}) {
   const db = migrate(createDb());
   Object.assign(db.config, {
     feeRate: 0, stampDuty: 0, playerImpactEnabled: 0, impactCostCoef: 0,
-    marketOpen: true, orderTtlTicks: 4000, maxTpslPerPosition: 8,
+    marketOpen: true, 
+    marketCycleEnabled: 0,   // 测试里别被「夜间休市」拦住orderTtlTicks: 4000, maxTpslPerPosition: 8,
     ...patch
   });
   db.tick = 10000;

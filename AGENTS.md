@@ -38,6 +38,7 @@ node tests/skill-text.mjs            # 主题技能文案跟着配置走（改�
 node tests/admin-panel.mjs           # 参数面板一致性：幽灵键/重复键/漏白名单（改设置面板必跑，18 条）
 node tests/market-schedule.mjs       # 定时休市 / 循环作息（改开市规则必跑，48 条断言）
 node tests/index-volume.mjs          # 指数成交量按权重拆到个股（改成交量/指数必跑，23 条断言）
+node tests/candles5.mjs              # 5 分钟 K 线单独打包（改 K 线接口/存储必跑，24 条断言）
 node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占比/天花板（不是断言套，看表格）
 ```
 
@@ -116,7 +117,7 @@ src/orders.js      限价单、撮合队列（风控单优先 → 价格优先�
 src/theme.js       夜行者时间窗 / 偷钱冷却（技能判定一律读 player.skill）
 src/achievements.js 主题成就 16 条 + 全局成就 2 条 + 结晶/进化（阈值全走 config）
 src/emoji.js       表情互动（按等级解锁、每轮只留最后一个、按票隔离）
-src/bars15.js      15 分钟 K 线单独打包（48 小时）
+src/bars15.js      中长周期 K 线单独打包：5 分钟 300 根(25h) / 15 分钟 192 根(48h)
 src/schedule.js   定时休市 / 循环作息（marketPhase 唯一入口）
 src/notify.js      站内通知（止盈止损/强平/被偷）
 src/steal.js       偷钱金额（上限按对方现金）

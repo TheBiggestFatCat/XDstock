@@ -27,7 +27,8 @@ function newDb(patch = {}) {
   const db = createDb();
   Object.assign(db.config, {
     feeRate: 0, stampDuty: 0, playerImpactEnabled: 0, impactCostCoef: 0,
-    limitOrderEnabled: 1, marketOpen: true, levelFillBonus: 0,
+    limitOrderEnabled: 1, marketOpen: true, 
+    marketCycleEnabled: 0,   // 测试里别被「夜间休市」拦住levelFillBonus: 0,
     ...Object.fromEntries(Object.entries(DEFAULT_CONFIG).filter(([k]) => k.startsWith('achv')))
   }, patch);
   db.tick = 1000;

@@ -1,5 +1,5 @@
 import { INDEX_BASE, SMALL_INDEX_STOCK } from './stocks.js';
-import { pushBar15, BAR15_TICKS } from './bars15.js';
+import { pushBar15, pushBar5, BAR15_TICKS, BAR5_TICKS } from './bars15.js';
 import { TYCOON_LEAD_TICKS, isTycoonSector, genNextReport, fairFromReport, fairFromHistory, impactFactor, industryMidGrowth, rollWeather, dividendPerShare } from './fundamentals.js';
 export { TYCOON_LEAD_TICKS };
 import { genMarketTrades } from './marketTrades.js';
@@ -711,6 +711,7 @@ export function stepMarket(db) {
     if (st.series.length > cap) st.series.splice(0, st.series.length - cap);
     // 15 分钟 K 线单独攒一份（48 小时）
     pushBar15(st.bars15, Math.floor(db.tick / BAR15_TICKS), st.price);
+    pushBar5(st.bars5, Math.floor(db.tick / BAR5_TICKS), st.price);
   }
 
   // 3.5 生成市场噪声成交（会推动价格：走 st.mflow 市场资金通道）
@@ -731,8 +732,9 @@ export function stepMarket(db) {
     st.volSeries.push(vol);
     const vcap = cfg.historyTicks ?? 3600;
     if (st.volSeries.length > vcap) st.volSeries.splice(0, st.volSeries.length - vcap);
-    // 15 分钟那根：价格在上面已经 push 过，这里只补成交量
+    // 15 分钟 / 5 分钟那根：价格在上面已经 push 过，这里只补成交量
     pushBar15(st.bars15, Math.floor(db.tick / BAR15_TICKS), st.price, vol);
+    pushBar5(st.bars5, Math.floor(db.tick / BAR5_TICKS), st.price, vol);
   }
   for (const st of stocks) {
     if (!st.isIndex) continue;
@@ -743,6 +745,7 @@ export function stepMarket(db) {
     const vcap = cfg.historyTicks ?? 3600;
     if (st.volSeries.length > vcap) st.volSeries.splice(0, st.volSeries.length - vcap);
     pushBar15(st.bars15, Math.floor(db.tick / BAR15_TICKS), st.price, vol);
+    pushBar5(st.bars5, Math.floor(db.tick / BAR5_TICKS), st.price, vol);
   }
 
   // 3.58 天气股对齐（共用天气、同时发报）
@@ -824,6 +827,7 @@ export function stepMarket(db) {
           idxStock.series.splice(0, idxStock.series.length - 3600);
         }
         pushBar15(idxStock.bars15, Math.floor(db.tick / BAR15_TICKS), db.index.value);
+  pushBar5(idxStock.bars5, Math.floor(db.tick / BAR5_TICKS), db.index.value);
         idxStock.changePct = 0;
       }
     }
@@ -882,6 +886,7 @@ export function stepMarket(db) {
         sidxStock.series.splice(0, sidxStock.series.length - 3600);
       }
       pushBar15(sidxStock.bars15, Math.floor(db.tick / BAR15_TICKS), sidx.value);
+  pushBar5(sidxStock.bars5, Math.floor(db.tick / BAR5_TICKS), sidx.value);
     }
     sidx.series.push(sidx.value);
     if (sidx.series.length > 3600) sidx.series.splice(0, sidx.series.length - 3600);

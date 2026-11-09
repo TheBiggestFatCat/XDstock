@@ -160,7 +160,8 @@ log('=== 7 接进 runReports：价值线走拟合值，而不是最后一期 ===
   const db = migrate(createDb());
   const st = db.stocks.TGW;
   Object.assign(db.config, {
-    marketOpen: true, dividendRate: 0, reportIntervalTicks: 720,
+    marketOpen: true, 
+    marketCycleEnabled: 0,   // 测试里别被「夜间休市」拦住dividendRate: 0, reportIntervalTicks: 720,
     baseVolatility: 0, meanReversion: 0, eventChance: 0, marketTradesRate: 0,
     hotMoneyEnabled: 0, sentimentEnabled: 0, playerImpactEnabled: 0
   });
@@ -211,7 +212,8 @@ log('=== 9 拟合期数可配（cfg.fairLookback，默认 8）===');
 
   const db = migrate(createDb());
   Object.assign(db.config, {
-    marketOpen: true, dividendRate: 0, reportIntervalTicks: 720,
+    marketOpen: true, 
+    marketCycleEnabled: 0,   // 测试里别被「夜间休市」拦住dividendRate: 0, reportIntervalTicks: 720,
     baseVolatility: 0, meanReversion: 0, eventChance: 0, marketTradesRate: 0,
     hotMoneyEnabled: 0, sentimentEnabled: 0, playerImpactEnabled: 0, fairLookback: 8
   });

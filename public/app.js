@@ -3470,9 +3470,10 @@ const OVERLAY_STYLE = {
 
 /** 拉 K 线的地址：15 分钟单独一个包，其它走 /api/candles */
 function candlesUrlFor(code, tf) {
-  return tf === '15m'
-    ? `/api/candles15?code=${encodeURIComponent(code)}`
-    : `/api/candles?code=${encodeURIComponent(code)}&tf=${tf}`;
+  // 5m / 15m 都有单独的数据包（series 只留 5 小时，直接算的话 5m 只有 60 根）
+  if (tf === '15m') return `/api/candles15?code=${encodeURIComponent(code)}`;
+  if (tf === '5m') return `/api/candles5?code=${encodeURIComponent(code)}`;
+  return `/api/candles?code=${encodeURIComponent(code)}&tf=${tf}`;
 }
 
 /** 清洗 K 线：时间必须递增且唯一（图表库按时间查不到会直接不画） */
