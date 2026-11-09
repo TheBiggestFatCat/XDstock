@@ -69,6 +69,10 @@ export function estimateReserve(db, st, price, qty, leverage, side, player = nul
  * 返回 null = 还能下单；否则是给玩家看的提示
  */
 export function orderLimitBlocked(db, player) {
+  // 休市期间 db.tick 不前进，次数计数会一直卡在同一个 tick 上 ——
+  // 不放开的话整段休市只能挂 1 单（玩家抱怨过），这里直接跳过次数限制，
+  // 真正的上限还是 maxPendingOrders（同时挂几笔）。
+  if (!marketPhase(db).open) return null;
   const max = num((db.config || {}).maxOrdersPerTick, 1);
   if (!(max > 0)) return null;
   const sameTick = player.orderTick === db.tick;
@@ -134,12 +138,9 @@ export function placeLimitOrder(db, player, body) {
   if (num(cfg.limitOrderEnabled, 1) === 0) {
     return { ok: false, error: '挂单功能已关闭' };
   }
-  // 休市：前端会把按钮置灰，但接口必须自己拦（否则能绕过页面挂单占押金）
-  // 管理员一刀切 / 定时休市 / 循环作息 都算休市
-  if (!marketPhase(db).open) {
-    const label = marketPhase(db).label || '休市';
-    return { ok: false, status: 423, error: label + '，暂停交易' };
-  }
+  // 休市期间**允许挂单**（2026-11 改）：只冻结行情和撮合，
+  // 挂单照常进队列、押金照常冻结，开市后的第一轮撮合才成交。
+  // 想彻底禁交易就把 config.marketOpen 置 0（总开关），那时引擎整轮不跑，订单也不会成交。
 
   const code = String(body.code || '').toUpperCase();
   const st = db.stocks[code];

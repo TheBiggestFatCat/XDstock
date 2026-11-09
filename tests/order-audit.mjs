@@ -220,13 +220,14 @@ log('=== 9 撤单 / 超时撤单都全额退款 ===');
 
 // ---------------------------------------------------------------- 10
 log('');
-log('=== 10 休市期间禁止下单 ===');
+log('=== 10 休市期间可以挂单（2026-11 改：只冻结行情与撮合）===');
 {
   const db = newDb({ marketOpen: false });
   const p = mkPlayer(db, 'a', 100000);
   const r = placeLimitOrder(db, p, { code: 'TGW', action: 'open', side: 'long', qty: 1, leverage: 1, limit: 101 });
-  check('休市挂单被拒（修复 B9）', !r.ok && r.status === 423, r.error || '竟然成功了');
-  check('押金没被动', near(p.cash, 100000));
+  check('休市挂单能挂上', r.ok === true, r.error || '');
+  check('押金照样冻结', r.ok && !near(p.cash, 100000), String(p.cash));
+  check('只是进队列，没立刻成交', p.orders.length === 1 && !(p.positions && p.positions.TGW));
 }
 
 // ---------------------------------------------------------------- 11
@@ -403,6 +404,23 @@ log('=== 挂单有效期 ===');
   check('普通挂单 expireTick = tick + 2000',
     r.ok && r.order.expireTick === db.tick + 2000,
     r.ok ? `expireTick=${r.order.expireTick}` : r.error);
+}
+
+// ---------------------------------------------------------------- 休市
+log('');
+log('=== 休市：只冻结行情和撮合，挂单照常（2026-11 改）===');
+{
+  const db = newDb({ marketOpen: 0 });      // 总开关休市
+  const p = mkPlayer(db, 'closed', 100000);
+  const r = placeLimitOrder(db, p, { code: 'TGW', action: 'open', side: 'long', qty: 100, leverage: 1, limit: 101 });
+  check('休市时也能挂开仓单', r.ok === true, r.error || '');
+  check('押金照常冻结（现金已经扣掉）', r.ok && p.cash < 100000, String(p.cash));
+  check('只是进队列，没有立刻成交', !(p.positions && p.positions.TGW));
+
+  const p2 = mkPlayer(db, 'b', 100000);
+  p2.positions.TGW = { code: 'TGW', side: 'long', qty: 100, entry: 100, leverage: 1, margin: 10000 };
+  const r2 = placeLimitOrder(db, p2, { code: 'TGW', action: 'close', side: 'long', limit: 99 });
+  check('休市时也能挂平仓单', r2.ok === true, r2.error || '');
 }
 
 console.log(out.join('\n'));

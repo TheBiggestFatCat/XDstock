@@ -4334,3 +4334,12 @@ body[data-theme="bear"] .brand-logo {
   .close-in { margin-left: 4px; padding: 1px 7px; font-size: 11px; }
   .close-in-dot { display: none; }
 }
+
+/* ---------- 休市时下单区的小提示 ---------- */
+.closed-trade-hint {
+  margin: 8px 0 0; padding: 7px 10px; border-radius: 9px;
+  font-size: 12px; line-height: 1.6; color: #b45309;
+  background: rgba(245, 158, 11, .1);
+  border: 1px solid rgba(245, 158, 11, .22);
+}
+.closed-trade-hint.hidden { display: none; }

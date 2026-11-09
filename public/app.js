@@ -537,7 +537,7 @@ function renderClosed() {
         const ss = Math.floor((left % 60000) / 1000);
         tail = ` · ${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')} 后开市`;
       }
-      if (body) body.textContent = (text ? text.split(' · ')[0] : '休市中') + tail;
+      if (body) body.textContent = (text ? text.split(' · ')[0] : '休市中') + tail + ' · 仍可挂单 / 设止盈止损';
     }
   }
   // 按钮文案统一交给 updateCostPreview 处理，避免每 tick 被刷回去
@@ -3100,10 +3100,12 @@ function updateOrderBtnLabel() {
   const btn = $('#orderBtn');
   if (!btn) return;
 
-  // 休市优先
+  // 休市：只暂停成交，挂单照常能点（2026-11 改）
+  // 按钮不禁用，但文案写清「开市后才成交」，避免玩家以为点了就立刻成交
   if (state.market?.marketOpen === false) {
-    btn.textContent = '休市中，暂停交易';
-    btn.disabled = true;
+    const modeNow = state.orderMode || 'open';
+    btn.textContent = modeNow === 'close' ? '挂平仓单（开市后成交）' : '挂开仓单（开市后成交）';
+    btn.disabled = false;
     return;
   }
 
@@ -4575,6 +4577,24 @@ function updateCostPreview() {
   }
   const closed = state.market?.marketOpen === false;
   $('.trade-panel')?.classList.toggle('is-closed', closed);
+  // 休市只是冻结行情和撮合：挂单、止盈止损照常能设，开市后第一轮才成交
+  const hint = $('#closedTradeHint');
+  if (hint) {
+    hint.classList.toggle('hidden', !closed);
+    if (closed) {
+      const until = Number(state.market?.closedUntil) || 0;
+      const clock = until > Date.now()
+        ? (() => {
+          const left = Math.max(0, until - Date.now());
+          const mm = Math.floor(left / 60000);
+          const ss = Math.floor((left % 60000) / 1000);
+          return `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+        })()
+        : '';
+      const why = state.market?.closedLabel || '休市中';
+      hint.textContent = `${why}：现在挂的单会先冻结押金，${clock ? clock + ' 后' : ''}开市才成交`;
+    }
+  }
   // 按钮文案统一由 updateOrderBtnLabel 决定（要看开仓/平仓模式）
   updateOrderBtnLabel();
 }
