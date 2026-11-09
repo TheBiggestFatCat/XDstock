@@ -744,7 +744,8 @@ input.tpsl-input {
   .index-value { font-size: 16px; }
   .index-change { font-size: 11px; }
   .cash-box { display: flex; flex-direction: row; align-items: baseline; gap: 5px; }
-  .cash-label { font-size: 10px; }
+  /* 手机上不显示「总资产」三个字，只留数字（省宽度，金额本身看得懂） */
+  .topbar .cash-label { display: none; }
   .cash-value { font-size: 14px; }
   .user-box { display: none; }
   .avatar-btn { width: 30px; height: 30px; }
