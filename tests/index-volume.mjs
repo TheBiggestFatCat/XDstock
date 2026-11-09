@@ -152,11 +152,28 @@ log('');
 log('=== 5 两个指数各自独立 ===');
 {
   const db = calmDb();
+  // 大指数 = 全部 10 只；小指数 = 流通市值最小的 3 只（线上 DENGS 是 7 只，逻辑一样）
+  const all = Object.values(db.stocks).filter((s) => !s.isIndex);
+  rebalanceIndex(db, all, 1000);
+  const cap = (s) => s.price * s.shares * (s.freeFloat || 0.45);
+  const smallest = all.slice().sort((a, b) => cap(a) - cap(b)).slice(0, 3);
+  db.smallIndex = db.smallIndex || {};
+  db.smallIndex.weights = Object.fromEntries(smallest.map((s) => [s.code, 1 / smallest.length]));
+  for (const s of Object.values(db.stocks)) { s.volTick = 0; s.volSeries = []; }
+
   addVolume(db, 'TGW', 1000);
   const big = indexTickVolume(db, 'index');
   const small = indexTickVolume(db, 'smallIndex');
   check('大指数包含全部正常成分的量', near(big, 1000), big.toFixed(1));
-  check('小指数只算它自己的成分', small <= big + 1e-9, `${small.toFixed(1)} <= ${big.toFixed(1)}`);
+  check('小指数只算自己的成分（不含非成分股）', small < big + 1e-9,
+    `小指数 ${small.toFixed(1)} <= 大指数 ${big.toFixed(1)}`);
+
+  // 小指数成分股的成交要计入小指数
+  const member = smallest[0];
+  const v0 = indexTickVolume(db, 'smallIndex');
+  addVolume(db, member.code, 500);
+  const d = indexTickVolume(db, 'smallIndex') - v0;
+  check('小指数成分股的成交会计入小指数', d >= 500 - 1e-9, `+${d.toFixed(1)}`);
 }
 
 console.log = realLog;

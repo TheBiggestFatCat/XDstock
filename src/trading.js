@@ -44,7 +44,9 @@ export function addVolume(db, code, qty) {
  */
 export function indexTickVolume(db, indexKey = 'index', tickVol = null) {
   let total = 0;
-  for (const { st } of indexWeights(db, indexKey)) {
+  for (const { st, weight } of indexWeights(db, indexKey)) {
+    // 只算这个指数的成分股（indexWeights 会把所有正常交易的票都列出来，非成员的 weight = 0）
+    if (!(weight > 0)) continue;
     const v = tickVol && typeof tickVol.get === 'function'
       ? tickVol.get(st.code)
       : st.volTick;
