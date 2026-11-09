@@ -66,6 +66,7 @@ export function pushChat(db, player, payload = {}) {
     pid: player.id,
     nick: player.nickname || '匿名',
     lv: Number(player.level) || 1,
+    avatar: player.avatar || null,   // 落一份当快照（玩家删号后还能显示）
     type: payload.type || 'text'
   };
   if (payload.text !== undefined) msg.text = String(payload.text);
@@ -177,11 +178,25 @@ export function chatRows(db, { afterSeq = 0, limit = 100 } = {}) {
   for (const pk of Object.values(db.redPackets)) {
     if (pk) packets[pk.id] = packetView(pk);
   }
+  /**
+   * 头像按「玩家现在的头像」实时解析：
+   * 换头像之后，聊天室里他以前发过的消息也跟着变（不是快照）。
+   * 玩家被删号了才退回消息里存的那份。
+   */
+  const avatars = {};
+  for (const m of all) {
+    if (!m || !m.pid || Object.prototype.hasOwnProperty.call(avatars, m.pid)) continue;
+    const owner = db.players ? db.players[m.pid] : null;
+    avatars[m.pid] = (owner && owner.avatar) || m.avatar || null;
+  }
   return {
     seq: c.seq,
-    rows: rows.map((m) => (m.type === 'packet'
-      ? { ...m, packet: packets[m.packetId] || null }
-      : m)),
+    rows: rows.map((m) => {
+      const out = { ...m, avatar: avatars[m.pid] ?? m.avatar ?? null };
+      if (m.type === 'packet') out.packet = packets[m.packetId] || null;
+      return out;
+    }),
+    avatars,
     packets,
     max: CHAT_MAX,
     total: all.length

@@ -4457,11 +4457,18 @@ body[data-theme="bear"] .brand-logo {
 .chat-row.is-me { flex-direction: row-reverse; }
 
 .chat-avatar {
+  position: relative; overflow: hidden;
   flex: none; width: 34px; height: 34px; border-radius: 11px;
   display: flex; align-items: center; justify-content: center;
   font-size: 19px; background: var(--soft-2, #eef4f2);
   border: 1px solid var(--line);
 }
+/* 真实头像铺满；加载失败会自己 remove()，露出底下的 emoji 兜底 */
+.chat-avatar-img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; border-radius: inherit; z-index: 1;
+}
+.chat-avatar .ca-fb { position: relative; z-index: 0; }
 .chat-row.is-me .chat-avatar { background: rgba(18, 184, 134, .14); border-color: rgba(18, 184, 134, .3); }
 
 .chat-main { max-width: min(76%, 620px); display: flex; flex-direction: column; gap: 4px; }

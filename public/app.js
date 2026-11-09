@@ -612,6 +612,12 @@ function renderTopbar() {
 
 /** 头像同时更新顶栏和「我的」资料卡 */
 function applyAvatar(url) {
+  // 自己的头像变了，聊天室里自己发过的消息也跟着换（不等下一轮）
+  if (state.chat?.open && state.market?.me) {
+    state.market.me.avatar = url || null;
+    state.chat.avatars = { ...(state.chat.avatars || {}), [state.market.me.id]: url || null };
+    syncChatAvatars();
+  }
   const on = !!url;
   for (const sel of ['#avatarImg', '#profileAvatarImg']) {
     const img = $(sel);
@@ -6842,6 +6848,16 @@ const CHAT_AVATARS = ['🐱', '🐶', '🐼', '🦊', '🐸', '🐯', '🦁', '�
 const CHAT_PAGE = 100;
 const CHAT_MAX_UI = 300;   // 前端最多留多少条在 DOM 里（后端保留 500）
 
+/** 聊天头像：有上传的头像就显示图片，没有就退回按昵称生成的动物 emoji */
+function chatAvatarHtml(m, mine) {
+  const url = m.avatar || (mine ? state.market?.me?.avatar : null) || null;
+  const fb = chatAvatarOf(m.nick);
+  const img = url
+    ? `<img class="chat-avatar-img" src="${escapeHtml(url)}" alt="" loading="lazy" onerror="this.remove()" />`
+    : '';
+  return `<span class="chat-avatar" title="${escapeHtml(m.nick || '')}">${img}<span class="ca-fb">${fb}</span></span>`;
+}
+
 function chatAvatarOf(nick) {
   const s = String(nick || '');
   let h = 0;
@@ -6894,7 +6910,6 @@ function renderChatRow(m) {
   const me = state.market?.me?.id;
   const mine = m.pid === me;
   const nick = escapeHtml(m.nick || '匿名');
-  const avatar = chatAvatarOf(m.nick);
   const time = chatTimeOf(m.at);
   let body = '';
   if (m.type === 'emoji') {
@@ -6934,8 +6949,8 @@ function renderChatRow(m) {
   } else {
     body = `<div class="chat-bubble">${escapeHtml(m.text || '')}</div>`;
   }
-  return `<div class="chat-row ${mine ? 'is-me' : ''}" data-seq="${m.seq}">
-    <span class="chat-avatar" aria-hidden="true">${avatar}</span>
+  return `<div class="chat-row ${mine ? 'is-me' : ''}" data-seq="${m.seq}" data-pid="${escapeHtml(m.pid || '')}">
+    ${chatAvatarHtml(m, mine)}
     <div class="chat-main">
       <div class="chat-meta">
         <span class="chat-nick">${nick}</span>
@@ -6984,6 +6999,8 @@ async function loadChat(afterSeq = 0) {
     const q = afterSeq > 0 ? `?after=${afterSeq}&limit=${CHAT_PAGE}` : `?limit=${CHAT_PAGE}`;
     const d = await api('/api/chat' + q);
     state.chat.packets = { ...(state.chat.packets || {}), ...(d.packets || {}) };
+    state.chat.avatars = { ...(state.chat.avatars || {}), ...(d.avatars || {}) };
+    syncChatAvatars();
     if (afterSeq > 0 && (d.rows || []).length) {
       const known = new Set(state.chat.rows.map((m) => m.seq));
       const add = d.rows.filter((m) => !known.has(m.seq));
@@ -7009,6 +7026,32 @@ async function loadChat(afterSeq = 0) {
     chatTip('聊天加载失败：' + e.message, 'is-bad');
   } finally {
     state.chat.loading = false;
+  }
+}
+
+/** 头像同步：玩家换了头像，聊天室里他发过的消息全部跟着换 */
+function syncChatAvatars() {
+  const box = $('#chatBody');
+  if (!box) return;
+  const map = state.chat.avatars || {};
+  const meAvatar = state.market?.me?.avatar || null;
+  const meId = state.market?.me?.id;
+  for (const el of box.querySelectorAll('.chat-row[data-pid]')) {
+    const pid = el.dataset.pid;
+    if (!pid) continue;
+    const holder = el.querySelector('.chat-avatar');
+    if (!holder) continue;
+    const want = map[pid] ?? (pid === meId ? meAvatar : null);
+    const img = holder.querySelector('.chat-avatar-img');
+    if (!want) {
+      if (img) img.remove();
+      continue;
+    }
+    if (!img) {
+      holder.insertAdjacentHTML('afterbegin', `<img class="chat-avatar-img" src="${escapeHtml(want)}" alt="" loading="lazy" onerror="this.remove()" />`);
+    } else if (img.getAttribute('src') !== want) {
+      img.setAttribute('src', want);
+    }
   }
 }
 
@@ -7059,6 +7102,7 @@ async function sendChatEmoji(file) {
 function mergeChatPayload(d) {
   if (!d || !Array.isArray(d.rows)) return;
   state.chat.packets = { ...(state.chat.packets || {}), ...(d.packets || {}) };
+  state.chat.avatars = { ...(state.chat.avatars || {}), ...(d.avatars || {}) };
   const known = new Set(state.chat.rows.map((m) => m.seq));
   const add = d.rows.filter((m) => !known.has(m.seq));
   if (add.length) {
