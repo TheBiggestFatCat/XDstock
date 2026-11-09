@@ -448,56 +448,85 @@
                   <span class="panel-sub" id="schPhase">—</span>
                 </div>
 
-                <div class="sch-cycle">
-                  <label class="field"><span>循环作息</span>
-                    <select id="schCycleEnabled" data-cfg="marketCycleEnabled">
-                      <option value="1">开（按现实时间循环）</option>
-                      <option value="0">关</option>
-                    </select>
-                  </label>
-                  <label class="field"><span>开市(分钟)</span>
-                    <input id="schCycleOpen" type="number" min="1" max="1440" step="1" value="5" data-cfg="marketCycleOpenMin" />
-                  </label>
-                  <label class="field"><span>休市(分钟)</span>
-                    <input id="schCycleClose" type="number" min="0" max="1440" step="1" value="2" data-cfg="marketCycleCloseMin" />
-                  </label>
-                  <button id="schCycleSave" class="btn btn-primary">保存节奏</button>
-                </div>
-                <p class="panel-sub" style="margin:-6px 0 14px">
-                  默认 开 5 分 / 休 2 分：「白天」5 分钟走行情，「夜里」2 分钟冻结。
-                  一根 5 分钟 K 线 = 一个交易日。休市期间价格、新闻、撮合全部暂停，挂单会被拒。
-                </p>
-
-                <div class="sch-add">
-                  <div class="sch-add-box">
-                    <div class="sch-add-title">一次性休市（指定几号几点）</div>
-                    <label class="field"><span>开始时间</span>
-                      <input id="schOnceAt" type="datetime-local" />
-                    </label>
-                    <label class="field"><span>休市时长(分钟)</span>
-                      <input id="schOnceDur" type="number" min="1" max="1440" step="5" value="30" />
-                    </label>
-                    <label class="field"><span>备注（可留空）</span>
-                      <input id="schOnceNote" type="text" maxlength="40" placeholder="例如：维护" />
-                    </label>
-                    <button id="schOnceAdd" class="btn btn-primary">添加一次性</button>
+                <div class="sch-card">
+                  <div class="sch-card-head">
+                    <b>循环作息</b>
+                    <span class="sch-card-sub">按现实时间循环：开市一段、休市一段，永久生效</span>
                   </div>
-
-                  <div class="sch-add-box">
-                    <div class="sch-add-title">计划性休市（每天同一时间）</div>
-                    <label class="field"><span>每天几点</span>
-                      <input id="schDailyAt" type="time" value="09:30" />
+                  <div class="sch-form">
+                    <label class="sch-field">
+                      <span>开关</span>
+                      <select id="schCycleEnabled" data-cfg="marketCycleEnabled">
+                        <option value="1">开（按现实时间循环）</option>
+                        <option value="0">关（24 小时不停市）</option>
+                      </select>
                     </label>
-                    <label class="field"><span>休市时长(分钟)</span>
-                      <input id="schDailyDur" type="number" min="1" max="1440" step="5" value="30" />
+                    <label class="sch-field">
+                      <span>开市时长</span>
+                      <div class="sch-input"><input id="schCycleOpen" type="number" min="1" max="1440" step="1" value="5" data-cfg="marketCycleOpenMin" /><i>分钟</i></div>
                     </label>
-                    <label class="field"><span>备注（可留空）</span>
-                      <input id="schDailyNote" type="text" maxlength="40" placeholder="例如：早盘前维护" />
+                    <label class="sch-field">
+                      <span>休市时长</span>
+                      <div class="sch-input"><input id="schCycleClose" type="number" min="0" max="1440" step="1" value="2" data-cfg="marketCycleCloseMin" /><i>分钟</i></div>
                     </label>
-                    <button id="schDailyAdd" class="btn btn-primary">添加每天计划</button>
+                    <button id="schCycleSave" class="btn btn-primary sch-save">保存节奏</button>
                   </div>
+                  <p class="sch-tip">
+                    默认 <b>开 5 分 / 休 2 分</b>：白天 5 分钟走行情，夜里 2 分钟冻结。
+                    一根 <b>5 分钟 K 线 = 一个交易日</b>。休市期间价格、新闻、撮合全部暂停，挂单会被拒。
+                  </p>
                 </div>
 
+                <div class="sch-grid">
+                  <div class="sch-card">
+                    <div class="sch-card-head">
+                      <b>一次性休市</b>
+                      <span class="sch-card-sub">指定某年某月某日某时，过点自动停 / 自动恢复</span>
+                    </div>
+                    <div class="sch-form">
+                      <label class="sch-field">
+                        <span>开始时间</span>
+                        <input id="schOnceAt" type="datetime-local" />
+                      </label>
+                      <label class="sch-field">
+                        <span>休市时长</span>
+                        <div class="sch-input"><input id="schOnceDur" type="number" min="1" max="1440" step="5" value="30" /><i>分钟</i></div>
+                      </label>
+                      <label class="sch-field">
+                        <span>备注</span>
+                        <input id="schOnceNote" type="text" maxlength="40" placeholder="可留空，例如：维护" />
+                      </label>
+                      <button id="schOnceAdd" class="btn btn-primary sch-save">添加</button>
+                    </div>
+                  </div>
+
+                  <div class="sch-card">
+                    <div class="sch-card-head">
+                      <b>计划性休市</b>
+                      <span class="sch-card-sub">每天同一时间，可跨零点（23:30 起休 90 分 → 次日 01:00 开市）</span>
+                    </div>
+                    <div class="sch-form">
+                      <label class="sch-field">
+                        <span>每天几点</span>
+                        <input id="schDailyAt" type="time" value="09:30" />
+                      </label>
+                      <label class="sch-field">
+                        <span>休市时长</span>
+                        <div class="sch-input"><input id="schDailyDur" type="number" min="1" max="1440" step="5" value="30" /><i>分钟</i></div>
+                      </label>
+                      <label class="sch-field">
+                        <span>备注</span>
+                        <input id="schDailyNote" type="text" maxlength="40" placeholder="可留空，例如：早盘维护" />
+                      </label>
+                      <button id="schDailyAdd" class="btn btn-primary sch-save">添加</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="sch-list-head">
+                  <b>已配置的计划</b>
+                  <span class="panel-sub" id="schCount">0 条</span>
+                </div>
                 <div id="schList" class="sch-list"></div>
               </div>
 

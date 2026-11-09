@@ -753,6 +753,21 @@ export async function handleApi(ctx) {
   }
   if (pathname === '/api/admin/schedule' && method === 'POST') {
     const action = String(body.action || '');
+    // 兼容：没带 action（或前端误用 POST 拉列表）就当查询处理，别报「没有这条计划」
+    if (!action) {
+      ensureSchedules(db);
+      return json(res, 200, {
+        ok: true,
+        schedules: db.marketSchedules || [],
+        phase: marketPhase(db),
+        phaseText: phaseText(marketPhase(db)),
+        config: {
+          marketCycleEnabled: db.config.marketCycleEnabled ?? 0,
+          marketCycleOpenMin: db.config.marketCycleOpenMin ?? 5,
+          marketCycleCloseMin: db.config.marketCycleCloseMin ?? 2
+        }
+      });
+    }
     ensureSchedules(db);
     if (!Array.isArray(db.marketSchedules)) db.marketSchedules = [];
 

@@ -5347,6 +5347,14 @@ async function adminLogin() {
   }
 }
 
+/** 管理端只读请求（adminApi 固定 POST，GET 要单独走这个） */
+async function adminGet(path) {
+  const res = await fetch(path, { headers: { Authorization: 'Bearer ' + state.adminToken } });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(d.error || '读取失败');
+  return d;
+}
+
 async function adminApi(path, body) {
   const res = await fetch(path, {
     method: 'POST',
@@ -5673,7 +5681,8 @@ function fmtMinuteStr(min) {
 
 /** 拉一次定时休市状态（列表 + 当前相位 + 循环参数）*/
 async function loadSchedules() {
-  const d = await adminApi('/api/admin/schedule');
+  // 列表是 GET：以前误用了 adminApi（固定 POST，带空 body）→ 后端当成「找 id 为空的计划」→ 404
+  const d = await adminGet('/api/admin/schedule');
   state.schedules = d.schedules || [];
   state.schPhase = d.phase || null;
   state.schPhaseText = d.phaseText || '';
@@ -5709,14 +5718,16 @@ function renderSchedules(cfg) {
   if (cl && document.activeElement !== cl) cl.value = String(cfg.marketCycleCloseMin ?? 2);
 
   const box = $('#schList');
-  if (!box) return;
   const list = state.schedules || [];
+  const countEl = $('#schCount');
+  if (countEl) countEl.textContent = list.length ? `${list.length} 条` : '暂无';
+  if (!box) return;
   if (!list.length) {
-    box.innerHTML = '<div class="panel-sub">还没有定时计划（循环作息仍然生效）</div>';
+    box.innerHTML = '<div class="panel-sub" style="padding:6px 2px">还没有定时计划（上面的循环作息仍然生效）</div>';
     return;
   }
   const now = Date.now();
-  const rows = list.map((s) => {
+  box.innerHTML = list.map((s) => {
     const active = state.schPhase && state.schPhase.scheduleId === s.id;
     const done = s.done || (s.kind === 'once' && s.startAt + s.durationMin * 60000 <= now && !active);
     const cls = 'sch-row' + (s.enabled === false ? ' off' : '') + (done ? ' done' : '');
@@ -5727,15 +5738,14 @@ function renderSchedules(cfg) {
       <span class="sch-tag ${s.kind}">${s.kind === 'once' ? '一次性' : '每天'}</span>
       <span class="sch-when">${when}</span>
       <span class="sch-note">${s.note || ''}</span>
-      ${active ? '<span class="sch-tag" style="background:rgba(220,38,38,.12);color:#dc2626">正在休市</span>' : ''}
-      ${done ? '<span class="sch-tag">已结束</span>' : ''}
+      ${active ? '<span class="sch-tag live">正在休市</span>' : ''}
+      ${done ? '<span class="sch-tag done">已结束</span>' : ''}
       <span class="sch-spacer"></span>
       <button class="mini-btn" data-sch-toggle="${s.id}">${s.enabled === false ? '启用' : '停用'}</button>
       <button class="mini-btn danger" data-sch-del="${s.id}">删除</button>
     </div>`;
   }).join('');
-  box.innerHTML = rows;
-  $('#schList [data-sch-del]').forEach((b) => {
+  $$('#schList [data-sch-del]').forEach((b) => {
     b.addEventListener('click', async () => {
       try {
         await adminApi('/api/admin/schedule', { action: 'del', id: b.dataset.schDel });
@@ -5744,7 +5754,7 @@ function renderSchedules(cfg) {
       } catch (e) { toast(e.message, 'err'); }
     });
   });
-  $('#schList [data-sch-toggle]').forEach((b) => {
+  $$('#schList [data-sch-toggle]').forEach((b) => {
     b.addEventListener('click', async () => {
       try {
         await adminApi('/api/admin/schedule', { action: 'toggle', id: b.dataset.schToggle });

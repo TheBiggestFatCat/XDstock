@@ -4215,32 +4215,86 @@ body[data-theme="bear"] .brand-logo {
 }
 
 
-/* ---------- 定时休市 ---------- */
-.sch-cycle, .sch-add { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
-.sch-cycle .field { width: 150px; }
-.sch-add { gap: 16px; margin-bottom: 14px; }
-.sch-add-box {
-  flex: 1 1 320px; min-width: 280px; padding: 12px 14px;
-  border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2, rgba(20,184,166,.03));
-  display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
+/* ---------- 定时休市 / 开市 ---------- */
+.sch-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 14px 16px 16px;
+  margin-bottom: 14px;
 }
-.sch-add-title { width: 100%; font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 2px; }
-.sch-add-box .field { width: 150px; }
+.sch-card-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.sch-card-head b { font-size: 14px; color: var(--ink); }
+.sch-card-sub { font-size: 12px; color: var(--ink-3); }
+
+.sch-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.sch-field { display: flex; flex-direction: column; gap: 5px; min-width: 130px; }
+.sch-field > span { font-size: 12px; color: var(--ink-3); }
+.sch-field select,
+.sch-field > input {
+  height: 38px; box-sizing: border-box; padding: 0 10px; border-radius: 9px;
+  border: 1px solid var(--line); background: var(--bg);
+  font-size: 13px; color: var(--ink); font-family: inherit;
+  line-height: normal;
+}
+.sch-field input[type="datetime-local"],
+.sch-field input[type="time"] { min-width: 176px; }
+.sch-field select { min-width: 170px; }
+.sch-input {
+  display: flex; align-items: center; gap: 6px;
+  height: 38px; box-sizing: border-box; padding: 0 10px; border-radius: 9px;
+  border: 1px solid var(--line); background: var(--bg);
+}
+.sch-input input {
+  width: 64px; border: 0; background: transparent; outline: none;
+  font-size: 13px; color: var(--ink); font-family: inherit;
+  font-variant-numeric: tabular-nums; text-align: right;
+}
+.sch-input i { font-style: normal; font-size: 12px; color: var(--ink-3); }
+.sch-save { height: 38px; padding: 0 18px; align-self: flex-end; }
+.sch-tip {
+  margin: 12px 0 0; font-size: 12px; line-height: 1.7; color: var(--ink-3);
+  padding: 9px 12px; border-radius: 10px; background: rgba(20, 184, 166, .06);
+}
+.sch-tip b { color: #0d9488; }
+
+.sch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.sch-grid .sch-card { margin-bottom: 0; }
+
+.sch-list-head {
+  display: flex; align-items: baseline; gap: 10px;
+  margin: 16px 0 8px;
+}
+.sch-list-head b { font-size: 13.5px; }
 .sch-list { display: flex; flex-direction: column; gap: 8px; }
+
 .sch-row {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 13px;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px;
+  font-size: 13px; background: var(--surface);
 }
 .sch-row.off { opacity: .55; }
-.sch-row.done { opacity: .45; text-decoration: line-through; }
+.sch-row.done { opacity: .5; }
+.sch-row.done .sch-when { text-decoration: line-through; }
 .sch-tag {
-  padding: 1px 8px; border-radius: 999px; font-size: 11px;
-  background: rgba(20,184,166,.12); color: #0d9488;
+  padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  background: rgba(20, 184, 166, .12); color: #0d9488; white-space: nowrap;
 }
-.sch-tag.once { background: rgba(245,158,11,.14); color: #b45309; }
-.sch-when { font-variant-numeric: tabular-nums; font-weight: 600; }
+.sch-tag.once { background: rgba(245, 158, 11, .16); color: #b45309; }
+.sch-tag.live { background: rgba(220, 38, 38, .14); color: #dc2626; }
+.sch-tag.done { background: rgba(120, 120, 120, .14); color: var(--ink-3); }
+.sch-when { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sch-note { color: var(--ink-3); }
 .sch-spacer { flex: 1; }
+
+#schPhase.sch-closed { color: #dc2626; font-weight: 600; }
+
+@media (max-width: 900px) {
+  .sch-grid { grid-template-columns: 1fr; }
+}
 @media (max-width: 640px) {
-  .sch-cycle .field, .sch-add-box .field { width: calc(50% - 5px); }
+  .sch-form { gap: 10px; }
+  .sch-field { min-width: calc(50% - 5px); flex: 1 1 calc(50% - 5px); }
+  .sch-field select { min-width: 100%; width: 100%; }
+  .sch-save { width: 100%; }
 }
