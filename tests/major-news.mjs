@@ -2,7 +2,7 @@
 //   node tests/major-news.mjs
 
 import { createDb, migrate } from '../src/store.js';
-import { spawnMajorNews, stepMarket, majorNewsProbPerTick, majorNewsGapTicks } from '../src/engine.js';
+import { spawnMajorNews, stepMarket, majorNewsProbPerTick, majorNewsGapTicks, majorNewsQuietNow, seedHistory } from '../src/engine.js';
 import { MAJOR_NEWS_POOL, NEWS_POOL, majorPoolByCode } from '../src/news.js';
 import { genNextReport } from '../src/fundamentals.js';
 
@@ -31,6 +31,7 @@ function newDb(patch = {}) {
     fxEnabled: 0, goldVol: 0, goldRev: 0, reportIntervalTicks: 1e12,
     majorNewsEnabled: 1,
     majorNewsAvgHours: 12, majorNewsMinGapHours: 0,   // 单测里先关掉硬闸
+    majorNewsQuietStartHour: 0, majorNewsQuietEndHour: 0,   // 单测里先关掉静默窗口
     majorNewsPriceShock: 0.2, majorNewsTicks: 5,
     majorNewsFairShift: 0.15, majorNewsReportBias: 0.4,
     majorNewsAnnounceHours: 3
@@ -306,6 +307,42 @@ log('=== 8 硬闸：两条重大新闻之间至少隔 N 轮（防「一下子出
   const e2 = quiet(() => spawnMajorNews(db3));
   check('同一只票冲击中不再叠一条（池里只有 TGW 时会退化成允许，所以只查不重复同 tick）',
     !e2 || e2.companies[0] === 'TGW');
+}
+// ---------------------------------------------------------------- 9
+log('');
+log('=== 9 夜里 01:00~09:00 不生成 + 铺历史不出 ===');
+{
+  const at = (h, m = 0) => new Date(2026, 10, 10, h, m, 0, 0).getTime();
+  const cfg = { majorNewsQuietStartHour: 1, majorNewsQuietEndHour: 9 };
+  check('00:59 不是静默', majorNewsQuietNow(cfg, at(0, 59)) === false);
+  check('01:00 进静默', majorNewsQuietNow(cfg, at(1, 0)) === true);
+  check('05:30 在静默里', majorNewsQuietNow(cfg, at(5, 30)) === true);
+  check('08:59 还在静默', majorNewsQuietNow(cfg, at(8, 59)) === true);
+  check('09:00 解除静默', majorNewsQuietNow(cfg, at(9, 0)) === false);
+  check('13:00 正常', majorNewsQuietNow(cfg, at(13, 0)) === false);
+  check('起止相同 → 不静默', majorNewsQuietNow({ majorNewsQuietStartHour: 3, majorNewsQuietEndHour: 3 }, at(3)) === false);
+  check('跨零点写法也支持（22~6：23 点静默）',
+    majorNewsQuietNow({ majorNewsQuietStartHour: 22, majorNewsQuietEndHour: 6 }, at(23)) === true);
+
+  // 静默时段里 spawn 一定返回 null（概率拉满也不出）
+  const quietDb = newDb({ majorNewsAvgHours: 5000 / 3600000, majorNewsMinGapHours: 0,
+    majorNewsQuietStartHour: 1, majorNewsQuietEndHour: 9 });
+  const hourNow = new Date().getHours();
+  const inQuiet = hourNow >= 1 && hourNow < 9;
+  const hit = quiet(() => spawnMajorNews(quietDb));
+  if (inQuiet) {
+    check(`现在是 ${hourNow} 点（静默时段）→ 概率 100% 也不出`, !hit, hit ? hit.companies.join(',') : '没出');
+  } else {
+    check(`现在是 ${hourNow} 点（非静默）→ 概率 100% 会出（说明静默判断没误伤）`, !!hit);
+  }
+
+  // 铺历史（seedHistory）不塞重大新闻
+  const sdb = newDb({ majorNewsAvgHours: 5000 / 3600000, majorNewsMinGapHours: 0,
+    majorNewsQuietStartHour: 0, majorNewsQuietEndHour: 0 });
+  sdb.config.eventChance = 0;
+  quiet(() => seedHistory(sdb, 300));
+  const majors = (sdb.events || []).filter((e) => e.major);
+  check('seedHistory 铺历史时不出重大新闻', majors.length === 0, String(majors.length));
 }
 console.log(out.join('\n'));
 console.log(`\n---- ${passes} 通过 / ${fails} 失败 ----`);

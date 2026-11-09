@@ -1145,6 +1145,7 @@ export async function handleApi(ctx) {
       'marketTradesSmallP', 'marketTradesMidP', 'marketTradesBigP', 'marketTradesChase', 'marketTradesPanic', 'marketTradesTrigger', 'marketTradesWindow', 'marketTradesSizeExp', 'marketTradesSentBias', 'marketTradesSentVol', 'reopenSurgeMult', 'indexTradeScale',
     'majorNewsEnabled', 'majorNewsAvgHours', 'majorNewsPriceShock', 'majorNewsTicks',
     'majorNewsFairShift', 'majorNewsReportBias', 'majorNewsAnnounceHours', 'majorNewsMinGapHours',
+    'majorNewsQuietStartHour', 'majorNewsQuietEndHour',
     'packetTtlHours',
       'hotMoneyEnabled', 'hotMoneySwitchMin', 'hotMoneySwitchMax', 'hotMoneyMin', 'hotMoneyMax',
       'marketImpactEnabled', 'marketImpactRef', 'marketImpactStrength', 'marketImpactMax',

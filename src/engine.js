@@ -625,6 +625,24 @@ export function majorNewsProbPerTick(cfg = {}) {
   return Math.min(1, tickMs / (avgHours * 3600 * 1000));
 }
 
+/**
+ * 现在是不是「静默时段」（这段时间不生成重大新闻）
+ * @param {object} cfg db.config
+ * @param {number} [nowMs] 服务器本地时间戳
+ */
+export function majorNewsQuietNow(cfg = {}, nowMs = Date.now()) {
+  const norm = (v, d) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return d;
+    return ((Math.round(n) % 24) + 24) % 24;
+  };
+  const start = norm(cfg.majorNewsQuietStartHour, 1);
+  const end = norm(cfg.majorNewsQuietEndHour, 9);
+  if (start === end) return false;                 // 起止相同 = 不设静默
+  const h = new Date(Number.isFinite(Number(nowMs)) ? Number(nowMs) : Date.now()).getHours();
+  return start < end ? (h >= start && h < end) : (h >= start || h < end);
+}
+
 /** 两条重大新闻之间最少隔多少轮（0 = 不限制） */
 export function majorNewsGapTicks(cfg = {}) {
   const hours = Math.max(0, Number(cfg.majorNewsMinGapHours ?? 1));
@@ -638,6 +656,10 @@ export function spawnMajorNews(db) {
   if (Number(cfg.majorNewsEnabled ?? 1) === 0) return null;
   const pool = db.majorPool || [];
   if (!pool.length) return null;
+  // 铺历史（seedHistory）用合成时间，不能往历史里塞重大新闻
+  if (db._simNow || db.seeding) return null;
+  // 静默窗口（默认 01:00~09:00）：这段时间不生成新的重大新闻
+  if (majorNewsQuietNow(cfg)) return null;
 
   // 概率：平均 majorNewsAvgHours 小时一条（和 eventChance 解耦，按真实时间算）
   //   每轮命中概率 = tickMs / (avgHours × 3600000)；12 小时 → 1/8640
