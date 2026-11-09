@@ -16,7 +16,7 @@
  * 两种资金来源在成交记录里长得完全一样，玩家分不出来。
  */
 
-import { addMarketFlow, addVolume } from './trading.js';
+import { addMarketFlow, addVolume, indexWeights } from './trading.js';
 import { freeCap } from './fundamentals.js';
 
 /** 散户昵称池（虚假成交 / 游资共用） */
@@ -190,6 +190,33 @@ export function marketTradeWeight(st, cfg = {}) {
   return capW * sizeScale * marketSentimentVolume(st, cfg);
 }
 
+/**
+ * 指数当虚假成交标的时的权重。
+ *
+ * 指数本身没有 shares（freeCap ≈ 0），老逻辑里权重恒为 0 → 指数永远抽不到，
+ * 于是「指数的虚假成交」整段没了。这里用**成分股流通市值之和**当它的体量，
+ * 再乘 `indexTradeScale`（默认 0.15）控制占比。
+ */
+export function indexTradeWeight(db, st, cfg = {}) {
+  const scale = Number(cfg.indexTradeScale ?? 0.15);
+  if (!(scale > 0)) return 0;
+  const key = st.code === 'DENGS' ? 'smallIndex' : 'index';
+  let cap = 0;
+  let sentSum = 0;
+  let n = 0;
+  for (const { st: member, weight } of indexWeights(db, key)) {
+    if (!(weight > 0)) continue;
+    cap += freeCap(member);
+    sentSum += marketSentimentVolume(member, cfg);
+    n += 1;
+  }
+  if (!n) return 0;
+  const exp = Math.max(0, Math.min(2, num(cfg.marketTradesSizeExp, 1)));
+  const capW = exp === 0 ? 1 : Math.pow(cap / 1e8, exp);
+  const avgSent = sentSum / n;
+  return capW * scale * avgSent;
+}
+
 /** 情绪对方向的影响（百分点）：正=偏买，负=偏卖 */
 export function marketSentimentBias(st, cfg = {}) {
   const t = st.trait || {};
@@ -238,7 +265,10 @@ export function genMarketTrades(db, maxTrades = 2) {
   const base = Math.max(1, Math.round(rand(1, maxTrades) * rate * avgSent * surge));
 
   // 每只票的成交权重（市值 × 个股倍率 × 情绪放量），每轮算一次
-  const weights = list.map((s) => marketTradeWeight(s, cfg));
+  // 指数单独算：用成分股流通市值之和 × indexTradeScale，否则它永远抽不到
+  const weights = list.map((s) => (s.isIndex
+    ? indexTradeWeight(db, s, cfg)
+    : marketTradeWeight(s, cfg)));
   const weightedPicker = () => pickWeighted(list, weights);
 
   const out = [];

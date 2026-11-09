@@ -207,7 +207,7 @@ export function impactCostRate(db, notional) {
 }
 
 /** 指数成分：当前权重（没有权重时按等权）。DENGS 读小灯指数自己的权重表 */
-function indexWeights(db, indexKey = 'index') {
+export function indexWeights(db, indexKey = 'index') {
   const idx = (indexKey === 'smallIndex' ? db.smallIndex : db.index) || {};
   const w = idx.weights || {};
   const live = Object.values(db.stocks).filter((s) => !s.isIndex && s.status === 'normal');
