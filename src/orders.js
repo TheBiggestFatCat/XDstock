@@ -11,6 +11,8 @@
 // 撮合规则（每个 tick 一次）：
 //   · 风控单（止盈止损转来的 auto 单）必须当轮成交，不受限价约束。
 //     否则价格跳空时卖单会挂在上方等反弹，止损形同虚设。
+//   · 简单模式（order.simple）是市价单：不看挂单价，下一轮无条件按市价成交。
+//     排队顺序排在风控单之后、限价单之前；其余流程和限价单共用。
 //   · 其余按「价格优先 → 时间优先」排队。
 //   · 成交金额上限按【玩家 × 标的 × 方向】算，大单自动拆成多轮。
 //     不再有「全服每只票每轮只成交一张」——那会被 1 股小单占位卡死全服。
@@ -30,6 +32,13 @@ const r2 = (v) => Math.round(Number(v) * 100) / 100;
 const AUTO_SLIP = 0.004;
 /** 同一张单连续失败几次就撤掉（避免每轮刷失败提示） */
 const MAX_ORDER_FAILS = 3;
+/**
+ * 简单模式（市价单）冻结押金时给的跳空缓冲。
+ * 简单模式不看挂单价、下一轮无条件按市价成交，所以押金必须按「可能更高/更低的价」冻结：
+ * 冻结少了下单那一刻就报「资金不足」，冻结多了只是暂时占着，成交后差额自动退回。
+ * 3% 覆盖正常跳空；真跳穿了这个数也不会崩 —— 撮合时按买得起的数量部分成交。
+ */
+const SIMPLE_RESERVE_SLIP = 0.03;
 
 function uid() {
   return 'o_' + Math.random().toString(36).slice(2, 10);
@@ -133,9 +142,20 @@ function allCloseOrders(list) {
   return list.filter((o) => o && o.action === 'close' && !o.autoDca);
 }
 
+/**
+ * 下单入口。两种「下单方式」，同一个队列、同一套撮合：
+ *
+ *   · 传统模式（默认，body.simple 省略）= 限价挂单：价格到线才成交，成交价取市价
+ *   · 简单模式（body.simple = true）= 市价单：**不看 limit**，下一轮无条件按市价成交
+ *
+ * 除了「要不要判限价」，其余全部共用：押金冻结、每轮成交额度、同票开平冲突、
+ * 同时挂单上限、撤单退款。所以两种模式互不影响 —— 关掉简单模式就是原来的行为。
+ */
 export function placeLimitOrder(db, player, body) {
   const cfg = db.config;
-  if (num(cfg.limitOrderEnabled, 1) === 0) {
+  const simple = body.simple === true || body.simple === 1 || body.simple === '1' || body.simple === 'true';
+  // 「允许限价挂单」只关限价单；简单模式是市价单，不受它影响
+  if (!simple && num(cfg.limitOrderEnabled, 1) === 0) {
     return { ok: false, error: '挂单功能已关闭' };
   }
   // 休市期间**允许挂单**（2026-11 改）：只冻结行情和撮合，
@@ -149,8 +169,11 @@ export function placeLimitOrder(db, player, body) {
 
   const action = body.action === 'close' ? 'close' : 'open';
   const side = body.side === 'short' ? 'short' : 'long';
-  const limit = num(body.limit, 0);
+  const pxNow = num(st.price, 0);
+  // 简单模式不需要玩家填价：limit 只用来「显示 + 排序 + 估押金」，不参与成交判定
+  const limit = num(body.limit, 0) > 0 ? num(body.limit, 0) : (simple ? pxNow : 0);
   if (!(limit > 0)) return { ok: false, error: '限价必须大于 0' };
+  if (simple && !(pxNow > 0)) return { ok: false, error: '这只票还没有行情，等下一轮再试' };
 
   if (!Array.isArray(player.orders)) player.orders = [];
   const maxPending = Math.max(1, num(cfg.maxPendingOrders, 5));
@@ -189,7 +212,8 @@ export function placeLimitOrder(db, player, body) {
       reserve: 0,
       createdAt: Date.now(),
       createdTick: db.tick,
-      expireTick
+      expireTick,
+      ...(simple ? { simple: true } : {})
     };
     player.orders.push(order);
     return { ok: true, order };
@@ -212,8 +236,12 @@ export function placeLimitOrder(db, player, body) {
   // 押金按「最坏情况成交价」冻结：
   //   买单 → 直接按【限价】冻结（成交价最高就是限价）
   //   卖单 → 取限价和现价里更高的那个（成交价没有上限，成交时再按买得起的量缩小）
+  //   简单模式 → 没有限价兜底，再乘一个跳空缓冲（SIMPLE_RESERVE_SLIP）
   const buySide = side === 'long';
-  const refPrice = buySide ? limit : Math.max(limit, st.price);
+  const baseRef = buySide ? limit : Math.max(limit, st.price);
+  // 简单模式的 limit 不参与成交，估押金也**不该看它**（自动挂单价可能比现价高 0.5%，
+  // 再乘 3% 就冻成 6% 了）；只按现价加跳空缓冲
+  const refPrice = simple ? pxNow * (1 + SIMPLE_RESERVE_SLIP) : baseRef;
   const reserve = estimateReserve(db, st, refPrice, qty, leverage, side, player);
   if (player.cash < reserve) {
     return { ok: false, error: `押金不足，需要 $${reserve.toFixed(2)}，你只有 $${player.cash.toFixed(2)}` };
@@ -233,7 +261,8 @@ export function placeLimitOrder(db, player, body) {
     reserve,
     createdAt: Date.now(),
     createdTick: db.tick,
-    expireTick
+    expireTick,
+    ...(simple ? { simple: true } : {})
   };
   player.orders.push(order);
   return { ok: true, order, reserved: reserve };
@@ -337,9 +366,10 @@ export function processOrders(db) {
 
   items.sort((a, b) => {
     if (a.order.code !== b.order.code) return a.order.code < b.order.code ? -1 : 1;
-    // 风控单优先（止损必须跑得掉）
-    const aAuto = a.order.auto ? 0 : 1;
-    const bAuto = b.order.auto ? 0 : 1;
+    // 风控单优先（止损必须跑得掉），其次是简单模式的市价单，最后才是限价单
+    const pri = (o) => (o.auto ? 0 : o.simple ? 1 : 2);
+    const aAuto = pri(a.order);
+    const bAuto = pri(b.order);
     if (aAuto !== bAuto) return aAuto - bAuto;
     const aBuy = isBuyOrder(a.order) ? 0 : 1;
     const bBuy = isBuyOrder(b.order) ? 0 : 1;
@@ -394,10 +424,13 @@ export function processOrders(db) {
       // 风控单：每轮重定一次穿价，并且无视限价直接成交。
       // 价格跳空时若还按原限价判断，卖单会永远等不到成交。
       order.limit = r2(buy ? px * (1 + AUTO_SLIP) : px * (1 - AUTO_SLIP));
-    } else {
+    } else if (!order.simple) {
+      // 传统模式：价格到线才成交
       const hit = buy ? px <= num(order.limit) : px >= num(order.limit);
       if (!hit) continue;
     }
+    // 简单模式（order.simple）：不看 limit，本轮无条件按市价 px 成交。
+    // 下面的押金 / 每轮额度 / 部分成交流程和限价单完全一样，所以大单照样能分批。
 
     // 平仓单必须和当前持仓同向，否则会平掉后来开的反向仓位
     if (order.action === 'close') {
@@ -507,8 +540,8 @@ export function processOrders(db) {
       continue;
     }
 
-    // 自动单在流水里标成止盈/止损，方便回看
-    const r = closePosition(db, player, code, order.auto || 'limit', closeQty);
+    // 自动单在流水里标成止盈/止损，简单模式标成市价，方便回看
+    const r = closePosition(db, player, code, order.auto || (order.simple ? 'market' : 'limit'), closeQty);
     if (!r.ok) {
       order.fails = num(order.fails) + 1;
       if (order.fails >= MAX_ORDER_FAILS) {

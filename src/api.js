@@ -201,7 +201,9 @@ function publicPlayer(p, db) {
       expireTick: o.expireTick,
       createdAt: o.createdAt,
       auto: o.auto || null,
-      autoDca: !!o.autoDca
+      autoDca: !!o.autoDca,
+      // 简单模式（市价单）：前端「我的挂单」显示「市价」而不是挂单价
+      simple: !!o.simple
     })),
     income: (p.workEarned || 0) + (p.stealEarned || 0),
     // 站内通知：最新 20 条（网页端目前不显示，但安卓壳靠它发系统通知）

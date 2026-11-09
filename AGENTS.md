@@ -18,6 +18,7 @@ node --check src/api.js              # 语法检查（改完必跑）
 node --check public/app.js
 node tests/order-audit.mjs           # 下单/撮合/押金回归（改下单必跑，64 条断言）
 node tests/order-conflict.mjs        # 同票开平冲突（改挂单必跑，21 条断言）
+node tests/order-simple.mjs          # 简单模式（市价单）无条件成交（改下单必跑，46 条断言）
 node tests/theme-split.mjs           # 主题=外观+技能（改商城必跑，28 条断言）
 node tests/shop-gate.mjs             # 商城等级门槛（改商城必跑，30 条断言）
 node tests/theme-evolution.mjs       # 主题成就 + 主题进化（改成就/技能必跑，72 条断言）

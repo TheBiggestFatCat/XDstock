@@ -268,7 +268,8 @@ function tickPayload(forPlayerId) {
         expireTick: o.expireTick,
         createdAt: o.createdAt,
         auto: o.auto || null,
-        autoDca: !!o.autoDca
+        autoDca: !!o.autoDca,
+        simple: !!o.simple
       })),
       // 主题成就 / 进化（进度、结晶、阶数）
       achv: achvPayload(d, p),

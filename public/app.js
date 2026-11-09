@@ -70,6 +70,8 @@ const state = {
   limitAuto: true,
   limitLine: null,
   orderMode: 'open',
+  // 下单方式：'limit' = 传统挂单（默认，行为不变）/ 'simple' = 简单模式（市价单）
+  orderStyle: localStorage.getItem('xd_order_style') === 'simple' ? 'simple' : 'limit',
   shopDir: 1,
   fakeNewsTargets: [],
   tradeTab: 'order',
@@ -3021,7 +3023,9 @@ async function placeLimit() {
   if (!st) return;
   // 价格保留两位小数，避免出现 194.02499999999998 这种值
   const limit = Math.round(Number($('#orderLimit').value) * 100) / 100;
-  if (!(limit > 0)) { toast('先填挂单价', 'err'); return; }
+  // 简单模式不看挂单价：没有价也能下单，后端会按现价估押金、下一轮按市价成交
+  const simple = isSimpleOrder();
+  if (!simple && !(limit > 0)) { toast('先填挂单价', 'err'); return; }
 
   const mode = state.orderMode || 'open';
   const pos = state.market?.me?.positions?.[state.code];
@@ -3034,7 +3038,7 @@ async function placeLimit() {
       toast(`最多平 ${pos.qty} 股`, 'err');
       return;
     }
-    payload = { code: st.code, action: 'close', side: pos.side, limit, qty: closeQty > 0 ? closeQty : undefined };
+    payload = { code: st.code, action: 'close', side: pos.side, limit: limit > 0 ? limit : undefined, qty: closeQty > 0 ? closeQty : undefined };
   } else {
     payload = {
       code: st.code,
@@ -3042,17 +3046,61 @@ async function placeLimit() {
       side: state.side,
       qty: Number($('#orderQty').value),
       leverage: Number($('#orderLev').value) || 1,
-      limit
+      limit: limit > 0 ? limit : undefined
     };
   }
+  // 简单模式：服务端走「不看限价、下一轮按市价无条件成交」那条分支
+  if (simple) payload.simple = true;
 
   try {
     await api('/api/order/limit', { method: 'POST', body: JSON.stringify(payload) });
-    toast(`挂单已提交：${mode === 'close' ? '平仓' : '开仓'} @ ${limit.toFixed(2)}`, 'ok');
+    if (simple) {
+      toast(`市价单已提交：下一轮按市价${mode === 'close' ? '平仓' : '成交'}`, 'ok');
+    } else {
+      toast(`挂单已提交：${mode === 'close' ? '平仓' : '开仓'} @ ${limit.toFixed(2)}`, 'ok');
+    }
     refreshMarket();
   } catch (e) {
     toast(e.message, 'err');
   }
+}
+
+/** 当前是不是「简单模式」（市价单）。默认 false = 保持原来的挂单逻辑 */
+function isSimpleOrder() {
+  return state.orderStyle === 'simple';
+}
+
+/**
+ * 切换下单方式（传统挂单 ↔ 简单模式）。
+ * 只影响前端提交的参数：传统模式带 limit、按价成交；简单模式带 simple: true、下一轮按市价成交。
+ * 两种模式在服务端是两条独立分支，切回来 100% 是原来的行为。
+ */
+function applyOrderStyle(style, save = true) {
+  state.orderStyle = style === 'simple' ? 'simple' : 'limit';
+  if (save) localStorage.setItem('xd_order_style', state.orderStyle);
+  const simple = isSimpleOrder();
+
+  $$('.os-btn').forEach((b) => {
+    const on = b.dataset.style === state.orderStyle;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+
+  // 简单模式没有挂单价概念，整块收起来。
+  // 用 class + style.display 双保险：`.field` 上的 display 可能把 hidden 覆盖掉（老坑）
+  const field = $('#limitField');
+  if (field) {
+    field.classList.toggle('hidden', simple);
+    field.style.display = simple ? 'none' : '';
+  }
+  const hint = $('#simpleHint');
+  if (hint) {
+    hint.classList.toggle('hidden', !simple);
+    hint.style.display = simple ? '' : 'none';
+  }
+
+  updateOrderBtnLabel();
+  updateCostPreview();
 }
 
 /** 开仓 / 平仓 模式切换 */
@@ -3107,12 +3155,16 @@ function switchOrderMode(mode) {
 function updateOrderBtnLabel() {
   const btn = $('#orderBtn');
   if (!btn) return;
+  const simple = isSimpleOrder();
+  // 简单模式按钮换橙色，和「市价」语义对上（样式见 styles.css#orderBtn.is-simple）
+  btn.classList.toggle('is-simple', simple);
 
   // 休市：只暂停成交，挂单照常能点（2026-11 改）
   // 按钮不禁用，但文案写清「开市后才成交」，避免玩家以为点了就立刻成交
   if (state.market?.marketOpen === false) {
     const modeNow = state.orderMode || 'open';
-    btn.textContent = modeNow === 'close' ? '挂平仓单（开市后成交）' : '挂开仓单（开市后成交）';
+    const what = modeNow === 'close' ? '平仓' : '开仓';
+    btn.textContent = simple ? `市价${what}（开市后成交）` : `挂${what}单（开市后成交）`;
     btn.disabled = false;
     return;
   }
@@ -3135,12 +3187,16 @@ function updateOrderBtnLabel() {
       btn.disabled = true;
       return;
     }
-    btn.textContent = pos.side === 'long' ? '挂单平多' : '挂单平空';
+    btn.textContent = simple
+      ? (pos.side === 'long' ? '市价平多（下一轮成交）' : '市价平空（下一轮成交）')
+      : (pos.side === 'long' ? '挂单平多' : '挂单平空');
     btn.disabled = false;
     return;
   }
 
-  btn.textContent = state.side === 'long' ? '挂单开多' : '挂单开空';
+  btn.textContent = simple
+    ? (state.side === 'long' ? '市价开多（下一轮成交）' : '市价开空（下一轮成交）')
+    : (state.side === 'long' ? '挂单开多' : '挂单开空');
   btn.disabled = false;
 }
 
@@ -3161,11 +3217,15 @@ function renderMyOrders() {
       const autoTag = o.auto
         ? `<span class="mo-auto">${o.auto === 'tp' ? '止盈单' : '止损单'}</span>`
         : (o.autoDca ? '<span class="mo-auto">定投</span>' : '');
+      // 简单模式（市价单）没有挂单价，价格位置显示「市价」
+      const priceCell = o.simple
+        ? '<span class="mo-price is-market" title="简单模式：下一轮按市价成交">市价</span>'
+        : `<span class="mo-price">@${Number(o.limit).toFixed(2)}</span>`;
       return `<div class="mo-row">
         <span class="mo-side ${buy ? 'buy' : 'sell'}">${label}${buy ? '买' : '卖'}</span>
         <span class="mo-name">${o.name}${autoTag}</span>
         <span class="mo-qty">${o.qty}股</span>
-        <span class="mo-price">@${Number(o.limit).toFixed(2)}</span>
+        ${priceCell}
         <span class="mo-left">${left}轮</span>
         <button class="mo-cancel" data-cancel="${o.id}">撤</button>
       </div>`;
@@ -4574,6 +4634,8 @@ function orderCostParts(qty, price) {
 /** 参考价：买单按限价（成交价最高就是限价），卖单取限价与现价里更高的那个 */
 function orderRefPrice() {
   const st = state.market?.stocks?.[state.code];
+  // 简单模式按下一轮市价成交，成本预估就按现价算（挂单价和成交价无关）
+  if (isSimpleOrder()) return Number(st?.price) || 0;
   const limitPx = Math.round(Number($('#orderLimit')?.value) * 100) / 100;
   const rawPrice = limitPx > 0 ? limitPx : Number(st?.price) || 0;
   return isBuySide() ? rawPrice : Math.max(rawPrice, Number(st?.price) || 0);
@@ -4872,6 +4934,7 @@ function renderPortfolio() {
 // ---------------- 交易记录 ----------------
 const REASON_LABEL = {
   manual: ['手动', 'pill gray'],
+  market: ['市价', 'pill gray'],
   tp: ['止盈', 'pill long'],
   sl: ['止损', 'pill short'],
   liquidated: ['爆仓', 'pill short'],
@@ -7522,6 +7585,11 @@ function bind() {
   $('#hotTipBuy')?.addEventListener('click', buyHotTip);
   $('#orderBtn').addEventListener('click', placeLimit);
 
+  // 下单方式切换：传统挂单 / 简单模式（选择存 localStorage，默认传统模式）
+  $$('.os-btn').forEach((b) => {
+    b.addEventListener('click', () => applyOrderStyle(b.dataset.style));
+  });
+
   // 暗中调查弹窗
   $('#spyClose')?.addEventListener('click', closeSpy);
   $('#spyOk')?.addEventListener('click', closeSpy);
@@ -7623,6 +7691,8 @@ async function boot() {
   applyCachedTheme();
   initSlipInput();
   bind();
+  // 恢复上次选的下单方式（默认传统挂单），并把按钮/说明/按钮文案刷成对应状态
+  applyOrderStyle(state.orderStyle, false);
   if (state.token) {
     // 上次停在「我的 → 银行/管理」，登录后自动切回去
     if (localStorage.getItem('xd_pf_pane')) switchPfPane(localStorage.getItem('xd_pf_pane'), true);
