@@ -544,6 +544,36 @@ function renderClosed() {
   updateCostPreview();
 }
 
+/**
+ * 顶栏「距休市」倒计时（2026-11）
+ *   开市中 → 距下一次夜间休市还有多久
+ *   休市中 → 距开市还有多久
+ * 时间来自每轮 payload 的 nextChangeAt / closedUntil，本地每秒刷新，不额外请求服务端。
+ */
+function renderCloseIn() {
+  const chip = $('#closeInChip');
+  const text = $('#closeInText');
+  if (!chip || !text) return;
+  const m = state.market || {};
+  const closed = m.marketOpen === false;
+  const target = closed ? Number(m.closedUntil) || 0 : Number(m.nextChangeAt) || 0;
+  if (!(target > 0)) { chip.classList.add('hidden'); return; }
+
+  const left = target - Date.now();
+  if (closed && left <= 0) { chip.classList.add('hidden'); return; }
+  const mm = Math.floor(Math.max(0, left) / 60000);
+  const ss = Math.floor((Math.max(0, left) % 60000) / 1000);
+  const clock = `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+
+  chip.classList.remove('hidden');
+  chip.classList.toggle('closed', closed);
+  chip.classList.toggle('closing', !closed && left <= 60000);
+  text.textContent = closed ? `距开市 ${clock}` : `距休市 ${clock}`;
+  chip.title = closed
+    ? `${m.closedLabel || '休市中'} · ${clock} 后开市`
+    : `${clock} 后进入夜间休市（价格、新闻、撮合暂停）`;
+}
+
 function renderTopbar() {
   const m = state.market;
   if (!m) return;
@@ -565,6 +595,7 @@ function renderTopbar() {
   const ie = $('#indexChange');
   ie.textContent = pct(idxChg);
   ie.className = 'index-change ' + cls(idxChg);
+  renderCloseIn();
 
   const me = m.me;
   if (me) {
@@ -6855,6 +6886,12 @@ function bind() {
     b.addEventListener('click', () => toggleIndicator(b.dataset.ind));
   });
   loadIndPrefs();
+
+  // 顶栏倒计时：每秒刷新（标签页在后台就不跑，省电）
+  setInterval(() => {
+    if (document.visibilityState === 'hidden') return;
+    renderCloseIn();
+  }, 1000);
 
   $$('#sideSwitch .side-btn').forEach((b) => {
     b.addEventListener('click', () => {

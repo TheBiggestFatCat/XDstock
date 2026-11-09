@@ -4298,3 +4298,38 @@ body[data-theme="bear"] .brand-logo {
   .sch-field select { min-width: 100%; width: 100%; }
   .sch-save { width: 100%; }
 }
+
+
+/* ---------- 顶栏：距休市倒计时 ---------- */
+.close-in {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-left: 8px; padding: 2px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+  background: rgba(245, 158, 11, .12); color: #b45309;
+  border: 1px solid rgba(245, 158, 11, .28);
+  white-space: nowrap; transition: background .2s, color .2s, border-color .2s;
+}
+.close-in.hidden { display: none; }
+.close-in-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor; opacity: .85;
+  animation: closeInPulse 1.6s ease-in-out infinite;
+}
+.close-in.closing {                       /* 最后一分钟：变红 */
+  background: rgba(220, 38, 38, .12); color: #dc2626;
+  border-color: rgba(220, 38, 38, .3);
+}
+.close-in.closed {                        /* 已经在休市：显示距开市 */
+  background: rgba(120, 120, 120, .12); color: var(--ink-3);
+  border-color: rgba(120, 120, 120, .25);
+}
+.close-in.closed .close-in-dot { animation: none; }
+@keyframes closeInPulse {
+  0%, 100% { opacity: .35; }
+  50% { opacity: 1; }
+}
+@media (max-width: 640px) {
+  .close-in { margin-left: 4px; padding: 1px 7px; font-size: 11px; }
+  .close-in-dot { display: none; }
+}

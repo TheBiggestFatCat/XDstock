@@ -138,7 +138,7 @@ public/styles.css  全部样式（主题变量 + 移动端媒体查询）
 
 ## 已验证的关键数值（线上）
 
-- `tickMs = 5000`，1 轮 5 秒；**开市 5 分钟 / 休市 2 分钟循环**（`marketCycleOpenMin/CloseMin`，5 分 K 线 = 一个交易日）
+- `tickMs = 5000`，1 轮 5 秒；**开市 5 分钟 / 休市 2 分钟循环**（顶栏指数右侧有「距休市/距开市」倒计时，每秒本地刷新）（`marketCycleOpenMin/CloseMin`，5 分 K 线 = 一个交易日）
 - `playerImpactRef = 1000000`、`impactRefFreeCap = 100亿`
 - `levelBaseAsset = 1000万`、`levelGrowth = 2`、`levelUpRatio = 0.6`
 - `marketTradesRate = 6`（每轮 6~12 笔虚假成交；笔数按流通市值分配 + 散户情绪定方向/放量）、`marketTradesWindow = 12`（追涨杀跌看 1 分钟动量）、`sentimentRollTicks = 720`
