@@ -224,6 +224,11 @@ export function genMarketTrades(db, maxTrades = 2) {
   }
 
   db.trades.push(...out);
+  // 成交量：同样先攒在 st.volTick 上（和玩家 / 游资一路货）
+  for (const row of out) {
+    const vst = db.stocks?.[row.code];
+    if (vst) vst.volTick = (Number(vst.volTick) || 0) + (Number(row.qty) || 0);
+  }
   const cap = Number(cfg.tradeLogMax) || 3000;
   if (db.trades.length > cap) db.trades.splice(0, db.trades.length - cap);
   return out;

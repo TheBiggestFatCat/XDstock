@@ -18,6 +18,9 @@ export function logTrade(db, entry) {
     at: now(),
     ...entry
   });
+  // 成交量（股）：每轮先攒在 st.volTick 上，引擎在一轮结束时汇总进 volSeries
+  const vst = entry && entry.code ? db.stocks?.[entry.code] : null;
+  if (vst) vst.volTick = (Number(vst.volTick) || 0) + (Number(entry.qty) || 0);
   if (db.trades.length > TRADE_LOG_MAX) {
     db.trades.splice(0, db.trades.length - TRADE_LOG_MAX);
   }

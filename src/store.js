@@ -45,6 +45,7 @@ function freshStock(code) {
     status: 'normal', // normal | suspended | delisted
     statusUntil: 0,
     series: [seed.initialPrice],
+    volSeries: [0],       // 每轮成交量，和 series 一一对应（K 线成交量柱）
   // 15 分钟 K 线单独存一份（48 小时 = 192 根），见 engine.js#pushBar15
   bars15: [],
   bars15Seeded: false,
@@ -431,6 +432,13 @@ export function migrate(d) {
   // 游资状态缺了就补一个空壳（下一次 tick 会自己在板块里开仓）
   for (const s of Object.values(merged.stocks)) {
     if (!Number.isFinite(Number(s.mflow))) s.mflow = 0;
+    // 每轮成交量（K 线成交量柱用）：和 series 一一对应，老存档前面补 0
+    if (!Array.isArray(s.volSeries)) s.volSeries = [];
+    const seriesLen = Array.isArray(s.series) ? s.series.length : 0;
+    if (s.volSeries.length < seriesLen) {
+      s.volSeries = [...new Array(seriesLen - s.volSeries.length).fill(0), ...s.volSeries];
+    }
+    if (typeof s.volTick !== 'number') s.volTick = 0;
   }
   if (!merged.hotMoney || typeof merged.hotMoney !== 'object') {
     merged.hotMoney = { code: '', industry: '', nextSwitchTick: 0, switches: 0, startedTick: 0 };

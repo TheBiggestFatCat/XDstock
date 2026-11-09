@@ -27,7 +27,7 @@ log('=== 2 同一根里更新 high / low / close ===');
 {
   const list = [];
   pushBar15(list, 100, 10);
-  check('第一笔：开高低收都是 10', JSON.stringify(list[0]) === '[100,10,10,10,10]', JSON.stringify(list[0]));
+  check('第一笔：开高低收都是 10，成交量从 0 起', JSON.stringify(list[0]) === '[100,10,10,10,10,0]', JSON.stringify(list[0]));
   pushBar15(list, 100, 12);
   check('涨到 12：high 更新', list[0][2] === 12, JSON.stringify(list[0]));
   check('close 跟着走', list[0][4] === 12);
@@ -35,6 +35,30 @@ log('=== 2 同一根里更新 high / low / close ===');
   pushBar15(list, 100, 8);
   check('跌到 8：low 更新', list[0][3] === 8, JSON.stringify(list[0]));
   check('仍然只有一根', list.length === 1);
+}
+
+log('');
+log('=== 2.5 成交量：同一根里累加，输出带上 volume ===');
+{
+  const list = [];
+  pushBar15(list, 100, 10, 500);
+  pushBar15(list, 100, 12, 300);      // 同一根：价格更新 + 成交量累加
+  check('同一根成交量累加', list[0][5] === 800, String(list[0][5]));
+  check('价格照常更新', list[0][4] === 12 && list[0][2] === 12);
+  pushBar15(list, 101, 11, 200);      // 新一根：从 200 起
+  check('新一根成交量为 200', list[1][5] === 200, String(list[1][5]));
+  pushBar15(list, 101, 11);           // 不传成交量 = 加 0
+  check('不传成交量按 0 处理', list[1][5] === 200, String(list[1][5]));
+  pushBar15(list, 101, 11, -5);       // 负数忽略
+  check('负成交量忽略', list[1][5] === 200, String(list[1][5]));
+
+  const candles = bars15Candles(list, (t) => t * 5000);
+  check('输出带 volume', candles.every((c) => Number.isFinite(c.volume)), JSON.stringify(candles.map((c) => c.volume)));
+  check('老存档（没有第 6 位）按 0', (() => {
+    const old = [[100, 10, 10, 10, 10]];
+    const c = bars15Candles(old, (t) => t * 5000);
+    return c.length === 1 && c[0].volume === 0;
+  })());
 }
 
 // ---------------------------------------------------------------- 3
@@ -45,7 +69,7 @@ log('=== 3 跨桶新开一根、封顶丢最老 ===');
   pushBar15(list, 100, 10);
   pushBar15(list, 101, 11);
   check('跨桶后两根', list.length === 2);
-  check('新一根从 11 起', JSON.stringify(list[1]) === '[101,11,11,11,11]', JSON.stringify(list[1]));
+  check('新一根从 11 起', JSON.stringify(list[1]) === '[101,11,11,11,11,0]', JSON.stringify(list[1]));
 
   check('乱序（老桶）直接忽略', (() => {
     const before = JSON.stringify(list);
@@ -118,7 +142,7 @@ log('=== 6 转成 K 线对象 ===');
   check('条数对', candles.length === 2);
   check('time 是秒（毫秒/1000）', candles[0].time === Math.floor(10 * BAR15_TICKS * 5000 / 1000),
     String(candles[0].time));
-  check('o/h/l/c 保留 4 位', JSON.stringify(candles[0]) === '{"time":9000,"open":100,"high":105,"low":98,"close":103}',
+  check('o/h/l/c 保留 4 位（带 volume）', JSON.stringify(candles[0]) === '{"time":9000,"open":100,"high":105,"low":98,"close":103,"volume":0}',
     JSON.stringify(candles[0]));
   check('时间递增', candles[1].time > candles[0].time);
   check('空数组不炸', bars15Candles(null).length === 0 && bars15Candles([]).length === 0);

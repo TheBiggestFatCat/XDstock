@@ -719,6 +719,18 @@ export function stepMarket(db) {
   // 3.6 游资：到点就换板块（卖旧买新，每一笔 1000 万~3000 万）
   stepHotMoney(db);
 
+  // 3.65 成交量：把本轮攒下的 volTick 汇总进 volSeries（和 series 一一对应，K 线的成交量柱用）
+  for (const st of stocks) {
+    const vol = Math.max(0, Number(st.volTick) || 0);
+    st.volTick = 0;
+    if (!Array.isArray(st.volSeries)) st.volSeries = [];
+    st.volSeries.push(vol);
+    const vcap = cfg.historyTicks ?? 3600;
+    if (st.volSeries.length > vcap) st.volSeries.splice(0, st.volSeries.length - vcap);
+    // 15 分钟那根：价格在上面已经 push 过，这里只补成交量
+    if (!st.isIndex) pushBar15(st.bars15, Math.floor(db.tick / BAR15_TICKS), st.price, vol);
+  }
+
   // 3.58 天气股对齐（共用天气、同时发报）
   {
     let first = null;
@@ -956,9 +968,11 @@ export function timeFromAxis(axis, absTick, db) {
   return times[lastIdx] + (absTick - lastAbs) * step;
 }
 
-export function candlesFromSeries(series, group, tickMs, tickStart, maxCandles = 1200, baseMs = 0, timeOf = null) {
+export function candlesFromSeries(series, group, tickMs, tickStart, maxCandles = 1200, baseMs = 0, timeOf = null, volumes = null) {
   const out = [];
   if (!series || !series.length) return out;
+  // volumes 和 series 一一对应（每轮一个）；没给就不带 volume 字段
+  const volOffset = Array.isArray(volumes) ? volumes.length - series.length : 0;
 
   let curBucket = null;
   let cur = null;
@@ -966,6 +980,7 @@ export function candlesFromSeries(series, group, tickMs, tickStart, maxCandles =
     const absTick = tickStart + i;
     const bucket = Math.floor(absTick / group);
     const v = series[i];
+    const vol = Array.isArray(volumes) ? Number(volumes[i + volOffset]) || 0 : null;
     if (bucket !== curBucket) {
       if (cur) out.push(cur);
       curBucket = bucket;
@@ -977,10 +992,12 @@ export function candlesFromSeries(series, group, tickMs, tickStart, maxCandles =
         low: v,
         close: v
       };
+      if (vol !== null) cur.volume = vol;
     } else {
       if (v > cur.high) cur.high = v;
       if (v < cur.low) cur.low = v;
       cur.close = v;
+      if (vol !== null) cur.volume = (cur.volume || 0) + vol;
     }
   }
   if (cur) out.push(cur);
@@ -990,7 +1007,8 @@ export function candlesFromSeries(series, group, tickMs, tickStart, maxCandles =
     open: Number(c.open.toFixed(4)),
     high: Number(c.high.toFixed(4)),
     low: Number(c.low.toFixed(4)),
-    close: Number(c.close.toFixed(4))
+    close: Number(c.close.toFixed(4)),
+    ...(c.volume === undefined ? {} : { volume: c.volume })
   }));
 }
 

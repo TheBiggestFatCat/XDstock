@@ -24,6 +24,9 @@ const state = {
   candleSeries: null,
   maSeries: {},
   maVisible: { 5: true, 10: true, 30: false },
+  // K 线指标开关（成交量 / MACD），存在 localStorage 里
+  ind: { vol: false, macd: false },
+  indSeries: null,
   candles: [],
   adminToken: localStorage.getItem('xd_admin') || '',
   adminTab: 'console',        // 管理页当前标签
@@ -3245,7 +3248,8 @@ function buildChart() {
     layout: {
       background: { type: 'solid', color: 'transparent' },
       textColor: '#5b7671',
-      fontFamily: 'inherit'
+      fontFamily: 'inherit',
+      attributionLogo: false   // 左下角那个 TradingView 角标会和成交量柱叠在一起
     },
     grid: {
       vertLines: { color: 'rgba(230,240,237,.7)' },
@@ -3265,7 +3269,8 @@ function buildChart() {
     },
     handleScale: { axisPressedMouseMove: true }
   });
-  const candle = chart.addCandlestickSeries({
+  // v5：统一的 addSeries(定义, 选项)，默认落在第 0 个窗格（价格）
+  const candle = chart.addSeries(LightweightCharts.CandlestickSeries, {
     upColor: '#f04b4b',
     downColor: '#12b886',
     borderVisible: false,
@@ -3277,7 +3282,7 @@ function buildChart() {
   state.candleSeries = candle;
 
   for (const period of [5, 10, 30]) {
-    state.maSeries[period] = chart.addLineSeries({
+    state.maSeries[period] = chart.addSeries(LightweightCharts.LineSeries, {
       color: period === 5 ? '#f59e0b' : period === 10 ? '#3b82f6' : '#a855f7',
       lineWidth: 1.5,
       priceLineVisible: false,
@@ -3286,6 +3291,44 @@ function buildChart() {
       visible: state.maVisible[period]
     });
   }
+
+  // ---- 成交量：第 1 个窗格（v5 真窗格，自带独立坐标轴）----
+  const volPane = chart.addPane();
+  const volSeries = volPane.addSeries(LightweightCharts.HistogramSeries, {
+    priceFormat: { type: 'volume' },
+    priceLineVisible: false,
+    lastValueVisible: false,
+    crosshairMarkerVisible: false,
+    visible: false
+  });
+  state.volPane = volPane;
+  // ---- MACD：第 2 个窗格 ----
+  const macdPane = chart.addPane();
+  const macdHist = macdPane.addSeries(LightweightCharts.HistogramSeries, {
+    priceLineVisible: false,
+    lastValueVisible: false,
+    crosshairMarkerVisible: false,
+    visible: false
+  });
+  const macdDif = macdPane.addSeries(LightweightCharts.LineSeries, {
+    color: '#f59e0b',
+    lineWidth: 1.4,
+    priceLineVisible: false,
+    lastValueVisible: false,
+    crosshairMarkerVisible: false,
+    visible: false
+  });
+  const macdDea = macdPane.addSeries(LightweightCharts.LineSeries, {
+    color: '#3b82f6',
+    lineWidth: 1.4,
+    priceLineVisible: false,
+    lastValueVisible: false,
+    crosshairMarkerVisible: false,
+    visible: false
+  });
+  state.macdPane = macdPane;
+  state.volSeries = volSeries;
+  state.macdSeries = { hist: macdHist, dif: macdDif, dea: macdDea };
 
   // 手机上初次创建时图表容器可能是隐藏的（宽高为 0），
   // 给个兜底尺寸，等真正显示出来再由 ResizeObserver 校正
@@ -3423,7 +3466,8 @@ function cleanCandles(list) {
       open: c.open,
       high: Math.max(c.high, c.open, c.close, c.low),
       low: Math.min(c.low, c.open, c.close, c.high),
-      close: c.close
+      close: c.close,
+      volume: Math.max(0, Number(c.volume) || 0)
     });
   }
   out.sort((a, b) => a.time - b.time);
@@ -3435,7 +3479,7 @@ function ensureOverlaySeries() {
   const chart = state.chart;
   if (!chart) return null;
   if (!state.overlaySeries) {
-    state.overlaySeries = chart.addCandlestickSeries({
+    state.overlaySeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
       ...OVERLAY_STYLE,
       priceScaleId: 'left',
       lastValueVisible: true,
@@ -3443,16 +3487,11 @@ function ensureOverlaySeries() {
     });
   }
   chart.applyOptions({
-    leftPriceScale: {
-      visible: true,
-      borderColor: 'rgba(59,130,246,.35)',
-      scaleMargins: { top: 0.06, bottom: 0.32 }
-    },
-    rightPriceScale: {
-      borderColor: 'rgba(230,240,237,.9)',
-      scaleMargins: { top: 0.32, bottom: 0.06 }
-    }
+    leftPriceScale: { visible: true, borderColor: 'rgba(59,130,246,.35)' },
+    rightPriceScale: { borderColor: 'rgba(230,240,237,.9)' }
   });
+  // 上下留白（含成交量 / MACD 的分区）统一由 applyIndLayout 算
+  applyIndLayout();
   return state.overlaySeries;
 }
 
@@ -3463,8 +3502,9 @@ function clearOverlay(silent) {
   if (state.chart) {
     state.chart.applyOptions({
       leftPriceScale: { visible: false },
-      rightPriceScale: { borderColor: 'rgba(230,240,237,.9)', scaleMargins: { top: 0.2, bottom: 0.1 } }
+      rightPriceScale: { borderColor: 'rgba(230,240,237,.9)' }
     });
+    applyIndLayout();   // 留白按当前指标开关重算
   }
   try { localStorage.removeItem('xd_overlay'); } catch { /* 隐私模式 */ }
   renderOverlayChip();
@@ -3696,6 +3736,8 @@ async function loadCandles(opts = {}) {
       }
     }
     $('#chartEmpty').classList.toggle('hidden', state.candles.length > 0);
+    renderMAs();
+    renderIndicators();
     // 换了标的/周期：叠加的那一份也跟着换
     if (state.overlay) loadOverlay(); else renderOverlayChip();
   } catch (e) {
@@ -3727,6 +3769,139 @@ function renderMAs() {
     }
     series.setData(out);
   }
+}
+
+// ---------------- K 线指标：成交量 / MACD ----------------
+const IND_KEY = 'xd_ind';
+const MACD_FAST = 12;
+const MACD_SLOW = 26;
+const MACD_SIGNAL = 9;
+
+/** 从 localStorage 恢复开关状态 */
+function loadIndPrefs() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(IND_KEY) || '{}');
+    state.ind.vol = !!raw.vol;
+    state.ind.macd = !!raw.macd;
+  } catch (e) { /* 隐私模式忽略 */ }
+  renderIndButtons();
+}
+
+function saveIndPrefs() {
+  try { localStorage.setItem(IND_KEY, JSON.stringify(state.ind)); } catch (e) { /* 忽略 */ }
+}
+
+function renderIndButtons() {
+  $$('#indGroup .ind').forEach((b) => {
+    b.classList.toggle('active', !!state.ind[b.dataset.ind]);
+  });
+}
+
+/** EMA 序列（首值用第一个收盘价起算，和常见行情软件一致） */
+function emaSeries(values, period) {
+  const k = 2 / (period + 1);
+  const out = [];
+  let prev = null;
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    prev = prev === null ? v : v * k + prev * (1 - k);
+    out.push(prev);
+  }
+  return out;
+}
+
+/** MACD(12,26,9)：返回 { dif, dea, hist, time } 四组，和 candles 一一对应 */
+function macdOf(candles) {
+  const closes = candles.map((c) => c.close);
+  const emaFast = emaSeries(closes, MACD_FAST);
+  const emaSlow = emaSeries(closes, MACD_SLOW);
+  const dif = closes.map((_, i) => emaFast[i] - emaSlow[i]);
+  const dea = emaSeries(dif, MACD_SIGNAL);
+  return candles.map((c, i) => ({
+    time: c.time,
+    dif: Number(dif[i].toFixed(4)),
+    dea: Number(dea[i].toFixed(4)),
+    hist: Number(((dif[i] - dea[i]) * 2).toFixed(4))   // 国内习惯：柱 = 2 × (DIF − DEA)
+  }));
+}
+
+/**
+ * 图上的分区布局：开指标时把主图往上压，成交量贴底、MACD 夹在中间。
+ * 价格轴用 rightPriceScale 的 scaleMargins 留白，另有左轴（叠加）时一起算。
+ */
+function applyIndLayout() {
+  const chart = state.chart;
+  if (!chart) return;
+  const vol = !!state.ind.vol;
+  const macd = !!state.ind.macd;
+  const overlay = !!state.overlay;
+
+  // v5 的真窗格：用「伸缩系数」按比例分配高度（setHeight 会和 stretch 打架，别混用）
+  // 价格窗格 4 份、成交量 1.1 份、MACD 1.3 份；关掉的那个给 0 → 窗格自动塌成一条缝
+  const panes = (chart.panes && chart.panes()) || [];
+  try {
+    panes[0]?.setStretchFactor?.(4);
+    if (state.volPane) state.volPane.setStretchFactor?.(vol ? 1.1 : 0);
+    if (state.macdPane) state.macdPane.setStretchFactor?.(macd ? 1.3 : 0);
+  } catch (e) { /* 窗格还没挂好时忽略 */ }
+
+  // 价格窗格：只在有叠加时把左右轴上下错开，其余交给库自己算
+  if (overlay) {
+    chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.12, bottom: 0.06 } });
+    chart.priceScale('left').applyOptions({ scaleMargins: { top: 0.06, bottom: 0.12 } });
+  } else {
+    chart.priceScale('right').applyOptions({ scaleMargins: { top: 0.08, bottom: 0.08 } });
+  }
+}
+
+/** 把成交量柱 / MACD 画到图上（关掉就清空并隐藏） */
+function renderIndicators() {
+  const candles = state.candles || [];
+  const volSeries = state.volSeries;
+  const macdSeries = state.macdSeries;
+  if (!volSeries || !macdSeries) return;
+
+  // 成交量：涨红跌绿（和 K 线同一套配色）
+  volSeries.applyOptions({ visible: !!state.ind.vol });
+  if (state.ind.vol && candles.length) {
+    volSeries.setData(candles.map((c) => ({
+      time: c.time,
+      value: Math.max(0, Number(c.volume) || 0),
+      color: c.close >= c.open ? 'rgba(240,75,75,.55)' : 'rgba(18,184,134,.55)'
+    })));
+  } else {
+    volSeries.setData([]);
+  }
+
+  const on = !!state.ind.macd;
+  macdSeries.hist.applyOptions({ visible: on });
+  macdSeries.dif.applyOptions({ visible: on });
+  macdSeries.dea.applyOptions({ visible: on });
+  if (on && candles.length) {
+    const rows = macdOf(candles);
+    macdSeries.hist.setData(rows.map((r) => ({
+      time: r.time,
+      value: r.hist,
+      color: r.hist >= 0 ? 'rgba(240,75,75,.55)' : 'rgba(18,184,134,.55)'
+    })));
+    macdSeries.dif.setData(rows.map((r) => ({ time: r.time, value: r.dif })));
+    macdSeries.dea.setData(rows.map((r) => ({ time: r.time, value: r.dea })));
+  } else {
+    macdSeries.hist.setData([]);
+    macdSeries.dif.setData([]);
+    macdSeries.dea.setData([]);
+  }
+
+  applyIndLayout();
+}
+
+/** 开关（点一下切一次，存 localStorage） */
+function toggleIndicator(name) {
+  if (!(name in state.ind)) return;
+  state.ind[name] = !state.ind[name];
+  saveIndPrefs();
+  renderIndButtons();
+  renderIndicators();
 }
 
 // ---------------- K线上的买卖点 ----------------
@@ -3843,6 +4018,7 @@ function applyTickToChart(price) {
       state.maSeries[period].update({ time: last.time, value: Number((sum / period).toFixed(4)) });
     }
     state.tickBucket = bucket;
+    if (state.ind.vol || state.ind.macd) renderIndicators();
     applyTickToOverlay();
     return;
   }
@@ -3855,6 +4031,7 @@ function applyTickToChart(price) {
   if (state.candles.length > 1200) state.candles.shift();
   state.candleSeries.update(c);
   renderMAs();
+  if (state.ind.vol || state.ind.macd) renderIndicators();
   state.tickBucket = bucket;
   applyTickToOverlay();
 }
@@ -4603,7 +4780,8 @@ function ensureEquityChart() {
       background: { color: 'transparent' },
       textColor: '#8aa39c',
       fontFamily: 'inherit',
-      fontSize: 10
+      fontSize: 10,
+      attributionLogo: false
     },
     grid: {
       vertLines: { color: 'rgba(15, 42, 38, .045)' },
@@ -4627,7 +4805,7 @@ function ensureEquityChart() {
     handleScale: { axisPressedMouseMove: false }
   });
 
-  const total = chart.addLineSeries({
+  const total = chart.addSeries(LightweightCharts.LineSeries, {
     color: '#0d9488',
     lineWidth: 2,
     priceScaleId: 'right',
@@ -4636,7 +4814,7 @@ function ensureEquityChart() {
     crosshairMarkerVisible: true
   });
   // 纯投资收益量级小得多，单独用左轴，否则会被压成一条直线
-  const trading = chart.addLineSeries({
+  const trading = chart.addSeries(LightweightCharts.LineSeries, {
     color: '#f59e0b',
     lineWidth: 2,
     priceScaleId: 'left',
@@ -6427,6 +6605,12 @@ function bind() {
       renderMAs();
     });
   });
+
+  // 成交量 / MACD 开关（点一下切一次，状态存 localStorage）
+  $$('#indGroup .ind').forEach((b) => {
+    b.addEventListener('click', () => toggleIndicator(b.dataset.ind));
+  });
+  loadIndPrefs();
 
   $$('#sideSwitch .side-btn').forEach((b) => {
     b.addEventListener('click', () => {

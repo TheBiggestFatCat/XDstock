@@ -61,7 +61,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 6. **发布流程**：改代码 → `node --check` → 本地跑通 → SFTP 上传 → 改线上数据（先备份）→
    `systemctl restart xdstock` → curl 验证 → `git commit` → `git push`（需代理 `127.0.0.1:4780`）。
 
-## 最容易踩的 19 个坑
+## 最容易踩的 20 个坑
 
 | 坑 | 症状 | 正解 |
 |---|---|---|
@@ -83,6 +83,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 | 市场预期写死成 0 | 玩家看不到「预期」，超预期/不及预期成了内部参数的游戏 | 用 `expectedGrowthFromHistory()`（最近 5 期营收回归外推），不够 3 期才回退模型口径 |
 | 券商活跃度用绝对口径 | 线上成交笔数少 → 营收被 25% 地板夹死 → 每期财报 0%、大鳄预览永远是「符合预期 0%」 | 用 `volumeFactorOf()`（volumeAvg / 慢速 volumeRef），migrate 会给贴地板的券商重置基准营收 |
 | 指数只算「在交易」的成分股 | 一停牌指数就闪崩（麦当劳停牌时 DENG −32%），复牌还回不来 | 遍历 status !== 'delisted'，停牌按最后价计；只有退市才剔除并强制调仓 |
+| 升级图表库忘了改 API | v5 没有 `addCandlestickSeries`，调了直接抛，整页白屏 | v5 一律 `chart.addSeries(LightweightCharts.XxxSeries, opts)`；窗格用 `addPane()` + `setStretchFactor()`，别和 `setHeight()` 混用 |
 | payload 把引擎参数抖出去 | F12 里能看到 `trait.lotteryChance` / `volMult` / `fair` / `sentimentStrength`，等于把价格模型交给玩家 | 所有下发字段必须过 `src/wire.js` 白名单；跑 `node tests/payload-wire.mjs` |
 
 ## 新增配置参数（四处都要改）

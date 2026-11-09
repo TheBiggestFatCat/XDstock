@@ -18,21 +18,23 @@ export const BAR15_SEED_VER = 2;
  * 同一根就更新 high / low / close，跨桶就新开一根，超过 BAR15_MAX 丢最老的。
  * 数组项：`[bucket, open, high, low, close]`，bucket = floor(absTick / 180)。
  */
-export function pushBar15(list, bucket, price) {
+export function pushBar15(list, bucket, price, volume = 0) {
   const p = Number(price);
   if (!Array.isArray(list) || !Number.isFinite(p) || p <= 0) return list;
   if (!Number.isFinite(bucket)) return list;
+  const vol = Number(volume) > 0 ? Number(volume) : 0;
 
   const last = list[list.length - 1];
   if (last && last[0] === bucket) {
     if (p > last[2]) last[2] = p;
     if (p < last[3]) last[3] = p;
     last[4] = p;
+    last[5] = (Number(last[5]) || 0) + vol;   // 成交量累加（老存档没有第 6 位 → 从 0 起）
     return list;
   }
   // 只往未来开新的一根；乱序（理论上不该有）直接忽略
   if (!last || bucket > last[0]) {
-    list.push([bucket, p, p, p, p]);
+    list.push([bucket, p, p, p, p, vol]);
     if (list.length > BAR15_MAX) list.splice(0, list.length - BAR15_MAX);
   }
   return list;
@@ -106,7 +108,8 @@ export function bars15Candles(list, timeOf) {
       open: Number(o.toFixed(4)),
       high: Number(Math.max(h, o, c, l).toFixed(4)),
       low: Number(Math.min(l, o, c, h).toFixed(4)),
-      close: Number(c.toFixed(4))
+      close: Number(c.toFixed(4)),
+      volume: Math.max(0, Number(b[5]) || 0)
     });
   }
   return out;

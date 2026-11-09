@@ -4196,3 +4196,20 @@ body[data-theme="bear"] .brand-logo {
   font-style: normal; font-size: 10px; color: var(--ink-3);
   border: 1px solid var(--line); border-radius: 6px; padding: 0 4px; margin-left: 4px;
 }
+
+/* ---------- K 线指标开关（成交量 / MACD） ---------- */
+.ind-group { display: flex; gap: 6px; }
+.ind {
+  padding: 4px 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface);
+  font-size: 12px; color: var(--ink-2); font-family: inherit;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.ind:hover { border-color: #14b8a6; color: var(--ink); }
+.ind.active {
+  background: #14b8a6; border-color: #14b8a6; color: #fff;
+  box-shadow: 0 3px 10px rgba(20, 184, 166, .28);
+}
+@media (max-width: 640px) {
+  .ind { padding: 3px 8px; font-size: 11px; }
+}
