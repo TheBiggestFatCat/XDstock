@@ -36,6 +36,7 @@ node tests/tycoon-broker.mjs         # 券商营收/大鳄预览（改财报/券
 node tests/report-trend-expectation.mjs  # 市场预期=最近5期走势拟合（改财报预期必跑，25 条）
 node tests/skill-text.mjs            # 主题技能文案跟着配置走（改技能/文案必跑，47 条）
 node tests/admin-panel.mjs           # 参数面板一致性：幽灵键/重复键/漏白名单（改设置面板必跑，18 条）
+node tests/market-schedule.mjs       # 定时休市 / 循环作息（改开市规则必跑，48 条断言）
 node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占比/天花板（不是断言套，看表格）
 ```
 
@@ -114,6 +115,7 @@ src/theme.js       夜行者时间窗 / 偷钱冷却（技能判定一律读 pla
 src/achievements.js 主题成就 16 条 + 全局成就 2 条 + 结晶/进化（阈值全走 config）
 src/emoji.js       表情互动（按等级解锁、每轮只留最后一个、按票隔离）
 src/bars15.js      15 分钟 K 线单独打包（48 小时）
+src/schedule.js   定时休市 / 循环作息（marketPhase 唯一入口）
 src/notify.js      站内通知（止盈止损/强平/被偷）
 src/steal.js       偷钱金额（上限按对方现金）
 src/api.js         全部 REST + payload 组装 + 管理接口
@@ -133,7 +135,7 @@ public/styles.css  全部样式（主题变量 + 移动端媒体查询）
 
 ## 已验证的关键数值（线上）
 
-- `tickMs = 5000`，1 轮 5 秒
+- `tickMs = 5000`，1 轮 5 秒；**开市 5 分钟 / 休市 2 分钟循环**（`marketCycleOpenMin/CloseMin`，5 分 K 线 = 一个交易日）
 - `playerImpactRef = 1000000`、`impactRefFreeCap = 100亿`
 - `levelBaseAsset = 1000万`、`levelGrowth = 2`、`levelUpRatio = 0.6`
 - `marketTradesRate = 6`（每轮 6~12 笔虚假成交；笔数按流通市值分配 + 散户情绪定方向/放量）、`marketTradesWindow = 12`（追涨杀跌看 1 分钟动量）、`sentimentRollTicks = 720`

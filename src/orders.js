@@ -17,6 +17,7 @@
 //   · 价格跳空导致钱不够时，按买得起的数量成交，而不是整单撤销。
 
 import { openPosition, closePosition, impactCostRate, indexImpactCost } from './trading.js';
+import { marketPhase } from './schedule.js';
 import { freeFeeActive, stampRateFor } from './perks.js';
 
 const num = (v, d = 0) => {
@@ -134,8 +135,10 @@ export function placeLimitOrder(db, player, body) {
     return { ok: false, error: '挂单功能已关闭' };
   }
   // 休市：前端会把按钮置灰，但接口必须自己拦（否则能绕过页面挂单占押金）
-  if (cfg.marketOpen === false) {
-    return { ok: false, status: 423, error: '休市中，暂停交易' };
+  // 管理员一刀切 / 定时休市 / 循环作息 都算休市
+  if (!marketPhase(db).open) {
+    const label = marketPhase(db).label || '休市';
+    return { ok: false, status: 423, error: label + '，暂停交易' };
   }
 
   const code = String(body.code || '').toUpperCase();

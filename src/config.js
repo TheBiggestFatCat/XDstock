@@ -225,6 +225,13 @@ export const DEFAULT_CONFIG = {
   investigateCooldownTicks: 30,
 
   // 市场噪声成交：每轮编几笔「散户」成交，让成交列表看着像有人在交易
+  // ---- 定时休市 / 循环作息（2026-11）----
+  // 循环：开市 marketCycleOpenMin 分钟 → 休市 marketCycleCloseMin 分钟，按现实时间无限循环
+  // 默认开 5 分 / 休 2 分（相当于「白天 5 分钟、夜里 2 分钟」，一根 5 分钟 K 线 = 一个交易日）
+  marketCycleEnabled: 1,
+  marketCycleOpenMin: 5,
+  marketCycleCloseMin: 2,
+
   marketTradesEnabled: 1,
   // 出现频率：每轮笔数 = 随机(1~2) × 这个数，6 = 每轮 6~12 笔（2026-11 从 3 翻倍到 6）
   marketTradesRate: 6,

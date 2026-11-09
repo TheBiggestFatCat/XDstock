@@ -30,6 +30,10 @@ const state = {
   // B/S 标记把手：v5 用 createSeriesMarkers 拿到，v4 退回 series.setMarkers
   markersApi: null,
   markersSeries: null,
+  // 定时休市（管理面板用）
+  schedules: [],
+  schPhase: null,
+  schPhaseText: '',
   candles: [],
   adminToken: localStorage.getItem('xd_admin') || '',
   adminTab: 'console',        // 管理页当前标签
@@ -519,7 +523,23 @@ function bindEmoteUi() {
 function renderClosed() {
   const closed = state.market && state.market.marketOpen === false;
   const banner = $('#closedBanner');
-  if (banner) banner.classList.toggle('hidden', !closed);
+  if (banner) {
+    banner.classList.toggle('hidden', !closed);
+    if (closed) {
+      // 定时休市 / 夜间休市：把原因和倒计时写进横幅（有 closedUntil 才算）
+      const text = state.market.closedText || state.market.closedLabel || '';
+      const until = Number(state.market.closedUntil) || 0;
+      const body = banner.querySelector('.cb-text') || banner;
+      let tail = '';
+      if (until > Date.now()) {
+        const left = Math.max(0, until - Date.now());
+        const mm = Math.floor(left / 60000);
+        const ss = Math.floor((left % 60000) / 1000);
+        tail = ` · ${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')} 后开市`;
+      }
+      if (body) body.textContent = (text ? text.split(' · ')[0] : '休市中') + tail;
+    }
+  }
   // 按钮文案统一交给 updateCostPreview 处理，避免每 tick 被刷回去
   updateCostPreview();
 }
@@ -4177,6 +4197,11 @@ function onTick(d) {
   // 表情：本轮该冒出来的（服务端只下发「上一轮发出来的」那一批）
   if (Array.isArray(d.emotes)) renderEmotes(d.emotes);
   if (d.closed !== undefined) m.marketOpen = !d.closed;
+  // 定时休市 / 夜间休市：原因 + 开市时间（横幅里显示倒计时）
+  if (d.closedLabel !== undefined) m.closedLabel = d.closedLabel;
+  if (d.closedText !== undefined) m.closedText = d.closedText;
+  if (d.closedUntil !== undefined) m.closedUntil = Number(d.closedUntil) || 0;
+  if (d.nextChangeAt !== undefined) m.nextChangeAt = Number(d.nextChangeAt) || 0;
   // 后台改了参数（杠杆上限等），下一轮就同步过来
   if (d.config) m.config = { ...(m.config || {}), ...d.config };
   renderClosed();
@@ -5477,6 +5502,7 @@ function renderConsole() {
 }
 
 function bindAdminConsole() {
+  bindSchedulePanel();
   $$('#adminTabs [data-admin-tab]').forEach((b) => {
     b.addEventListener('click', () => switchAdminTab(b.dataset.adminTab));
   });
@@ -5632,6 +5658,162 @@ async function publishVersionPost() {
   }
 }
 
+// ---------------- 定时休市（一次性 / 每天 / 循环作息）----------------
+function fmtAt(ms) {
+  if (!(ms > 0)) return '—';
+  const d = new Date(ms);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function fmtMinuteStr(min) {
+  const m = ((Math.round(Number(min) || 0) % 1440) + 1440) % 1440;
+  return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+}
+
+/** 拉一次定时休市状态（列表 + 当前相位 + 循环参数）*/
+async function loadSchedules() {
+  const d = await adminApi('/api/admin/schedule');
+  state.schedules = d.schedules || [];
+  state.schPhase = d.phase || null;
+  state.schPhaseText = d.phaseText || '';
+  renderSchedules(d.config || {});
+}
+
+function renderSchedules(cfg) {
+  const phaseEl = $('#schPhase');
+  if (phaseEl) {
+    const p = state.schPhase;
+    const live = p && !p.open;
+    phaseEl.textContent = state.schPhaseText || '—';
+    phaseEl.className = 'panel-sub' + (live ? ' sch-closed' : '');
+    if (live) phaseEl.style.color = '#dc2626';
+    else phaseEl.style.color = '';
+  }
+  // 顺手把「市场控制」那张卡也按真实状态刷一下（休市可能是定时的，不是管理员按的）
+  const p2 = state.schPhase;
+  if (p2) {
+    const msEl = $('#marketState');
+    if (msEl) {
+      msEl.textContent = p2.open ? '🟢 开市中' : '🔴 ' + (p2.label || '休市中');
+      msEl.className = 'mc-state ' + (p2.open ? 'open' : 'closed');
+    }
+  }
+
+  // 循环参数（只在第一次填，别把正在输入的值刷掉）
+  const en = $('#schCycleEnabled');
+  const op = $('#schCycleOpen');
+  const cl = $('#schCycleClose');
+  if (en && document.activeElement !== en) en.value = String(Number(cfg.marketCycleEnabled ?? 0) !== 0 ? 1 : 0);
+  if (op && document.activeElement !== op) op.value = String(cfg.marketCycleOpenMin ?? 5);
+  if (cl && document.activeElement !== cl) cl.value = String(cfg.marketCycleCloseMin ?? 2);
+
+  const box = $('#schList');
+  if (!box) return;
+  const list = state.schedules || [];
+  if (!list.length) {
+    box.innerHTML = '<div class="panel-sub">还没有定时计划（循环作息仍然生效）</div>';
+    return;
+  }
+  const now = Date.now();
+  const rows = list.map((s) => {
+    const active = state.schPhase && state.schPhase.scheduleId === s.id;
+    const done = s.done || (s.kind === 'once' && s.startAt + s.durationMin * 60000 <= now && !active);
+    const cls = 'sch-row' + (s.enabled === false ? ' off' : '') + (done ? ' done' : '');
+    const when = s.kind === 'once'
+      ? `${fmtAt(s.startAt)} 起 ${s.durationMin} 分钟`
+      : `每天 ${fmtMinuteStr(s.startMinute)} 起 ${s.durationMin} 分钟`;
+    return `<div class="${cls}">
+      <span class="sch-tag ${s.kind}">${s.kind === 'once' ? '一次性' : '每天'}</span>
+      <span class="sch-when">${when}</span>
+      <span class="sch-note">${s.note || ''}</span>
+      ${active ? '<span class="sch-tag" style="background:rgba(220,38,38,.12);color:#dc2626">正在休市</span>' : ''}
+      ${done ? '<span class="sch-tag">已结束</span>' : ''}
+      <span class="sch-spacer"></span>
+      <button class="mini-btn" data-sch-toggle="${s.id}">${s.enabled === false ? '启用' : '停用'}</button>
+      <button class="mini-btn danger" data-sch-del="${s.id}">删除</button>
+    </div>`;
+  }).join('');
+  box.innerHTML = rows;
+  $('#schList [data-sch-del]').forEach((b) => {
+    b.addEventListener('click', async () => {
+      try {
+        await adminApi('/api/admin/schedule', { action: 'del', id: b.dataset.schDel });
+        toast('已删除', 'ok');
+        await loadSchedules();
+      } catch (e) { toast(e.message, 'err'); }
+    });
+  });
+  $('#schList [data-sch-toggle]').forEach((b) => {
+    b.addEventListener('click', async () => {
+      try {
+        await adminApi('/api/admin/schedule', { action: 'toggle', id: b.dataset.schToggle });
+        await loadSchedules();
+      } catch (e) { toast(e.message, 'err'); }
+    });
+  });
+}
+
+/** datetime-local 的值（本地时间）→ 毫秒时间戳 */
+function localInputToMs(v) {
+  if (!v) return 0;
+  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!m) return 0;
+  return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], 0, 0).getTime();
+}
+
+function bindSchedulePanel() {
+  const saveBtn = $('#schCycleSave');
+  if (saveBtn) {
+    saveBtn.onclick = async () => {
+      try {
+        await adminApi('/api/admin/config', {
+          patch: {
+            marketCycleEnabled: Number($('#schCycleEnabled').value) || 0,
+            marketCycleOpenMin: Math.max(1, Number($('#schCycleOpen').value) || 5),
+            marketCycleCloseMin: Math.max(0, Number($('#schCycleClose').value) || 2)
+          }
+        });
+        toast('作息已保存，下一轮生效', 'ok');
+        await loadSchedules();
+        await refreshMarket();
+      } catch (e) { toast(e.message, 'err'); }
+    };
+  }
+  const onceBtn = $('#schOnceAdd');
+  if (onceBtn) {
+    onceBtn.onclick = async () => {
+      const startAt = localInputToMs($('#schOnceAt').value);
+      if (!(startAt > 0)) { toast('先选开始时间', 'err'); return; }
+      try {
+        await adminApi('/api/admin/schedule', {
+          action: 'add',
+          schedule: { kind: 'once', startAt, durationMin: Number($('#schOnceDur').value) || 30, note: $('#schOnceNote').value.trim() }
+        });
+        toast('已添加一次性休市', 'ok');
+        $('#schOnceNote').value = '';
+        await loadSchedules();
+      } catch (e) { toast(e.message, 'err'); }
+    };
+  }
+  const dailyBtn = $('#schDailyAdd');
+  if (dailyBtn) {
+    dailyBtn.onclick = async () => {
+      const t = $('#schDailyAt').value;
+      if (!/^\d{1,2}:\d{2}$/.test(t)) { toast('时间填 HH:MM', 'err'); return; }
+      try {
+        await adminApi('/api/admin/schedule', {
+          action: 'add',
+          schedule: { kind: 'daily', startMinute: t, durationMin: Number($('#schDailyDur').value) || 30, note: $('#schDailyNote').value.trim() }
+        });
+        toast('已添加每天计划', 'ok');
+        $('#schDailyNote').value = '';
+        await loadSchedules();
+      } catch (e) { toast(e.message, 'err'); }
+    };
+  }
+}
+
 async function loadAdmin() {
   const res = await fetch('/api/admin/state', { headers: { Authorization: 'Bearer ' + state.adminToken } });
   if (!res.ok) {
@@ -5678,16 +5860,25 @@ async function loadAdmin() {
   }
 
   // 标的
+  // 定时休市（列表 + 相位 + 循环参数）
+  try {
+    state.schedules = d.schedules || [];
+    state.schPhase = d.phase || null;
+    state.schPhaseText = d.phaseText || '';
+    renderSchedules(d.config || {});
+  } catch { /* 面板还没渲染好 */ }
+
   // 市场控制
   const isOpen = d.marketOpen !== false;
   const ms = $('#marketState');
   if (ms) {
-    ms.textContent = isOpen ? '🟢 开市中' : '🔴 休市中（行情冻结）';
+    const why = !isOpen && d.phase ? `（${d.phase.label}）` : '';
+    ms.textContent = isOpen ? '🟢 开市中' : `🔴 休市中${why}`;
     ms.className = 'mc-state ' + (isOpen ? 'open' : 'closed');
   }
   const mtb = $('#marketToggleBtn');
   if (mtb) {
-    mtb.textContent = isOpen ? '立即休市' : '恢复开市';
+    mtb.textContent = Number(d.config && d.config.marketOpen === false) ? '恢复开市' : '立即休市';
     mtb.className = 'btn ' + (isOpen ? 'btn-danger' : 'btn-primary');
     mtb.onclick = async () => {
       try {

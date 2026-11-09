@@ -64,6 +64,15 @@ const walk = (groups, where) => {
 for (const c of cats) walk(c.groups, c.name);
 walk(stockGroups, '个股页');
 
+// 手写在 index.html 里的 data-cfg（定时休市的循环作息那块）也算「面板可调」
+const htmlCfgKeys = new Set();
+for (const m of htmlSrc.matchAll(/data-cfg="([A-Za-z0-9_]+)"/g)) htmlCfgKeys.add(m[1]);
+for (const k of htmlCfgKeys) {
+  if (!panel.some((p) => p.key === k)) {
+    panel.push({ key: k, label: '(手写 HTML) ' + k, hint: null, where: '市场页' });
+  }
+}
+
 check('19 大类/组结构没坏元组', badTuple === 0, `坏 ${badTuple}`);
 check('面板字段都在 DEFAULT_CONFIG 里',
   panel.every((p) => configKeys.has(p.key)),

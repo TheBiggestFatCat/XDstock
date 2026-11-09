@@ -4213,3 +4213,34 @@ body[data-theme="bear"] .brand-logo {
 @media (max-width: 640px) {
   .ind { padding: 3px 8px; font-size: 11px; }
 }
+
+
+/* ---------- 定时休市 ---------- */
+.sch-cycle, .sch-add { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+.sch-cycle .field { width: 150px; }
+.sch-add { gap: 16px; margin-bottom: 14px; }
+.sch-add-box {
+  flex: 1 1 320px; min-width: 280px; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2, rgba(20,184,166,.03));
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
+}
+.sch-add-title { width: 100%; font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 2px; }
+.sch-add-box .field { width: 150px; }
+.sch-list { display: flex; flex-direction: column; gap: 8px; }
+.sch-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 13px;
+}
+.sch-row.off { opacity: .55; }
+.sch-row.done { opacity: .45; text-decoration: line-through; }
+.sch-tag {
+  padding: 1px 8px; border-radius: 999px; font-size: 11px;
+  background: rgba(20,184,166,.12); color: #0d9488;
+}
+.sch-tag.once { background: rgba(245,158,11,.14); color: #b45309; }
+.sch-when { font-variant-numeric: tabular-nums; font-weight: 600; }
+.sch-note { color: var(--ink-3); }
+.sch-spacer { flex: 1; }
+@media (max-width: 640px) {
+  .sch-cycle .field, .sch-add-box .field { width: calc(50% - 5px); }
+}

@@ -9,6 +9,7 @@ import { pushVersionPost, latestVersionPost, listVersionPosts, deleteVersionPost
 import { nightInfoFor } from './theme.js';
 import { TIMEFRAMES } from './config.js';
 import { getBuild } from './build.js';
+import { marketPhase, phaseText, normalizeSchedule, ensureSchedules, scheduleWindow, cyclePhase, fmtMinute, parseMinute, MINUTE_MS } from './schedule.js';
 import { playerEquity, positionPnl } from './trading.js';
 import { levelUpPlayer, withdrawFromBank, bankStatus } from './bank.js';
 import { placeLimitOrder, cancelOrder, orderLimitBlocked, consumeOrderSlot, fillCapFor } from './orders.js';
@@ -454,7 +455,12 @@ export function marketPayload(db, me) {
     build: getBuild(),
     tick: db.tick,
     tickMs: db.config.tickMs,
-    marketOpen: db.config.marketOpen !== false,
+    marketOpen: marketPhase(db).open,
+    closedReason: marketPhase(db).reason,
+    closedLabel: marketPhase(db).label,
+    closedText: phaseText(marketPhase(db)),
+    closedUntil: marketPhase(db).nextOpenAt,
+    nextChangeAt: marketPhase(db).nextChangeAt,
     // 首屏就能看到的表情（上一轮发出来的那些）
     emotes: visibleEmotes(db),
     // 版本更新公告（「市场快讯」上方固定那一栏；没有就 null）
@@ -697,7 +703,10 @@ export async function handleApi(ctx) {
   if (pathname === '/api/admin/state' && method === 'GET') {
     return json(res, 200, {
       config: db.config,
-      marketOpen: db.config.marketOpen !== false,
+      marketOpen: marketPhase(db).open,
+      phase: marketPhase(db),
+      phaseText: phaseText(marketPhase(db)),
+      schedules: Array.isArray(db.marketSchedules) ? db.marketSchedules : [],
       tick: db.tick,
       // 过期的公告不再下发，管理面板看到的和玩家看到的一致
       notices: (db.notices || []).filter((n) => noticeAlive(db, n)),
@@ -727,6 +736,63 @@ export async function handleApi(ctx) {
   }
 
   // 版本公告：发一条 / 删一条
+  // 定时休市：一次性（指定日期时间）/ 计划性（每天几点）
+  if (pathname === '/api/admin/schedule' && method === 'GET') {
+    ensureSchedules(db);
+    return json(res, 200, {
+      ok: true,
+      schedules: db.marketSchedules || [],
+      phase: marketPhase(db),
+      phaseText: phaseText(marketPhase(db)),
+      config: {
+        marketCycleEnabled: db.config.marketCycleEnabled ?? 0,
+        marketCycleOpenMin: db.config.marketCycleOpenMin ?? 5,
+        marketCycleCloseMin: db.config.marketCycleCloseMin ?? 2
+      }
+    });
+  }
+  if (pathname === '/api/admin/schedule' && method === 'POST') {
+    const action = String(body.action || '');
+    ensureSchedules(db);
+    if (!Array.isArray(db.marketSchedules)) db.marketSchedules = [];
+
+    if (action === 'add') {
+      const raw = body.schedule || {};
+      const s = normalizeSchedule({
+        kind: raw.kind,
+        // 一次性：前端传毫秒时间戳（datetime-local 转出来的）
+        startAt: raw.startAt,
+        durationMin: raw.durationMin,
+        // 计划性：'HH:MM'
+        startMinute: raw.startMinute,
+        note: raw.note
+      });
+      if (!s) return json(res, 400, { error: '时间格式不对：一次性要完整的日期时间，每天要 HH:MM' });
+      if (s.kind === 'once' && s.startAt + s.durationMin * MINUTE_MS <= now()) {
+        return json(res, 400, { error: '这个时间已经过去了，换个未来的时间' });
+      }
+      db.marketSchedules.push(s);
+      saveDb();
+      return json(res, 200, { ok: true, schedules: db.marketSchedules, added: s, phase: marketPhase(db) });
+    }
+
+    const id = String(body.id || '');
+    const idx = db.marketSchedules.findIndex((x) => x.id === id);
+    if (idx < 0) return json(res, 404, { error: '没有这条定时计划' });
+
+    if (action === 'del') {
+      db.marketSchedules.splice(idx, 1);
+      saveDb();
+      return json(res, 200, { ok: true, schedules: db.marketSchedules, phase: marketPhase(db) });
+    }
+    if (action === 'toggle') {
+      db.marketSchedules[idx].enabled = db.marketSchedules[idx].enabled === false;
+      saveDb();
+      return json(res, 200, { ok: true, schedules: db.marketSchedules, phase: marketPhase(db) });
+    }
+    return json(res, 400, { error: '不认识的操作' });
+  }
+
   if (pathname === '/api/admin/version-post' && method === 'POST') {
     const r = pushVersionPost(db, { version: body.version, title: body.title, body: body.body, tick: db.tick });
     if (!r.ok) return json(res, 400, { error: r.error });
@@ -999,7 +1065,12 @@ export async function handleApi(ctx) {
       db.closedAt = 0;
     }
     saveDb();
-    return json(res, 200, { ok: true, marketOpen: db.config.marketOpen });
+    return json(res, 200, {
+      ok: true,
+      marketOpen: db.config.marketOpen,
+      phase: marketPhase(db),
+      phaseText: phaseText(marketPhase(db))
+    });
   }
 
   if (pathname === '/api/admin/event/clear' && method === 'POST') {
@@ -1051,6 +1122,7 @@ export async function handleApi(ctx) {
       'playerImpactDecay', 'playerImpactMax', 'playerImpactFlowMax',
       'brokerMidpoint', 'brokerMidFloor', 'brokerSensitivity', 'brokerCap', 'brokerAlpha',
       'startingCash', 'adminPin', 'allowRegister', 'marketOpen', 'pinLength',
+    'marketCycleEnabled', 'marketCycleOpenMin', 'marketCycleCloseMin',
       // ---- 主题成就 / 进化 ----
       'achvShardPerEvolve',
       'achvRedTrendTarget', 'achvRedBonusTarget',

@@ -11,6 +11,7 @@ import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, logTrade } from './src/trading.js';
 import { processOrders, fillCapFor } from './src/orders.js';
 import { autoDcaTick } from './src/autoDca.js';
+import { marketPhase, phaseText } from './src/schedule.js';
 import { checkDelist } from './src/delist.js';
 import { fetchAudJpy } from './src/fx.js';
 import { handleApi } from './src/api.js';
@@ -202,6 +203,11 @@ const server = http.createServer(async (req, res) => {
 // ---------------- 游戏主循环 ----------------
 // 金融大鳄：下期财报预览（提前 20 轮）
 // 注意：每轮的 SSE 广播用的是「无玩家」的公共 payload，所以预览必须在
+/** tickPayload 里用的当前开市状态（每次都按现实时间重算，免得跨过边界还发旧值） */
+function phaseNow(d) {
+  return marketPhase(d, now());
+}
+
 function tickPayload(forPlayerId) {
   const d = getDb();
   const tp = forPlayerId ? d.players[forPlayerId] : null;
@@ -277,7 +283,12 @@ function tickPayload(forPlayerId) {
     emotes: visibleEmotes(d),
     // 版本公告：管理员发完，在线玩家下一轮就能看到（不用刷新）
     versionPost: latestVersionPost(d),
-    closed: d.config.marketOpen === false,
+    closed: phaseNow(d).open === false,
+    closedReason: phaseNow(d).reason,
+    closedLabel: phaseNow(d).label,
+    closedText: phaseText(phaseNow(d), now()),
+    closedUntil: phaseNow(d).nextOpenAt,
+    nextChangeAt: phaseNow(d).nextChangeAt,
     index: d.index.value,
     indexChanges: changesFor(d.index.series, TIMEFRAMES),
     // 调仓后权重会变，不推的话前端面板一直是进页面时那份
@@ -351,12 +362,22 @@ function loop() {
   const d = getDb();
   const cfg = d.config;
 
-  // 休市：冻结行情，只推状态不给价格
-  if (d.config.marketOpen === false) {
+  // 休市（管理员一刀切 / 定时休市 / 循环作息）：冻结行情，只推状态不给价格
+  const phase = marketPhase(d, now());
+  if (!phase.open) {
     const frozen = tickPayload(null);
     for (const c of clients) {
       const personal = tickPayload(c.playerId);
-      const payload = { ...frozen, me: personal.me, activity: personal.activity, closed: true };
+      const payload = {
+        ...frozen,
+        me: personal.me,
+        activity: personal.activity,
+        closed: true,
+        closedReason: phase.reason,
+        closedLabel: phase.label,
+        closedText: phaseText(phase, now()),
+        closedUntil: phase.nextOpenAt
+      };
       try {
         c.res.write(`data: ${JSON.stringify(payload)}\n\n`);
       } catch {

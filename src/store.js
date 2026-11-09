@@ -6,6 +6,7 @@ import { STOCK_SEED, STOCK_CODES, INDEX_BASE, INDEX_STOCK, SMALL_INDEX_STOCK } f
 import { ensureGold } from './gold.js';
 import { backDerive, fairFromReport } from './fundamentals.js';
 import { seedBars15, seedVolFromConfig, BAR15_MAX, BAR15_SEED_VER } from './bars15.js';
+import { ensureSchedules } from './schedule.js';
 import { ensureAchvState, GLOBAL_ACHIEVEMENTS, achvTarget } from './achievements.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -440,6 +441,8 @@ export function migrate(d) {
     }
     if (typeof s.volTick !== 'number') s.volTick = 0;
   }
+  // 定时休市计划：一次性 / 每天（脏数据顺手清掉，过期的一次性自动停用）
+  ensureSchedules(merged);
   if (!merged.hotMoney || typeof merged.hotMoney !== 'object') {
     merged.hotMoney = { code: '', industry: '', nextSwitchTick: 0, switches: 0, startedTick: 0 };
   }
