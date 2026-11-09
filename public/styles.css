@@ -783,6 +783,7 @@ input.tpsl-input {
   }
   .tab::before { font-size: 17px; line-height: 1.15; }
   .tab[data-view="market"]::before { content: '📈'; }
+  .tab[data-view="chat"]::before { content: '💬'; }
   .tab[data-view="portfolio"]::before { content: '💼'; }
   .tab[data-view="work"]::before { content: '💰'; }
   .tab[data-view="shop"]::before { content: '🛒'; }
