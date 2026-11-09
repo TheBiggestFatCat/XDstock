@@ -866,13 +866,17 @@ input.tpsl-input {
   .shop-grid { grid-template-columns: 1fr; }
   .rank-row { gap: 8px; padding: 9px 8px; }
   .news-panel { margin-bottom: 10px; }
-  /* 手机上限制高度并内部滚动，否则内容会溢出面板盖住下面的行情列表 */
+  /* 手机上限制高度并内部滚动，否则内容会溢出面板盖住下面的行情列表
+     2026-11：232px 太矮，重大利好/利空会被公告挤出可视区 → 放宽到 46vh */
   .news-feed {
-    max-height: 232px;
+    max-height: 46vh;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
   }
+  /* 手机上重大新闻再放大一点，红/绿底一眼能看到 */
+  .news-item.is-major { padding: 10px 11px; font-size: 13px; }
+  .news-item.is-major .news-badge { font-size: 11px; }
 
   /* 指纹/刘海屏安全区 */
   .login-wrap { padding: calc(20px + env(safe-area-inset-top)) 16px calc(20px + env(safe-area-inset-bottom)); }
@@ -4641,4 +4645,39 @@ body[data-theme="bear"] .brand-logo {
   .chat-send { height: 33px; padding: 0 13px; font-size: 13.5px; }
   .chat-emoji-panel { grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); max-height: 140px; }
   .packet-card { max-width: none; }
+}
+
+/* ---------- 手机端「详情」页：重大利好/利空横幅 ----------
+   手机上看某只票时，市场快讯面板是 hidden 的（body.m-detail），
+   所以重大新闻单独在图表上方占一条，红/绿底 + 闪烁，不点回列表也能看到。 */
+.m-major-strip { display: none; }
+
+@media (max-width: 760px) {
+  body.m-detail .m-major-strip.is-up,
+  body.m-detail .m-major-strip.is-down {
+    display: flex; align-items: center; gap: 7px;
+    margin: 0 0 8px; padding: 8px 10px; border-radius: 11px;
+    font-size: 12.5px; font-weight: 600; line-height: 1.45;
+    border: 1px solid rgba(220, 38, 38, .38);
+    background: linear-gradient(90deg, rgba(220, 38, 38, .16), rgba(220, 38, 38, .06));
+    color: #b91c1c;
+    animation: majorBlink 1.4s ease-in-out infinite;
+  }
+  body.m-detail .m-major-strip.is-down {
+    border-color: rgba(18, 184, 134, .42);
+    background: linear-gradient(90deg, rgba(18, 184, 134, .18), rgba(18, 184, 134, .07));
+    color: #047857;
+  }
+  .m-major-strip.hidden { display: none !important; }
+  .mms-badge {
+    flex: none; padding: 2px 7px; border-radius: 7px;
+    background: #dc2626; color: #fff; font-size: 11px; font-weight: 700;
+  }
+  .m-major-strip.is-down .mms-badge { background: #12b886; }
+  .mms-text {
+    flex: 1; min-width: 0;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .mms-left { flex: none; font-size: 11px; white-space: nowrap; opacity: .9; }
 }

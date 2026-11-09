@@ -3259,19 +3259,23 @@ function renderNews() {
   const notices = (state.market?.notices || []).slice().sort((a, b) => (b.at || 0) - (a.at || 0));
   const allEvents = (state.market?.events || []).slice()
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  // 重大利好/重大利空永远排最前（要挂 3 小时，不能被后来的普通新闻挤下去）
+  // 重大利好/重大利空单独拎出来：手机端要放最前面，不能被公告挤出可视区
   const majors = allEvents.filter((e) => e.major);
   const list = allEvents.filter((e) => !e.major);
+  const isPhone = window.matchMedia('(max-width: 760px)').matches;
+
   const cnt = $('#newsCount');
-  const total = notices.length + list.length;
+  const total = notices.length + allEvents.length;
   if (cnt) cnt.textContent = total ? `${total} 条` : '';
+
+  renderMajorStrip();
 
   if (!total) {
     feed.innerHTML = '<div class="news-empty">暂无消息，市场风平浪静</div>';
     return;
   }
 
-  // 公告永远排在最前面，且不参与行情
+  // 公告永远排在前面，且不参与行情
   const ageTip = (n) => (n === null || n === undefined)
     ? '' : `<span class="news-age">已过去 ${n} 轮</span>`;
   // 有 tick 期限的公告显示「还剩 N 轮」，老公告还是显示已过去多少轮
@@ -3283,6 +3287,13 @@ function renderNews() {
     return `<span class="news-age">还剩 ${left} 轮</span>`;
   };
 
+  const noticeHtml = notices.slice(0, isPhone ? 2 : 3).map((n) => `
+    <div class="news-item news-notice">
+      <span class="news-badge badge-notice">公告</span>
+      <span class="news-text">${escapeHtml(n.text)}</span>
+      ${noticeTip(n)}
+    </div>`).join('');
+
   // 重大新闻：还剩多久（服务端给 leftTicks）
   const majorLeftTip = (ev) => {
     const left = Number(ev.leftTicks);
@@ -3293,30 +3304,51 @@ function renderNews() {
     return `<span class="news-age is-major-age">剩 ${mins} 分钟</span>`;
   };
 
-  const noticeHtml = notices.slice(0, 3).map((n) => `
-    <div class="news-item news-notice">
-      <span class="news-badge badge-notice">公告</span>
-      <span class="news-text">${escapeHtml(n.text)}</span>
-      ${noticeTip(n)}
-    </div>`).join('');
-
-  // 重大新闻最多占 2 条，剩下位置给普通新闻
-  const majorSlots = Math.min(2, majors.length);
-  const slots = Math.max(1, 4 - Math.min(3, notices.length));
-  const newsHtml = majors.slice(0, majorSlots).map((ev) => `
+  const majorHtml = majors.slice(0, isPhone ? 3 : 2).map((ev) => `
     <div class="news-item is-major ${Number(ev.dir) > 0 ? 'is-major-up' : 'is-major-down'}">
       <span class="news-badge badge-major">${Number(ev.dir) > 0 ? '重大利好' : '重大利空'}</span>
       <span class="news-text">${ev.text}</span>
       ${majorLeftTip(ev)}
-    </div>`).join('')
-    + list.slice(0, Math.max(1, slots - majorSlots)).map((ev) => `
+    </div>`).join('');
+
+  // 普通新闻：手机端只留 1 条，桌面端塞满剩下的位置
+  const normalSlots = isPhone
+    ? 1
+    : Math.max(1, 4 - Math.min(3, notices.length) - Math.min(2, majors.length));
+  const normalHtml = list.slice(0, normalSlots).map((ev) => `
     <div class="news-item">
       ${newsBadge(ev)}
       <span class="news-text">${ev.text}</span>
       ${ageTip(ev.ageTicks)}
     </div>`).join('');
 
-  feed.innerHTML = noticeHtml + newsHtml;
+  // 手机端：重大 → 公告 → 普通（保证一进页面就看见重大新闻）
+  feed.innerHTML = isPhone
+    ? (majorHtml + noticeHtml + normalHtml)
+    : (noticeHtml + majorHtml + normalHtml);
+}
+
+/** 手机端「详情」页顶部的重大新闻横幅（快讯面板在那个模式下是 hidden 的） */
+function renderMajorStrip() {
+  const el = $('#mMajorStrip');
+  if (!el) return;
+  const majors = (state.market?.events || []).filter((e) => e.major)
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const ev = majors[0];
+  if (!ev) {
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+  const up = Number(ev.dir) > 0;
+  const left = Number(ev.leftTicks);
+  const mins = Number.isFinite(left) ? Math.round((left * (state.market?.tickMs || 5000)) / 60000) : 0;
+  const tip = mins >= 60 ? `${(mins / 60).toFixed(1)} 小时` : `${Math.max(1, mins)} 分钟`;
+  el.className = 'm-major-strip ' + (up ? 'is-up' : 'is-down');
+  el.innerHTML = `<span class="mms-badge">${up ? '重大利好' : '重大利空'}</span>`
+    + `<span class="mms-text">${ev.text}</span>`
+    + `<span class="mms-left">剩 ${tip}</span>`;
+  el.classList.remove('hidden');
 }
 
 function escapeHtml(s) {
