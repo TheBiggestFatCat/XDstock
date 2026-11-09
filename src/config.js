@@ -113,10 +113,10 @@ export const DEFAULT_CONFIG = {
   mindAccurateChanceEvolved: 0.7,
 
   // ---- 夜行者主题（Lv.2）----
-  nightStartHour: 20,      // 现实时间几点开始算夜里（服务器本地时间）
-  nightEndHour: 4,         // 几点结束（支持跨零点）
-  nightStealCooldown: 3,   // 夜行者夜里偷钱的冷却（轮），其他情况用 stealCooldownTicks
-  nightStealCooldownEvolved: 1,  // 进化后夜里偷钱冷却（硬底线 1 轮）
+  nightStartHour: 22,      // 现实时间几点开始算夜里（服务器本地时间）
+  nightEndHour: 5,         // 几点结束（支持跨零点）
+  nightStealCooldown: 50,  // 夜行者夜里偷钱的冷却（轮），其他情况用 stealCooldownTicks
+  nightStealCooldownEvolved: 20,  // 进化后夜里偷钱冷却（硬底线 1 轮）
 
   // ================= 主题成就 / 主题进化（Lv1 → Lv2）=================
   // 见 docs/成就系统设计.md §9。这里只是默认值，线上以 db.config 为准。
@@ -326,7 +326,7 @@ export const DEFAULT_CONFIG = {
   // ---- 偷钱 ----
   stealMin: 100,            // 单次最少偷多少
   stealMax: 10000,          // 单次最多偷多少
-  stealCapRatio: 0.001,     // 上限：被偷人「总资产」的 0.1%（实际只能从现金里拿）
+  stealCapRatio: 0.001,     // 上限：被偷人「现金」的 0.1%（持仓里的钱偷不到）
   stealCooldownTicks: 60,   // 偷钱冷却：得手后多少轮才能再偷（60 轮 ≈ 5 分钟）
 
   // ---- 券商特质（小灯证券）----

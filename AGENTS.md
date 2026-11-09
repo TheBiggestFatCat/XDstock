@@ -64,7 +64,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 6. **发布流程**：改代码 → `node --check` → 本地跑通 → SFTP 上传 → 改线上数据（先备份）→
    `systemctl restart xdstock` → curl 验证 → `git commit` → `git push`（需代理 `127.0.0.1:4780`）。
 
-## 最容易踩的 22 个坑
+## 最容易踩的 23 个坑
 
 | 坑 | 症状 | 正解 |
 |---|---|---|
@@ -89,6 +89,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 | 成交量只记在指数自己头上 | 指数 K 线有量、点进成分股全是空的 | 指数单按权重拆给成分股（`trading.js#addVolume`），指数成交量 = 成分股之和（`indexTickVolume`），别各算一份 |
 | v5 之后 B/S 标记消失 | 图上没有 B/S，也不报错（老守卫 `typeof setMarkers !== 'function'` 直接 return） | v5 用 `LightweightCharts.createSeriesMarkers(series, markers)`，见 `markerApi()` |
 | 升级图表库忘了改 API | v5 没有 `addCandlestickSeries`，调了直接抛，整页白屏 | v5 一律 `chart.addSeries(LightweightCharts.XxxSeries, opts)`；窗格用 `addPane()` + `setStretchFactor()`，别和 `setHeight()` 混用 |
+| 夜行者/偷钱数值写死在前端 | 后台改了时间窗或冷却，商城卡片还写旧的 20:00~04:00 / 3 轮 | 文案一律 `skillText.js` 从 config 生成；面板标签不要写死数字，改了配置要 `PATCH /api/admin/config`（老存档不会自动用新默认值） |
 | payload 把引擎参数抖出去 | F12 里能看到 `trait.lotteryChance` / `volMult` / `fair` / `sentimentStrength`，等于把价格模型交给玩家 | 所有下发字段必须过 `src/wire.js` 白名单；跑 `node tests/payload-wire.mjs` |
 
 ## 新增配置参数（四处都要改）
@@ -138,6 +139,7 @@ public/styles.css  全部样式（主题变量 + 移动端媒体查询）
 
 ## 已验证的关键数值（线上）
 
+- 夜行者：夜里（**22:00~05:00**）偷钱冷却 `nightStealCooldown = 50` 轮，进化后 `20` 轮；白天用 `stealCooldownTicks`；偷钱金额 = 随机[stealMin,stealMax] 再被「对方现金 × stealCapRatio」封顶
 - `tickMs = 5000`，1 轮 5 秒；**开市 5 分钟 / 休市 2 分钟循环**（`marketCycleOpenMin/CloseMin`，5 分 K 线 = 一个交易日）；顶栏指数右侧有「距休市 / 距开市」倒计时，每秒本地刷新
 - `playerImpactRef = 1000000`、`impactRefFreeCap = 100亿`
 - `levelBaseAsset = 1000万`、`levelGrowth = 2`、`levelUpRatio = 0.6`

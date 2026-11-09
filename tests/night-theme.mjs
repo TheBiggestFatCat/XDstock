@@ -17,13 +17,13 @@ const at = (h, m = 0) => new Date(2026, 10, 4, h, m, 0, 0).getTime();
 const db = () => ({ config: {} });
 
 // ---------------------------------------------------------------- 1
-log('=== 1 时间窗：18:00 ~ 次日 04:00 ===');
+log('=== 1 时间窗：22:00 ~ 次日 05:00 ===');
 {
   const cases = [
-    [17, 59, false], [18, 0, true], [18, 1, true],
-    [21, 30, true], [23, 59, true],
-    [0, 0, true], [3, 59, true], [4, 0, false],
-    [12, 0, false], [6, 30, false]
+    [21, 59, false], [22, 0, true], [22, 1, true],
+    [23, 59, true],
+    [0, 0, true], [4, 59, true], [5, 0, false],
+    [12, 0, false], [19, 30, false]
   ];
   for (const [h, m, want] of cases) {
     const got = isNightWindow(db(), at(h, m));
@@ -54,30 +54,35 @@ log('=== 2 时间窗可以配，且 start === end 视为不生效 ===');
 
 // ---------------------------------------------------------------- 3
 log('');
-log('=== 3 偷钱 CD：夜行者夜里 3 轮，其余 60 轮 ===');
+log('=== 3 偷钱 CD：夜行者夜里 50 轮，其余 60 轮 ===');
 {
   const night = { theme: 'night', skill: 'night' };
-  check('夜行者 · 夜里 → 3 轮', stealCooldownFor(db(), night, at(21)) === 3);
+  check('夜行者 · 夜里 → 50 轮', stealCooldownFor(db(), night, at(23)) === 50, String(stealCooldownFor(db(), night, at(23))));
   check('夜行者 · 白天 → 60 轮', stealCooldownFor(db(), night, at(12)) === 60);
-  check('别的主题 · 夜里 → 60 轮', stealCooldownFor(db(), { theme: 'dark', skill: 'dark' }, at(21)) === 60);
-  check('没主题（新号）· 夜里 → 60 轮', stealCooldownFor(db(), {}, at(21)) === 60);
-  check('玩家对象缺省也不炸', stealCooldownFor(db(), null, at(21)) === 60);
+  check('别的主题 · 夜里 → 60 轮', stealCooldownFor(db(), { theme: 'dark', skill: 'dark' }, at(23)) === 60);
+  check('没主题（新号）· 夜里 → 60 轮', stealCooldownFor(db(), {}, at(23)) === 60);
+  check('玩家对象缺省也不炸', stealCooldownFor(db(), null, at(23)) === 60);
+
+  // 22:00~05:00 之外不算夜里（老配置 18~04 已经改掉）
+  check('22 点之前（21:59）不算夜里', stealCooldownFor(db(), night, at(21, 59)) === 60);
+  check('凌晨 4:59 还算夜里', stealCooldownFor(db(), night, at(4, 59)) === 50);
+  check('5 点整已经不算夜里', stealCooldownFor(db(), night, at(5, 0)) === 60);
 
   const custom = { config: { nightStealCooldown: 3, stealCooldownTicks: 30 } };
-  check('后台能改成 3 轮', stealCooldownFor(custom, night, at(21)) === 3);
+  check('后台能改成 3 轮', stealCooldownFor(custom, night, at(23)) === 3);
   check('白天跟着全局改成 30 轮', stealCooldownFor(custom, night, at(12)) === 30);
   const zero = { config: { nightStealCooldown: 0 } };
-  check('夜里 CD 设 0 = 不冷却', stealCooldownFor(zero, night, at(21)) === 0);
+  check('夜里 CD 设 0 = 不冷却', stealCooldownFor(zero, night, at(23)) === 0);
 }
 
 // ---------------------------------------------------------------- 4
 log('');
 log('=== 4 给前端的 nightInfo ===');
 {
-  const info = nightInfoFor(db(), { theme: 'night', skill: 'night' }, at(21));
+  const info = nightInfoFor(db(), { theme: 'night', skill: 'night' }, at(23));
   check('夜里 active = true', info.active === true);
   check('夜行者夜里 bonus = true', info.bonus === true);
-  check('stealCd = 3', info.stealCd === 3);
+  check('夜里 stealCd = 50', info.stealCd === 50, String(info.stealCd));
   check('距离天亮是正数且小于 24 小时', info.msLeft > 0 && info.msLeft <= 86400000,
     Math.round(info.msLeft / 3600000) + ' 小时');
 
@@ -86,14 +91,14 @@ log('=== 4 给前端的 nightInfo ===');
   check('白天 bonus = false', dayInfo.bonus === false);
   check('白天 stealCd = 60', dayInfo.stealCd === 60);
 
-  const other = nightInfoFor(db(), { theme: 'red', skill: 'red' }, at(21));
+  const other = nightInfoFor(db(), { theme: 'red', skill: 'red' }, at(23));
   check('别的主题夜里也没有 bonus', other.bonus === false && other.stealCd === 60);
 
-  // 边界：正好 4:00 应该算白天，倒计时要指向今晚 18:00
-  const at4 = nightInfoFor(db(), { theme: 'night', skill: 'night' }, at(4, 0));
-  check('4:00 已经不算夜里', at4.active === false);
-  check('4:00 的倒计时指向 18:00（14 小时）',
-    Math.abs(at4.msLeft - 14 * 3600000) < 60000, Math.round(at4.msLeft / 3600000) + ' 小时');
+  // 边界：正好 5:00 应该算白天，倒计时要指向今晚 22:00
+  const at5 = nightInfoFor(db(), { theme: 'night', skill: 'night' }, at(5, 0));
+  check('5:00 已经不算夜里', at5.active === false);
+  check('5:00 的倒计时指向 22:00（17 小时）',
+    Math.abs(at5.msLeft - 17 * 3600000) < 60000, Math.round(at5.msLeft / 3600000) + ' 小时');
 }
 
 // ---------------------------------------------------------------- 5
@@ -102,9 +107,9 @@ log('=== 5 结算时用 cd 推 stealReadyAt（模拟 server.js 那两行）===')
 {
   const stealTick = 1000;
   const p = { theme: 'night', skill: 'night', stealReadyAt: 0 };
-  const cd = stealCooldownFor(db(), p, at(21));
+  const cd = stealCooldownFor(db(), p, at(23));
   p.stealReadyAt = stealTick + cd;
-  check('夜行者夜里偷完只要等 3 轮', p.stealReadyAt === 1003);
+  check('夜行者夜里偷完要等 50 轮', p.stealReadyAt === 1050, String(p.stealReadyAt));
 
   const q = { theme: 'night', skill: 'night', stealReadyAt: 0 };
   q.stealReadyAt = stealTick + stealCooldownFor(db(), q, at(12));
@@ -117,12 +122,12 @@ log('=== 6 跨零点窗口的倒计时不会算反 ===');
 {
   const win = nightWindow(db(), at(2));
   const left = nextNightBoundaryMs(db(), win, at(2));
-  check('凌晨 2 点的倒计时指向 4:00（2 小时）',
-    Math.abs(left - 2 * 3600000) < 60000, Math.round(left / 3600000) + ' 小时');
+  check('凌晨 2 点的倒计时指向 5:00（3 小时）',
+    Math.abs(left - 3 * 3600000) < 60000, Math.round(left / 3600000) + ' 小时');
   const win2 = nightWindow(db(), at(19));
   const left2 = nextNightBoundaryMs(db(), win2, at(19));
-  check('晚上 19 点的倒计时指向次日 4:00（9 小时）',
-    Math.abs(left2 - 9 * 3600000) < 60000, Math.round(left2 / 3600000) + ' 小时');
+  check('晚上 19 点的倒计时指向当天 22:00（3 小时）',
+    Math.abs(left2 - 3 * 3600000) < 60000, Math.round(left2 / 3600000) + ' 小时');
 }
 
 console.log(out.join('\n'));

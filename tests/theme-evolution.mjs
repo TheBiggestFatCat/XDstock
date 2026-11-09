@@ -379,19 +379,19 @@ log('=== 14 🕵️ 情报网 + Ⅱ 阶看全部持仓 ===');
 
 // ---------------------------------------------------------------- 15
 log('');
-log('=== 15 🌙 夜行者：20:00~04:00，夜里 CD 3 → 1 ===');
+log('=== 15 🌙 夜行者：22:00~05:00，夜里 CD 50 → 20 ===');
 {
   const db = newDb();
   // 必须按**本地时间**造，不能用 UTC 毫秒（getHours 取的是本地小时）
-  const night = new Date(2026, 0, 1, 22, 0, 0).getTime();   // 22:00 在夜里（20~04）
+  const night = new Date(2026, 0, 1, 23, 0, 0).getTime();   // 23:00 在夜里（22~05）
   const day = new Date(2026, 0, 1, 12, 0, 0).getTime();     // 12:00 不在夜里
   const p = mkPlayer(db, 'n', 1e9, 'night');
-  check('未进化：夜里 CD 3', stealCooldownFor(db, p, night) === 3, String(stealCooldownFor(db, p, night)));
+  check('未进化：夜里 CD 50', stealCooldownFor(db, p, night) === 50, String(stealCooldownFor(db, p, night)));
   check('未进化：白天还是 60', stealCooldownFor(db, p, day) === 60, String(stealCooldownFor(db, p, day)));
   grantAchv(db, p, 'night_big');
   grantAchv(db, p, 'night_200');
   evolveTheme(db, p, 'night');
-  check('进化后：夜里 CD 1', stealCooldownFor(db, p, night) === 1, String(stealCooldownFor(db, p, night)));
+  check('进化后：夜里 CD 20', stealCooldownFor(db, p, night) === 20, String(stealCooldownFor(db, p, night)));
   check('进化后：白天仍 60', stealCooldownFor(db, p, day) === 60);
 }
 

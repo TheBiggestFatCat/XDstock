@@ -17,15 +17,15 @@ function normHour(v, fallback) {
 }
 
 /**
- * 夜行者的时间窗：默认现实时间 18:00 ~ 次日 04:00。
+ * 夜行者的时间窗：默认现实时间 22:00 ~ 次日 05:00。
  * 支持跨零点（start > end）；start === end 视为「不生效」。
  *
  * @returns {{active:boolean, hour:number, start:number, end:number}}
  */
 export function nightWindow(db, nowMs = Date.now()) {
   const cfg = (db && db.config) || {};
-  const start = normHour(cfg.nightStartHour, 18);
-  const end = normHour(cfg.nightEndHour, 4);
+  const start = normHour(cfg.nightStartHour, 22);
+  const end = normHour(cfg.nightEndHour, 5);
   const hour = new Date(Number.isFinite(Number(nowMs)) ? Number(nowMs) : Date.now()).getHours();
   let active;
   if (start === end) active = false;
@@ -42,7 +42,7 @@ export function isNightWindow(db, nowMs = Date.now()) {
 /**
  * 该玩家**此刻**的偷钱冷却（轮）。
  *
- * - 夜行者主题 + 夜里 → `nightStealCooldown`（默认 3 轮）
+ * - 夜行者主题 + 夜里 → `nightStealCooldown`（默认 50 轮）
  * - 其他情况 → `stealCooldownTicks`（默认 60 轮）
  */
 export function stealCooldownFor(db, player, nowMs = Date.now()) {
@@ -51,11 +51,11 @@ export function stealCooldownFor(db, player, nowMs = Date.now()) {
   if (!player || player.skill !== 'night') return base;
   if (!isNightWindow(db, nowMs)) return base;
   const night = Number(cfg.nightStealCooldown);
-  const baseNight = Math.max(0, Number.isFinite(night) ? night : 3);
-  // 进化后（Ⅱ 阶）夜行者的夜间冷却再降一档，硬底线 1 轮（2026-11 按主题技能表下调）
+  const baseNight = Math.max(0, Number.isFinite(night) ? night : 50);
+  // 进化后（Ⅱ 阶）夜行者的夜间冷却再降一档，硬底线 1 轮
   if (!isEvolved(player, 'night')) return baseNight;
   const evo = Number(cfg.nightStealCooldownEvolved);
-  return Math.max(1, Math.min(baseNight, Number.isFinite(evo) ? evo : 1));
+  return Math.max(1, Math.min(baseNight, Number.isFinite(evo) ? evo : 20));
 }
 
 /** 给前端展示用：这个玩家当前的偷钱 CD 和夜里状态 */

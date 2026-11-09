@@ -50,10 +50,10 @@ const DEFAULTS = {
   investigateCooldownEvolved: 20,
   mindFakeChance: 0.5,
   mindAccurateChanceEvolved: 0.7,
-  nightStartHour: 20,
-  nightEndHour: 4,
-  nightStealCooldown: 3,
-  nightStealCooldownEvolved: 1,
+  nightStartHour: 22,
+  nightEndHour: 5,
+  nightStealCooldown: 50,
+  nightStealCooldownEvolved: 20,
   stealCooldownTicks: 60
 };
 

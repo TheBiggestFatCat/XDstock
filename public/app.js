@@ -2470,8 +2470,8 @@ function renderShop() {
   const nightEl = $('#nightStatus');
   if (nightEl) {
     const n = state.market?.me?.night || {};
-    const start = Number(cfg.nightStartHour ?? 18);
-    const end = Number(cfg.nightEndHour ?? 4);
+    const start = Number(cfg.nightStartHour ?? 22);
+    const end = Number(cfg.nightEndHour ?? 5);
     const hh = (v) => String(v).padStart(2, '0') + ':00';
     const left = Math.max(0, Number(n.msLeft) || 0);
     const mins = Math.ceil(left / 60000);
@@ -5248,11 +5248,19 @@ async function loadRank(force = false) {
               } else if (r.cash <= 0) {
                 parts.push('<span class="stock-code">没现金</span>');
               } else {
-                // 偷钱上限挂「对方现金」（不是总资产）：持仓里的钱偷不到
+                // 偷钱口径（和 src/steal.js 一致）：每次随机 [stealMin, stealMax]，
+                // 再被「对方现金 × stealCapRatio」封顶 —— 所以是「现金的百分比当上限」，不是固定百分比
                 const ratio = Number(cfg.stealCapRatio ?? 0.001);
+                const lo = Math.max(0, Number(cfg.stealMin ?? 100));
+                const hi = Math.max(lo, Number(cfg.stealMax ?? 10000));
                 const capByCash = Math.floor(r.cash * ratio);
-                const maxTake = Math.max(0, Math.min(capByCash, r.cash));
-                parts.push(`<button class="steal-btn" data-steal="${r.id}" data-name="${escapeHtml(r.nickname)}" title="现金 ${(ratio * 100).toFixed(1)}% = ${money(capByCash)}，实际最多能拿走 ${money(maxTake)}（持仓偷不到）">偷钱</button>`);
+                const canTake = Math.max(0, Math.min(capByCash, r.cash));
+                const realLo = Math.min(lo, canTake);
+                const realHi = Math.min(hi, canTake);
+                const tip = `每次随机 ${money(realLo)} ~ ${money(realHi)}`
+                  + `\n上限 = 他现金的 ${(ratio * 100).toFixed(1)}% = ${money(capByCash)}（持仓偷不到）`
+                  + `\n单次封顶 ${money(hi)}，得手后要等冷却`;
+                parts.push(`<button class="steal-btn" data-steal="${r.id}" data-name="${escapeHtml(r.nickname)}" title="${tip}">偷钱</button>`);
               }
               // 暗中调查：装备了这个主题才会出现，就在「偷钱」旁边
               if (probeActive) {
@@ -6129,9 +6137,9 @@ async function loadAdmin() {
           ['hermitHideChance', '隐世：成交隐身概率(0.75)'],
           ['investigateCooldownTicks', '调查：冷却(轮, 30)'],
           ['mindFakeChance', '读心：假读数概率(0.5=50%)'],
-          ['nightStartHour', '夜行：夜里开始小时(20)'],
-          ['nightEndHour', '夜行：夜里结束小时(4)'],
-          ['nightStealCooldown', '夜行：夜里偷钱冷却(轮, 3)']
+          ['nightStartHour', '夜行：夜里开始小时(22)'],
+          ['nightEndHour', '夜行：夜里结束小时(5)'],
+          ['nightStealCooldown', '夜行：夜里偷钱冷却(轮, 50)']
         ]
       },
       {
@@ -6145,7 +6153,7 @@ async function loadAdmin() {
           ['hermitHideChanceEvolved', '隐世：成交隐身概率(1=100%)'],
           ['investigateCooldownEvolved', '调查：冷却(轮, 20)'],
           ['mindAccurateChanceEvolved', '读心：看到真值的概率(0.7=70%)'],
-          ['nightStealCooldownEvolved', '夜行：夜里偷钱冷却(轮, 1)']
+          ['nightStealCooldownEvolved', '夜行：夜里偷钱冷却(轮, 20)']
         ]
       }
     ]
