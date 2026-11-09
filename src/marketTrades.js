@@ -231,7 +231,11 @@ export function genMarketTrades(db, maxTrades = 2) {
 
   // 情绪放量：全市场平均「兴奋度」会抬高总笔数（v 全 0 时 = 1，不动）
   const avgSent = list.reduce((a, s) => a + marketSentimentVolume(s, cfg), 0) / list.length;
-  const base = Math.max(1, Math.round(rand(1, maxTrades) * rate * avgSent));
+  // 开盘巨量：休市结束后的第一轮按倍率放大（0/1 = 不放量），标记只消费一次
+  const surgeRaw = db.reopenSurge ? Number(cfg.reopenSurgeMult ?? 3) : 1;
+  const surge = Number.isFinite(surgeRaw) && surgeRaw > 1 ? Math.min(10, surgeRaw) : 1;
+  if (db.reopenSurge) db.reopenSurge = false;
+  const base = Math.max(1, Math.round(rand(1, maxTrades) * rate * avgSent * surge));
 
   // 每只票的成交权重（市值 × 个股倍率 × 情绪放量），每轮算一次
   const weights = list.map((s) => marketTradeWeight(s, cfg));

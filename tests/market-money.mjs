@@ -574,6 +574,61 @@ log('=== 8 追涨 / 杀跌：1 分钟动量 + 三段式限幅（防刹不住车�
     '累积压力后买 ' + (brakeRatio * 100).toFixed(0) + '% vs 无压力 ' + (upRatio * 100).toFixed(0) + '%');
 }
 
+// ================================================================ 9
+log('');
+log('=== 9 开盘巨量：休市结束后的第一轮 ×N 倍 ===');
+{
+  const rowsOf = (db, n = 1) => {
+    const got = [];
+    for (let i = 0; i < n; i++) got.push(...genMarketTrades(db, 2));
+    return got;
+  };
+
+  // 一堆普通 tick
+  const normal = calmDb({ marketTradesEnabled: 1, marketTradesRate: 30, reopenSurgeMult: 3 });
+  const flatRows = rowsOf(normal, 40);
+
+  // 第一轮打上「刚开市」标记
+  const surgeDb = calmDb({ marketTradesEnabled: 1, marketTradesRate: 30, reopenSurgeMult: 3 });
+  const burst = [];
+  for (let i = 0; i < 40; i++) {
+    if (i === 0) surgeDb.reopenSurge = true;
+    burst.push(...genMarketTrades(surgeDb, 2));
+  }
+  check('标记只消费一次（放完就清）', surgeDb.reopenSurge === false, String(surgeDb.reopenSurge));
+  // 只有第一轮放量，40 轮整体只多出「一轮的增量」（约 +5%），这里只要求确实更多
+  check('40 轮里有巨量那一轮总笔数更多', burst.length > flatRows.length,
+    flatRows.length + ' → ' + burst.length);
+
+  // 单独比第一轮
+  const plainOnce = calmDb({ marketTradesEnabled: 1, marketTradesRate: 30, reopenSurgeMult: 3 });
+  const plainCount = rowsOf(plainOnce, 1).length;
+  const surgeOnce = calmDb({ marketTradesEnabled: 1, marketTradesRate: 30, reopenSurgeMult: 3 });
+  surgeOnce.reopenSurge = true;
+  const surgeCount = rowsOf(surgeOnce, 1).length;
+  check('第一轮约是平时的 3 倍', surgeCount > plainCount * 2 && surgeCount < plainCount * 4.5,
+    plainCount + ' → ' + surgeCount);
+
+  // 倍率 0 = 不放量
+  const offOnce = calmDb({ marketTradesEnabled: 1, marketTradesRate: 30, reopenSurgeMult: 0 });
+  offOnce.reopenSurge = true;
+  const offCount = rowsOf(offOnce, 1).length;
+  const plain0 = calmDb({ marketTradesEnabled: 1, marketTradesRate: 30, reopenSurgeMult: 0 });
+  const plain0Count = rowsOf(plain0, 1).length;
+  check('倍率 0 = 不放量', offCount < plain0Count * 1.8,
+    plain0Count + ' → ' + offCount);
+
+  // 倍率可以调大
+  const bigOnce = calmDb({ marketTradesEnabled: 1, marketTradesRate: 20, reopenSurgeMult: 5 });
+  bigOnce.reopenSurge = true;
+  const bigCount = rowsOf(bigOnce, 1).length;
+  const base20 = calmDb({ marketTradesEnabled: 1, marketTradesRate: 20, reopenSurgeMult: 5 });
+  const base20Count = rowsOf(base20, 1).length;
+  check('倍率 5 → 比平时明显多', bigCount > base20Count * 2,
+    base20Count + ' → ' + bigCount);
+}
+
+
 console.log = realLog;
 console.log(out.join('\n'));
 console.log(`\n---- ${passes} 通过 / ${fails} 失败 ----`);

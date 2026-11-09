@@ -365,6 +365,8 @@ function loop() {
   // 休市（管理员一刀切 / 定时休市 / 循环作息）：冻结行情，只推状态不给价格
   const phase = marketPhase(d, now());
   if (!phase.open) {
+    // 记一下「现在是休市」，开市后第一轮据此放一波巨量（见 marketTrades.js#genMarketTrades）
+    d.marketWasClosed = true;
     const frozen = tickPayload(null);
     for (const c of clients) {
       const personal = tickPayload(c.playerId);
@@ -387,6 +389,12 @@ function loop() {
     saveDb();
     lastTickAt = now();
     return;
+  }
+
+  // 刚休完市的第一轮：打上开盘巨量标记（genMarketTrades 消费掉就清空）
+  if (d.marketWasClosed) {
+    d.marketWasClosed = false;
+    d.reopenSurge = true;
   }
 
   // 停牌到期自动复牌
