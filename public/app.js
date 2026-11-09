@@ -4822,17 +4822,83 @@ function fmtTime(ts) {
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-async function loadTrades() {
+// ---------------- 交易记录（最近 48 小时 · 可翻页 · 按标的筛选） ----------------
+const TRADE_PAGE_SIZE = 20;
+state.tradePage = 1;
+state.tradeCode = '';
+
+/** 标的筛选下拉：只列这个玩家 48 小时内交易过的票（带笔数） */
+function renderTradeFilter(codes) {
+  const sel = $('#tradeFilter');
+  if (!sel) return;
+  const cur = state.tradeCode || '';
+  const opts = ['<option value="">全部标的</option>']
+    .concat(codes.map((c) => `<option value="${c.code}"${c.code === cur ? ' selected' : ''}>${escapeHtml(c.name)} ${c.code}（${c.n}）</option>`));
+  sel.innerHTML = opts.join('');
+  sel.value = cur;
+}
+
+/** 翻页条：‹ 1 2 3 … 8 ›（最多 7 个页码，两端省略） */
+function renderTradePager(page, pages) {
+  const box = $('#tradePager');
+  if (!box) return;
+  if (pages <= 1) {
+    box.innerHTML = '';
+    box.classList.add('hidden');
+    return;
+  }
+  box.classList.remove('hidden');
+  const btn = (p, text, cls = '') => `<button class="pager-btn ${cls}" data-page="${p}">${text}</button>`;
+  const nums = [];
+  const push = (p) => nums.push(p);
+  if (pages <= 7) {
+    for (let p = 1; p <= pages; p += 1) push(p);
+  } else if (page <= 4) {
+    for (let p = 1; p <= 5; p += 1) push(p);
+    nums.push('…', pages);
+  } else if (page >= pages - 3) {
+    nums.push(1, '…');
+    for (let p = pages - 4; p <= pages; p += 1) push(p);
+  } else {
+    nums.push(1, '…', page - 1, page, page + 1, '…', pages);
+  }
+  const parts = [btn(Math.max(1, page - 1), '‹', 'pager-step' + (page <= 1 ? ' is-off' : ''))];
+  for (const p of nums) {
+    if (p === '…') parts.push('<span class="pager-gap">…</span>');
+    else parts.push(btn(p, String(p), p === page ? 'is-now' : ''));
+  }
+  parts.push(btn(Math.min(pages, page + 1), '›', 'pager-step' + (page >= pages ? ' is-off' : '')));
+  box.innerHTML = parts.join('');
+}
+
+async function loadTrades(page) {
   const wrap = $('#tradeTable');
   if (!wrap) return;
+  const wantPage = Math.max(1, Number(page) || state.tradePage || 1);
   try {
-    const d = await api('/api/trades?limit=100');
+    const qs = new URLSearchParams({ page: String(wantPage), pageSize: String(TRADE_PAGE_SIZE), hours: '48' });
+    if (state.tradeCode) qs.set('code', state.tradeCode);
+    const d = await api(`/api/trades?${qs}`);
+    state.tradePage = d.page || 1;
+    renderTradeFilter(d.codes || []);
+    renderTradePager(state.tradePage, d.pages || 1);
+
+    const cnt = $('#tradeCount');
+    if (cnt) {
+      const from = d.total ? (d.page - 1) * d.pageSize + 1 : 0;
+      const to = Math.min(d.total, (d.page - 1) * d.pageSize + d.rows.length);
+      cnt.textContent = d.total
+        ? `近 ${d.hours} 小时 ${d.total} 笔 · 第 ${from}-${to} 笔`
+        : `近 ${d.hours} 小时没有成交`;
+    }
+
     if (!d.rows.length) {
-      wrap.innerHTML = '<table><tbody><tr class="empty-row"><td>还没有成交记录</td></tr></tbody></table>';
+      const tip = state.tradeCode ? '这个标的最近 48 小时没有成交' : '还没有成交记录';
+      wrap.innerHTML = `<table class="trade-table"><tbody><tr class="empty-row"><td>${tip}</td></tr></tbody></table>`;
       return;
     }
     wrap.innerHTML = `
-      <table>
+      <table class="trade-table">
         <thead><tr>
           <th>时间</th><th>标的</th><th>动作</th><th>方向</th><th>数量</th>
           <th>成交价</th><th>杠杆</th><th>金额</th><th>手续费</th><th>盈亏</th><th>备注</th>
@@ -4868,29 +4934,28 @@ async function loadTrades() {
                 ? (t.side === 'short' ? '补股息' : '股息')
                 : isOpen ? '开仓' : '平仓';
             return `<tr>
-              <td class="stock-code">${fmtTime(t.at)}</td>
-              <td>${escapeHtml(t.name || t.code)}${t.code ? ` <span class="stock-code">${t.code}</span>` : ''}</td>
-              <td>${actionText}</td>
-              <td>${isSteal ? '<span class="stock-code">—</span>' : `<span class="pill ${t.side}">${t.side === 'long' ? '多' : '空'}</span>`}</td>
-              <td>${isSteal ? '—' : t.qty}</td>
-              <td>${noFill ? '<span class="stock-code">—</span>' : Number(t.price).toFixed(2)}</td>
-              <td>${noFill ? '<span class="stock-code">—</span>' : (t.leverage || 1).toFixed(1) + 'x'}</td>
-              <td>${isSteal ? money(t.amount || 0) : isDividend
+              <td class="stock-code" data-label="时间">${fmtTime(t.at)}</td>
+              <td data-label="标的">${escapeHtml(t.name || t.code)}${t.code ? ` <span class="stock-code">${t.code}</span>` : ''}</td>
+              <td data-label="动作">${actionText}</td>
+              <td data-label="方向">${isSteal ? '<span class="stock-code">—</span>' : `<span class="pill ${t.side}">${t.side === 'long' ? '多' : '空'}</span>`}</td>
+              <td data-label="数量">${isSteal ? '—' : t.qty}</td>
+              <td data-label="成交价">${noFill ? '<span class="stock-code">—</span>' : Number(t.price).toFixed(2)}</td>
+              <td data-label="杠杆">${noFill ? '<span class="stock-code">—</span>' : (t.leverage || 1).toFixed(1) + 'x'}</td>
+              <td data-label="金额">${isSteal ? money(t.amount || 0) : isDividend
                 ? `<span class="${cls(t.amount)}" title="${Number(t.price).toFixed(2)} 元/股">${money(t.amount || 0)}</span>`
                 : amountCell}${bonusFee > 0 ? `<i class="fee-bonus">🐂 +${money(bonusFee)}</i>` : ''}</td>
-              <td>${noFill ? '<span class="stock-code">—</span>' : feeCell}</td>
-              <td>${pnlCell}</td>
-              <td><span class="${klass}">${label}</span></td>
+              <td data-label="手续费">${noFill ? '<span class="stock-code">—</span>' : feeCell}</td>
+              <td data-label="盈亏">${pnlCell}</td>
+              <td data-label="备注"><span class="${klass}">${label}</span></td>
             </tr>`;
           }).join('')}
         </tbody>
       </table>
       <p class="trade-foot">
-        共 ${d.total} 笔，显示最近 ${d.rows.length} 笔　·　
         手续费 ${((state.market?.config?.feeRate || 0) * 100).toFixed(3)}%，印花税（卖出方向）${((state.market?.config?.stampDuty || 0) * 100).toFixed(3)}%
       </p>`;
   } catch (e) {
-    wrap.innerHTML = `<table><tbody><tr class="empty-row"><td>${e.message}</td></tr></tbody></table>`;
+    wrap.innerHTML = `<table class="trade-table"><tbody><tr class="empty-row"><td>${e.message}</td></tr></tbody></table>`;
   }
 }
 
@@ -7019,7 +7084,20 @@ function bind() {
     e.target.value = '';
   });
 
-  $('#refreshTrades')?.addEventListener('click', loadTrades);
+  $('#refreshTrades')?.addEventListener('click', () => loadTrades(state.tradePage || 1));
+  // 标的筛选：换了就回到第 1 页
+  $('#tradeFilter')?.addEventListener('change', (e) => {
+    state.tradeCode = e.target.value || '';
+    loadTrades(1);
+  });
+  // 翻页：事件委托（页码是动态渲染的）
+  $('#tradePager')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.pager-btn');
+    if (!btn) return;
+    const p = Number(btn.dataset.page);
+    if (!Number.isFinite(p) || p < 1) return;
+    loadTrades(p);
+  });
   $('#adminLoginBtn').addEventListener('click', adminLogin);
   $('#newsBtn').addEventListener('click', publishNews);
   $('#noticeBtn')?.addEventListener('click', publishNotice);

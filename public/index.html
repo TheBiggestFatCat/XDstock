@@ -355,7 +355,15 @@
           <span>交易记录</span>
           <button id="refreshTrades" class="btn-link">刷新</button>
         </div>
+        <div class="trade-toolbar">
+          <label class="trade-filter">
+            <span>标的</span>
+            <select id="tradeFilter" class="input"></select>
+          </label>
+          <span id="tradeCount" class="trade-count"></span>
+        </div>
         <div id="tradeTable" class="table-wrap"></div>
+        <div id="tradePager" class="trade-pager hidden"></div>
       </div>
       </div>
       <div class="pf-pane hidden" data-pf-pane="bank">

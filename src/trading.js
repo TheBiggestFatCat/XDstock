@@ -9,6 +9,21 @@ import { SMALL_INDEX_STOCK } from './stocks.js';
 import { freeFeeActive, stampRateFor } from './perks.js';
 
 const TRADE_LOG_MAX = 4000;
+// 「我的 → 交易记录」要能翻 48 小时：全局日志里 95% 是虚假成交，几十分钟就把玩家的单挤没了，
+// 所以每个玩家单独存一份自己的流水（只留前端要用的字段，控制 db 体积）
+const TRADE_HISTORY_MAX = 300;
+const TRADE_HISTORY_MS = 48 * 3600 * 1000;
+const HISTORY_FIELDS = ['id', 'at', 'code', 'name', 'action', 'side', 'qty', 'price', 'leverage',
+  'reason', 'pnl', 'fee', 'stamp', 'impact', 'bonus', 'margin', 'returned', 'amount'];
+
+/** 把一条成交压成「个人流水」要存的字段（去掉 undefined，省 db 体积） */
+function historyRecord(rec) {
+  const out = {};
+  for (const k of HISTORY_FIELDS) {
+    if (rec[k] !== undefined) out[k] = rec[k];
+  }
+  return out;
+}
 
 /**
  * 记「这一轮的成交量」（股）：先攒在 st.volTick 上，引擎在一轮结束时汇总进 volSeries。
@@ -58,11 +73,23 @@ export function indexTickVolume(db, indexKey = 'index', tickVol = null) {
 /** 记一条交易流水（超出上限就丢最老的） */
 export function logTrade(db, entry) {
   if (!Array.isArray(db.trades)) db.trades = [];
-  db.trades.push({
+  const rec = {
     id: 't_' + Math.random().toString(36).slice(2, 10),
     at: now(),
     ...entry
-  });
+  };
+  db.trades.push(rec);
+
+  // 玩家自己的 48 小时流水（虚假成交 / 游资是 isMarket，不进个人流水）
+  const pid = rec.playerId;
+  const owner = pid && db.players ? db.players[pid] : null;
+  if (owner && !rec.isMarket) {
+    if (!Array.isArray(owner.tradeLog)) owner.tradeLog = [];
+    owner.tradeLog.push(historyRecord(rec));
+    if (owner.tradeLog.length > TRADE_HISTORY_MAX) {
+      owner.tradeLog.splice(0, owner.tradeLog.length - TRADE_HISTORY_MAX);
+    }
+  }
   // 成交量（股）：指数单按权重拆给成分股，普通票记自己头上
   if (entry && entry.code) addVolume(db, entry.code, entry.qty);
   if (db.trades.length > TRADE_LOG_MAX) {

@@ -489,6 +489,16 @@ export function migrate(d) {
       console.log(`[券商] ${st.name} 营收贴着地板（${((rev / base) * 100).toFixed(1)}%），基准营收已重置为现值`);
     }
   }
+  // 「我的 → 交易记录」：老存档还没有个人流水，从全局日志回填最近 48 小时
+  // （全局日志只留 4000 条，回填到多少算多少，之后由 logTrade 持续写）
+  {
+    const histCut = Date.now() - 48 * 3600 * 1000;
+    for (const p of Object.values(merged.players)) {
+      if (Array.isArray(p.tradeLog)) continue;
+      const mine = (merged.trades || []).filter((t) => t && t.playerId === p.id && t.at >= histCut);
+      p.tradeLog = mine.slice(-300);
+    }
+  }
   // 老的贷款功能已下线，存档里的残留字段一并清掉
   for (const p of Object.values(merged.players)) {
     delete p.loan;

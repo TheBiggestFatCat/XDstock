@@ -4343,3 +4343,81 @@ body[data-theme="bear"] .brand-logo {
   border: 1px solid rgba(245, 158, 11, .22);
 }
 .closed-trade-hint.hidden { display: none; }
+
+/* ================= 我的 · 交易记录（48 小时 / 翻页 / 筛选） ================= */
+.trade-toolbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 2px 0 10px;
+}
+.trade-filter { display: inline-flex; align-items: center; gap: 6px; }
+.trade-filter > span { font-size: 12px; color: var(--ink-3); white-space: nowrap; }
+.trade-filter .input {
+  height: 32px; padding: 0 10px; border-radius: 9px; font-size: 13px;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  max-width: 240px;
+}
+.trade-count { font-size: 12px; color: var(--ink-3); margin-left: auto; white-space: nowrap; }
+
+/* 交易记录表格：表头固定不换行，数字列右对齐（沿用全局 table 风格） */
+.trade-table td, .trade-table th { font-variant-numeric: tabular-nums; }
+
+/* 翻页条 */
+.trade-pager {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  flex-wrap: wrap; margin-top: 12px;
+}
+.trade-pager.hidden { display: none; }
+.pager-btn {
+  min-width: 34px; height: 32px; padding: 0 9px; border-radius: 9px;
+  border: 1px solid var(--line); background: var(--card); color: var(--ink);
+  font-size: 13px; line-height: 1; cursor: pointer; transition: all .16s;
+}
+.pager-btn:hover { border-color: var(--brand); color: var(--brand); }
+.pager-btn.is-now {
+  background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600;
+}
+.pager-btn.pager-step { font-size: 15px; }
+.pager-btn.is-off { opacity: .45; pointer-events: none; }
+.pager-gap { color: var(--ink-3); font-size: 13px; padding: 0 2px; }
+
+@media (max-width: 760px) {
+  /* 工具栏：筛选占一行，笔数换到下一行 */
+  .trade-toolbar { gap: 8px; }
+  .trade-filter { flex: 1 1 100%; }
+  .trade-filter .input { flex: 1; max-width: none; height: 34px; }
+  .trade-count { margin-left: 0; flex: 1 1 100%; }
+
+  /* 表格改成卡片：一行一笔，字段名在左、值在右 */
+  .trade-table { min-width: 0 !important; }
+  .trade-table table { min-width: 0; }
+  .trade-table thead { display: none; }
+  .trade-table tbody { display: block; }
+  .trade-table tbody tr {
+    display: block; padding: 10px 12px; margin-bottom: 9px;
+    border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+  }
+  .trade-table tbody tr:hover { background: var(--card); }
+  .trade-table tbody tr.empty-row {
+    border: 0; background: transparent; padding: 14px 0;
+  }
+  .trade-table td {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    padding: 3px 0; text-align: right; white-space: normal; border: 0;
+  }
+  .trade-table td::before {
+    content: attr(data-label); color: var(--ink-3); font-size: 12px; flex: none;
+  }
+  .trade-table td:first-child {
+    font-size: 12px; padding-bottom: 6px; margin-bottom: 4px;
+    border-bottom: 1px dashed var(--line);
+  }
+  .trade-table td:first-child::before { content: none; }
+  /* 卡片里「备注」做成右上角的小标签，读起来更顺 */
+  .trade-table td:last-child { justify-content: flex-end; }
+  .trade-table td[data-label="标的"] { font-weight: 600; }
+  .trade-table td[data-label="标的"]::before { content: none; }
+  .trade-table td.fee-cell, .trade-table .fee-impact { font-size: 12px; }
+
+  .trade-pager { gap: 5px; }
+  .pager-btn { min-width: 32px; height: 34px; font-size: 13px; }
+}

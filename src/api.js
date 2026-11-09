@@ -1389,13 +1389,50 @@ export async function handleApi(ctx) {
     });
   }
 
+  // 我的成交记录：默认最近 48 小时，支持按标的筛选 + 翻页。
+  // 数据源是 player.tradeLog（全局 db.trades 里 95% 是虚假成交，玩家的单几十分钟就被挤掉了）。
+  // 老调用（带 limit）仍然走不分页模式，给 K 线的 B/S 标记用。
   if (pathname === '/api/trades' && method === 'GET') {
-    const limit = Math.min(500, Math.max(1, Number(query.limit) || 50));
     const code = query.code ? String(query.code).toUpperCase() : '';
-    let mine = (db.trades || []).filter((t) => t.playerId === me.id);
+    const hours = Math.min(24 * 30, Math.max(1, Number(query.hours) || 48));
+    const cutoff = Date.now() - hours * 3600 * 1000;
+
+    // 个人流水；万一老号还没回填（migrate 之前），退回全局日志兜底
+    const source = Array.isArray(me.tradeLog) && me.tradeLog.length
+      ? me.tradeLog
+      : (db.trades || []).filter((t) => t.playerId === me.id);
+    const inWindow = source.filter((t) => t && Number(t.at) >= cutoff);
+
+    // 筛选下拉：这个玩家在窗口内交易过的标的（带笔数），按笔数从多到少
+    const countByCode = new Map();
+    for (const t of inWindow) {
+      if (!t.code) continue;
+      const cur = countByCode.get(t.code) || { code: t.code, name: t.name || t.code, n: 0 };
+      cur.n += 1;
+      if (t.name) cur.name = t.name;
+      countByCode.set(t.code, cur);
+    }
+    const codes = [...countByCode.values()].sort((a, b) => b.n - a.n);
+
+    let mine = inWindow;
     if (code) mine = mine.filter((t) => t.code === code);
-    const rows = mine.slice(-limit).reverse();
-    return json(res, 200, { total: mine.length, rows });
+    const total = mine.length;
+    // 最新在前
+    const sorted = mine.slice().sort((a, b) => Number(b.at) - Number(a.at));
+
+    // 老接口：limit 模式（不分页，返回最近 N 条）
+    if (query.limit) {
+      const limit = Math.min(500, Math.max(1, Number(query.limit) || 50));
+      const rows = sorted.slice(0, limit);
+      return json(res, 200, { total, rows, hours, code, codes });
+    }
+
+    const pageSize = Math.min(100, Math.max(5, Number(query.pageSize) || 20));
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(pages, Math.max(1, Number(query.page) || 1));
+    const from = (page - 1) * pageSize;
+    const rows = sorted.slice(from, from + pageSize);
+    return json(res, 200, { total, page, pageSize, pages, hours, code, codes, rows });
   }
 
   if (pathname === '/api/order/limit' && method === 'POST') {

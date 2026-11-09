@@ -39,6 +39,7 @@ node tests/admin-panel.mjs           # 参数面板一致性：幽灵键/重复�
 node tests/market-schedule.mjs       # 定时休市 / 循环作息（改开市规则必跑，48 条断言）
 node tests/index-volume.mjs          # 指数成交量按权重拆到个股（改成交量/指数必跑，23 条断言）
 node tests/candles5.mjs              # 5 分钟 K 线单独打包（改 K 线接口/存储必跑，24 条断言）
+node tests/trade-history.mjs          # 我的·交易记录 48 小时/翻页/筛选（改流水必跑，21 条断言）
 node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占比/天花板（不是断言套，看表格）
 ```
 
@@ -64,7 +65,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 6. **发布流程**：改代码 → `node --check` → 本地跑通 → SFTP 上传 → 改线上数据（先备份）→
    `systemctl restart xdstock` → curl 验证 → `git commit` → `git push`（需代理 `127.0.0.1:4780`）。
 
-## 最容易踩的 23 个坑
+## 最容易踩的 24 个坑
 
 | 坑 | 症状 | 正解 |
 |---|---|---|
@@ -90,6 +91,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 | v5 之后 B/S 标记消失 | 图上没有 B/S，也不报错（老守卫 `typeof setMarkers !== 'function'` 直接 return） | v5 用 `LightweightCharts.createSeriesMarkers(series, markers)`，见 `markerApi()` |
 | 升级图表库忘了改 API | v5 没有 `addCandlestickSeries`，调了直接抛，整页白屏 | v5 一律 `chart.addSeries(LightweightCharts.XxxSeries, opts)`；窗格用 `addPane()` + `setStretchFactor()`，别和 `setHeight()` 混用 |
 | 夜行者/偷钱数值写死在前端 | 后台改了时间窗或冷却，商城卡片还写旧的 20:00~04:00 / 3 轮 | 文案一律 `skillText.js` 从 config 生成；面板标签不要写死数字，改了配置要 `PATCH /api/admin/config`（老存档不会自动用新默认值） |
+| 交易记录只靠全局 `db.trades` | 全局日志里 95% 是虚假成交，4000 条几十分钟就把玩家的单挤掉，「我的」里看不到几小时前的成交 | 每个玩家单独存 `player.tradeLog`（48 小时 / 300 条，`logTrade` 写入、`migrate` 回填），`/api/trades` 从那里取 |
 | payload 把引擎参数抖出去 | F12 里能看到 `trait.lotteryChance` / `volMult` / `fair` / `sentimentStrength`，等于把价格模型交给玩家 | 所有下发字段必须过 `src/wire.js` 白名单；跑 `node tests/payload-wire.mjs` |
 
 ## 新增配置参数（四处都要改）
