@@ -617,14 +617,20 @@ log('=== 9 开盘巨量：休市结束后的第一轮 ×N 倍 ===');
   check('第一轮平均约是平时的 3 倍', surgeCount > plainCount * 2.2 && surgeCount < plainCount * 4,
     plainCount.toFixed(1) + ' → ' + surgeCount.toFixed(1));
 
-  // 倍率 0 = 不放量
-  const offOnce = calmDb({ marketTradesEnabled: 1, marketTradesRate: 30, reopenSurgeMult: 0 });
-  offOnce.reopenSurge = true;
-  const offCount = rowsOf(offOnce, 1).length;
-  const plain0 = calmDb({ marketTradesEnabled: 1, marketTradesRate: 30, reopenSurgeMult: 0 });
-  const plain0Count = rowsOf(plain0, 1).length;
-  check('倍率 0 = 不放量', offCount < plain0Count * 1.8,
-    plain0Count + ' → ' + offCount);
+  // 倍率 0 = 不放量（单次抖动大，各取 30 次平均）
+  const avg = (surge) => {
+    let sum = 0;
+    for (let i = 0; i < 30; i += 1) {
+      const db = calmDb({ marketTradesEnabled: 1, marketTradesRate: 30, reopenSurgeMult: 0 });
+      if (surge) db.reopenSurge = true;
+      sum += rowsOf(db, 1).length;
+    }
+    return sum / 30;
+  };
+  const offCount = avg(true);
+  const plain0Count = avg(false);
+  check('倍率 0 = 不放量', Math.abs(offCount - plain0Count) < plain0Count * 0.35,
+    plain0Count.toFixed(1) + ' → ' + offCount.toFixed(1));
 
   // 倍率可以调大
   const bigOnce = calmDb({ marketTradesEnabled: 1, marketTradesRate: 20, reopenSurgeMult: 5 });

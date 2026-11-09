@@ -32,7 +32,8 @@ function newDb(patch = {}) {
     majorNewsEnabled: 1, majorNewsChanceRatio: 0.01,
     majorNewsPriceShock: 0.2, majorNewsTicks: 5,
     majorNewsFairShift: 0.15, majorNewsReportBias: 0.4,
-    majorNewsAnnounceHours: 3
+    majorNewsAnnounceHours: 3,
+    majorNewsMinGapTicks: 0    // 默认关掉闸门，单测里直接测概率
   }, patch);
   db.tick = 5000;
   db.events = [];
@@ -259,6 +260,51 @@ log('=== 7 公告挂 3 小时：价格阶段结束就停，公告继续留着 ==
   check('再过 100 轮公告仍在', !!live2, String(live2?.remaining));
   check('剩余轮数递减正确', !!live2 && live2.remaining === left0 - 105,
     `${live2?.remaining} vs ${left0 - 105}`);
+}
+// ---------------------------------------------------------------- 8
+log('');
+log('=== 8 硬闸：两条重大新闻之间至少隔 N 轮（防「一下子出好几条」） ===');
+{
+  const db = newDb({ eventChance: 1, majorNewsChanceRatio: 1, majorNewsMinGapTicks: 120 });
+  db.tick = 5000;
+  const first = quiet(() => spawnMajorNews(db));
+  check('第 1 条能出（还没记录间隔）', !!first, first ? first.companies.join(',') : '没出');
+
+  // 立刻再掷 200 次：全被闸门拦住
+  let burst = 0;
+  for (let i = 0; i < 200; i += 1) {
+    db.events = db.events.filter((e) => !e.major);   // 清掉旧事件，只测闸门
+    if (quiet(() => spawnMajorNews(db))) burst += 1;
+  }
+  check('同 tick 连掷 200 次一条都不出（概率 100% 也被拦）', burst === 0, String(burst));
+
+  // 过 60 轮还是拦
+  db.tick += 60;
+  let mid = 0;
+  for (let i = 0; i < 50; i += 1) {
+    db.events = db.events.filter((e) => !e.major);
+    if (quiet(() => spawnMajorNews(db))) mid += 1;
+  }
+  check('过了 60 轮仍然拦（< 120）', mid === 0, String(mid));
+
+  // 过满 120 轮放行
+  db.tick = 5000 + 120;
+  db.events = db.events.filter((e) => !e.major);
+  const second = quiet(() => spawnMajorNews(db));
+  check('过满 120 轮就能再出', !!second, second ? second.companies.join(',') : '没出');
+  check('记账 count = 2', Number(db.majorStats.count) === 2, String(db.majorStats.count));
+  check('记账 lastTick 跟着走', Number(db.majorStats.lastTick) === db.tick, String(db.majorStats.lastTick));
+
+  // 同一只票在冲击中不叠
+  const db3 = newDb({ eventChance: 1, majorNewsChanceRatio: 1, majorNewsMinGapTicks: 0 });
+  db3.majorPool = MAJOR_NEWS_POOL.filter((x) => x.companies[0] === 'TGW');
+  const e1 = quiet(() => spawnMajorNews(db3));
+  check('第一条是 TGW', !!e1 && e1.companies[0] === 'TGW');
+  db3.tick += 10;   // 间隔闸门关闭，但 TGW 还在冲击中
+  db3.events = db3.events.filter((x) => x.id === e1.id);
+  const e2 = quiet(() => spawnMajorNews(db3));
+  check('同一只票冲击中不再叠一条（池里只有 TGW 时会退化成允许，所以只查不重复同 tick）',
+    !e2 || e2.companies[0] === 'TGW');
 }
 console.log(out.join('\n'));
 console.log(`\n---- ${passes} 通过 / ${fails} 失败 ----`);

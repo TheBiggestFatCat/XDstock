@@ -623,12 +623,32 @@ export function spawnMajorNews(db) {
   const pool = db.majorPool || [];
   if (!pool.length) return null;
 
-  // 概率 = 普通新闻概率 × 系数（默认 1/100）
-  const ratio = Math.max(0, Math.min(1, Number(cfg.majorNewsChanceRatio ?? 0.01)));
-  const base = Number(cfg.eventChance ?? 0.015);
+  // 概率 = 普通新闻概率 × 系数
+  const ratio = Math.max(0, Math.min(1, Number(cfg.majorNewsChanceRatio ?? 0.03)));
+  const base = Math.max(0, Number(cfg.eventChance ?? 0.015));
+
+  // 硬闸：两条重大新闻之间至少隔 majorNewsMinGapTicks 轮（默认 120 轮 ≈ 10 分钟）
+  // 概率参数被填大（比如误填 3 而不是 0.03）也不会「一下子刷出好几条」
+  const minGap = Math.max(0, Math.round(Number(cfg.majorNewsMinGapTicks ?? 120)));
+  if (!db.majorStats || typeof db.majorStats !== 'object') {
+    db.majorStats = { count: 0, lastTick: -1e9, lastAt: 0 };
+  }
+  const st0 = db.majorStats;
+  const sinceLast = Number(db.tick) - Number(st0.lastTick);
+  if (minGap > 0 && sinceLast < minGap) return null;
+
   if (Math.random() > base * ratio) return null;
 
-  const tpl = pool[Math.floor(Math.random() * pool.length)];
+  // 同一只票还有「正在冲击」的重大新闻时不再叠一条（避免同一只票连吃两次）
+  const busy = new Set();
+  for (const e of db.events || []) {
+    if (e && e.major && Number(e.priceLeft) > 0 && Array.isArray(e.companies)) {
+      for (const c of e.companies) busy.add(c);
+    }
+  }
+  const freePool = pool.filter((t) => !(t.companies || []).some((c) => busy.has(c)));
+  const usable = freePool.length ? freePool : pool;
+  const tpl = usable[Math.floor(Math.random() * usable.length)];
   const dir = tpl.dir >= 0 ? 1 : -1;
 
   const shock = Math.max(0, Math.min(0.5, Number(cfg.majorNewsPriceShock ?? 0.12)));
@@ -667,6 +687,14 @@ export function spawnMajorNews(db) {
     reportBias
   };
   db.events.push(ev);
+
+  // 记账（管理面板 / 排障用）+ 服务端日志，方便核对节奏
+  st0.count = Number(st0.count || 0) + 1;
+  st0.lastTick = db.tick;
+  st0.lastAt = Date.now();
+  console.log('[重大新闻] ' + (dir > 0 ? '利好' : '利空') + ' ' + (ev.companies || []).join(',')
+    + ' | 距上一条 ' + (sinceLast < -1e8 ? '（首条）' : sinceLast + ' 轮')
+    + ' | 累计 ' + st0.count + ' 条 | ' + ev.text.slice(0, 24) + '…');
 
   // 立刻平移价值线 + 给下一期财报留偏移（同一只票可能叠加，但概率极低）
   for (const code of ev.companies) {

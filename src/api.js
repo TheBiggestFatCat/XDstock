@@ -727,6 +727,8 @@ export async function handleApi(ctx) {
       phaseText: phaseText(marketPhase(db)),
       schedules: Array.isArray(db.marketSchedules) ? db.marketSchedules : [],
       tick: db.tick,
+      // 重大新闻记账：出过几条、上一条在第几轮（排查「一下子出好几条」用）
+      majorStats: db.majorStats || { count: 0, lastTick: 0, lastAt: 0 },
       // 过期的公告不再下发，管理面板看到的和玩家看到的一致
       notices: (db.notices || []).filter((n) => noticeAlive(db, n)),
       closedAt: db.closedAt || 0,
@@ -1142,7 +1144,7 @@ export async function handleApi(ctx) {
       // ---- 虚假成交（会推动股价）/ 游资 / 市场资金冲击 ----
       'marketTradesSmallP', 'marketTradesMidP', 'marketTradesBigP', 'marketTradesChase', 'marketTradesPanic', 'marketTradesTrigger', 'marketTradesWindow', 'marketTradesSizeExp', 'marketTradesSentBias', 'marketTradesSentVol', 'reopenSurgeMult', 'indexTradeScale',
     'majorNewsEnabled', 'majorNewsChanceRatio', 'majorNewsPriceShock', 'majorNewsTicks',
-    'majorNewsFairShift', 'majorNewsReportBias', 'majorNewsAnnounceHours',
+    'majorNewsFairShift', 'majorNewsReportBias', 'majorNewsAnnounceHours', 'majorNewsMinGapTicks',
       'hotMoneyEnabled', 'hotMoneySwitchMin', 'hotMoneySwitchMax', 'hotMoneyMin', 'hotMoneyMax',
       'marketImpactEnabled', 'marketImpactRef', 'marketImpactStrength', 'marketImpactMax',
       'marketImpactDecay', 'marketImpactFlowMax',
