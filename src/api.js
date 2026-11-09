@@ -1143,8 +1143,8 @@ export async function handleApi(ctx) {
       'marketTradesRate', 'redBonusRate', 'redBonusMinTicks', 'bearBonusRate', 'bearBonusMinTicks',
       // ---- 虚假成交（会推动股价）/ 游资 / 市场资金冲击 ----
       'marketTradesSmallP', 'marketTradesMidP', 'marketTradesBigP', 'marketTradesChase', 'marketTradesPanic', 'marketTradesTrigger', 'marketTradesWindow', 'marketTradesSizeExp', 'marketTradesSentBias', 'marketTradesSentVol', 'reopenSurgeMult', 'indexTradeScale',
-    'majorNewsEnabled', 'majorNewsChanceRatio', 'majorNewsPriceShock', 'majorNewsTicks',
-    'majorNewsFairShift', 'majorNewsReportBias', 'majorNewsAnnounceHours', 'majorNewsMinGapTicks',
+    'majorNewsEnabled', 'majorNewsAvgHours', 'majorNewsPriceShock', 'majorNewsTicks',
+    'majorNewsFairShift', 'majorNewsReportBias', 'majorNewsAnnounceHours', 'majorNewsMinGapHours',
       'hotMoneyEnabled', 'hotMoneySwitchMin', 'hotMoneySwitchMax', 'hotMoneyMin', 'hotMoneyMax',
       'marketImpactEnabled', 'marketImpactRef', 'marketImpactStrength', 'marketImpactMax',
       'marketImpactDecay', 'marketImpactFlowMax',

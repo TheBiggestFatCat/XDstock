@@ -2,7 +2,7 @@
 //   node tests/major-news.mjs
 
 import { createDb, migrate } from '../src/store.js';
-import { spawnMajorNews, stepMarket } from '../src/engine.js';
+import { spawnMajorNews, stepMarket, majorNewsProbPerTick, majorNewsGapTicks } from '../src/engine.js';
 import { MAJOR_NEWS_POOL, NEWS_POOL, majorPoolByCode } from '../src/news.js';
 import { genNextReport } from '../src/fundamentals.js';
 
@@ -29,11 +29,11 @@ function newDb(patch = {}) {
     eventChance: 0, baseVolatility: 0, meanReversion: 0, localEventChance: 0,
     marketTradesEnabled: 0, hotMoneyEnabled: 0, sentimentEnabled: 0, playerImpactEnabled: 0,
     fxEnabled: 0, goldVol: 0, goldRev: 0, reportIntervalTicks: 1e12,
-    majorNewsEnabled: 1, majorNewsChanceRatio: 0.01,
+    majorNewsEnabled: 1,
+    majorNewsAvgHours: 12, majorNewsMinGapHours: 0,   // 单测里先关掉硬闸
     majorNewsPriceShock: 0.2, majorNewsTicks: 5,
     majorNewsFairShift: 0.15, majorNewsReportBias: 0.4,
-    majorNewsAnnounceHours: 3,
-    majorNewsMinGapTicks: 0    // 默认关掉闸门，单测里直接测概率
+    majorNewsAnnounceHours: 3
   }, patch);
   db.tick = 5000;
   db.events = [];
@@ -58,48 +58,46 @@ log('=== 1 文案：每只票 5 条利好 + 5 条利空 ===');
 
 // ---------------------------------------------------------------- 2
 log('');
-log('=== 2 概率：只有普通新闻的 1/100 ===');
+log('=== 2 概率：平均 12 小时一条，最短 1 小时 ===');
 {
-  const db = newDb({ eventChance: 1 });          // 普通新闻概率=100%，方便对比
-  // 直接看掷骰子：概率 = eventChance × ratio = 0.01
-  let hit = 0;
-  const N = 4000;
-  for (let i = 0; i < N; i += 1) {
-    db.events = [];
-    db.config.majorNewsChanceRatio = 0.01;
-    if (quiet(() => spawnMajorNews(db))) hit += 1;
-  }
-  const rate = hit / N;
-  check('eventChance=1 时命中率 ≈ 1%', near(rate, 0.01, 0.004), `${(rate * 100).toFixed(2)}%`);
+  // 3.1 配置换算：默认平均 12 小时 → 每轮 1/8640；最短 1 小时 → 720 轮
+  const p12 = majorNewsProbPerTick({ majorNewsAvgHours: 12, tickMs: 5000 });
+  check('平均 12 小时 → 每轮 1/8640', Math.abs(p12 - 1 / 8640) < 1e-12, p12.toExponential(6));
+  check('最短 1 小时 → 720 轮', majorNewsGapTicks({ majorNewsMinGapHours: 1, tickMs: 5000 }) === 720,
+    String(majorNewsGapTicks({ majorNewsMinGapHours: 1, tickMs: 5000 })));
+  check('平均间隔设 0 → 关掉（概率 0）', majorNewsProbPerTick({ majorNewsAvgHours: 0 }) === 0);
+  check('tickMs 变了概率跟着变（10 秒一轮 → 2/8640）',
+    Math.abs(majorNewsProbPerTick({ majorNewsAvgHours: 12, tickMs: 10000 }) - 2 / 8640) < 1e-12);
 
-  // 概率太小（0.015% ≈ 几千轮一次）没法在小样本里测，所以固定 eventChance、只测系数乘法
-  const dbA = newDb({ eventChance: 1, majorNewsChanceRatio: 0.01 });
+  // 3.2 实测命中率：把平均间隔压到 1% 对应的时长（0.1389 小时）方便采样
+  const dbA = newDb({ majorNewsAvgHours: 5000 / (0.01 * 3600000) });   // p = 1%
   let hitA = 0;
   for (let i = 0; i < 3000; i += 1) {
     dbA.events = [];
     if (quiet(() => spawnMajorNews(dbA))) hitA += 1;
   }
-  check('系数 0.01 → 命中率 1%', Math.abs(hitA / 3000 - 0.01) < 0.004, `${(hitA / 3).toFixed(2)}%`);
+  check('命中率 ≈ 1%（对应平均 100 轮）', Math.abs(hitA / 3000 - 0.01) < 0.005,
+    (hitA / 30).toFixed(2) + '%');
 
-  const dbB = newDb({ eventChance: 1, majorNewsChanceRatio: 1 });
+  const dbB = newDb({ majorNewsAvgHours: 5000 / 3600000 });   // p = 100%
   let hitB = 0;
   for (let i = 0; i < 300; i += 1) {
     dbB.events = [];
     if (quiet(() => spawnMajorNews(dbB))) hitB += 1;
   }
-  check('系数 1 → 和普通新闻同概率（100%）', hitB === 300, `${hitB}/300`);
+  check('平均间隔压到 1 轮 → 必出', hitB === 300, hitB + '/300');
 
-  const dbC = newDb({ eventChance: 1, majorNewsChanceRatio: 0 });
+  const dbC = newDb({ majorNewsAvgHours: 0 });
   let hitC = 0;
   for (let i = 0; i < 300; i += 1) {
     dbC.events = [];
     if (quiet(() => spawnMajorNews(dbC))) hitC += 1;
   }
-  check('系数 0 → 一次都不出', hitC === 0, String(hitC));
+  check('平均间隔 0 → 一次都不出', hitC === 0, String(hitC));
 
-  const off = newDb({ eventChance: 1, majorNewsEnabled: 0 });
+  const off = newDb({ majorNewsEnabled: 0, majorNewsAvgHours: 5000 / 3600000 });
   let hit3 = 0;
-  for (let i = 0; i < 500; i += 1) {
+  for (let i = 0; i < 200; i += 1) {
     off.events = [];
     if (quiet(() => spawnMajorNews(off))) hit3 += 1;
   }
@@ -110,7 +108,7 @@ log('=== 2 概率：只有普通新闻的 1/100 ===');
 log('');
 log('=== 3 幅度：价格冲击 ±20%、分 5 轮走完 ===');
 {
-  const db = newDb({ majorNewsChanceRatio: 1, eventChance: 1 });   // 必出
+  const db = newDb({ majorNewsAvgHours: 5000 / 3600000, eventChance: 1 });   // 必出
   const ev = quiet(() => {
     const e = spawnMajorNews(db);
     return e;
@@ -130,14 +128,14 @@ log('=== 3 幅度：价格冲击 ±20%、分 5 轮走完 ===');
 log('');
 log('=== 4 零和：利好的倍数 × 利空的倍数 = 1 ===');
 {
-  const up = newDb({ majorNewsChanceRatio: 1, eventChance: 1 });
+  const up = newDb({ majorNewsAvgHours: 5000 / 3600000, eventChance: 1 });
   let e = quiet(() => spawnMajorNews(up));
   // 强行抽到利好为止
   let guard = 0;
   while (e && e.dir < 0 && guard < 200) { up.events = []; e = quiet(() => spawnMajorNews(up)); guard += 1; }
   const upMult = Math.exp(e.trend * e.leakTicks);
 
-  const dn = newDb({ majorNewsChanceRatio: 1, eventChance: 1 });
+  const dn = newDb({ majorNewsAvgHours: 5000 / 3600000, eventChance: 1 });
   let e2 = quiet(() => spawnMajorNews(dn));
   guard = 0;
   while (e2 && e2.dir > 0 && guard < 200) { dn.events = []; e2 = quiet(() => spawnMajorNews(dn)); guard += 1; }
@@ -148,14 +146,14 @@ log('=== 4 零和：利好的倍数 × 利空的倍数 = 1 ===');
   check('利空不是「-20%」而是「÷1.2」', Math.abs(dnMult - 1 / 1.2) < 1e-9, dnMult.toFixed(6));
 
   // 价值线平移也互为倒数
-  const upFair = newDb({ majorNewsChanceRatio: 1, eventChance: 1 });
+  const upFair = newDb({ majorNewsAvgHours: 5000 / 3600000, eventChance: 1 });
   const stU = upFair.stocks.TGW;
   stU.fair = 100;
   upFair.majorPool = MAJOR_NEWS_POOL.filter((x) => x.companies[0] === 'TGW' && x.dir > 0);
   quiet(() => spawnMajorNews(upFair));
   const fairUp = stU.fair;
 
-  const dnFair = newDb({ majorNewsChanceRatio: 1, eventChance: 1 });
+  const dnFair = newDb({ majorNewsAvgHours: 5000 / 3600000, eventChance: 1 });
   const stD = dnFair.stocks.TGW;
   stD.fair = 100;
   dnFair.majorPool = MAJOR_NEWS_POOL.filter((x) => x.companies[0] === 'TGW' && x.dir < 0);
@@ -212,7 +210,7 @@ log('=== 5 财报：下一期吃偏移，只用一次 ===');
 log('');
 log('=== 6 引擎里整条链路：事件落库、股价动、偏置清空 ===');
 {
-  const db = newDb({ majorNewsChanceRatio: 1, eventChance: 1 });
+  const db = newDb({ majorNewsAvgHours: 5000 / 3600000, eventChance: 1 });
   for (const s of Object.values(db.stocks)) s.majorBias = 0;
   const p0 = db.stocks.TGW.price;
   quiet(() => stepMarket(db));
@@ -237,7 +235,7 @@ log('=== 6 引擎里整条链路：事件落库、股价动、偏置清空 ===')
 log('');
 log('=== 7 公告挂 3 小时：价格阶段结束就停，公告继续留着 ===');
 {
-  const db = newDb({ majorNewsChanceRatio: 1, eventChance: 1, tickMs: 5000 });
+  const db = newDb({ majorNewsAvgHours: 5000 / 3600000, eventChance: 1, tickMs: 5000 });
   db.config.majorNewsAnnounceHours = 3;
   const ev = quiet(() => spawnMajorNews(db));
   check('公告存活轮数 = 3 小时 / 5 秒 = 2160 轮 + 冲击 5 轮',
@@ -265,7 +263,8 @@ log('=== 7 公告挂 3 小时：价格阶段结束就停，公告继续留着 ==
 log('');
 log('=== 8 硬闸：两条重大新闻之间至少隔 N 轮（防「一下子出好几条」） ===');
 {
-  const db = newDb({ eventChance: 1, majorNewsChanceRatio: 1, majorNewsMinGapTicks: 120 });
+  // 闸门设成 120 轮（0.16667 小时）方便测：120 轮 = 10 分钟
+  const db = newDb({ eventChance: 1, majorNewsAvgHours: 5000 / 3600000, majorNewsMinGapHours: 120 * 5000 / 3600000 });
   db.tick = 5000;
   const first = quiet(() => spawnMajorNews(db));
   check('第 1 条能出（还没记录间隔）', !!first, first ? first.companies.join(',') : '没出');
@@ -277,6 +276,8 @@ log('=== 8 硬闸：两条重大新闻之间至少隔 N 轮（防「一下子出
     if (quiet(() => spawnMajorNews(db))) burst += 1;
   }
   check('同 tick 连掷 200 次一条都不出（概率 100% 也被拦）', burst === 0, String(burst));
+  check('闸门长度 = 120 轮（0.1667 小时）', majorNewsGapTicks(db.config) === 120, String(majorNewsGapTicks(db.config)));
+  check('默认 1 小时 = 720 轮', majorNewsGapTicks({ majorNewsMinGapHours: 1, tickMs: 5000 }) === 720);
 
   // 过 60 轮还是拦
   db.tick += 60;
@@ -296,7 +297,7 @@ log('=== 8 硬闸：两条重大新闻之间至少隔 N 轮（防「一下子出
   check('记账 lastTick 跟着走', Number(db.majorStats.lastTick) === db.tick, String(db.majorStats.lastTick));
 
   // 同一只票在冲击中不叠
-  const db3 = newDb({ eventChance: 1, majorNewsChanceRatio: 1, majorNewsMinGapTicks: 0 });
+  const db3 = newDb({ eventChance: 1, majorNewsAvgHours: 5000 / 3600000, majorNewsMinGapHours: 0 });
   db3.majorPool = MAJOR_NEWS_POOL.filter((x) => x.companies[0] === 'TGW');
   const e1 = quiet(() => spawnMajorNews(db3));
   check('第一条是 TGW', !!e1 && e1.companies[0] === 'TGW');

@@ -611,25 +611,42 @@ export function spawnNews(db) {
  * 重大利好 / 重大利空（2026-11 新增）
  *
  * 和普通新闻的区别：
- *   - 概率只有普通的 1/100（`majorNewsChanceRatio`）
+ *   - 平均 12 小时一条（`majorNewsAvgHours`），最少隔 1 小时（`majorNewsMinGapHours`）
  *   - 短期股价大幅波动（`majorNewsPriceShock`，分 `majorNewsTicks` 轮走完）
  *   - 立刻平移价值线（`majorNewsFairShift`），并给下一期财报留偏移（`majorNewsReportBias`）
  *   - **零和**：利好 ×(1+s)、利空 ×1/(1+s) 互为倒数；价值线/财报偏移也对称
  *     → 长期期望零漂移，不会凭空造钱，也不会让所有票长期阴跌
  */
+/** 每轮命中重大新闻的概率（0 = 关闭）：平均 majorNewsAvgHours 小时一条 */
+export function majorNewsProbPerTick(cfg = {}) {
+  const avgHours = Math.max(0, Number(cfg.majorNewsAvgHours ?? 12));
+  if (!(avgHours > 0)) return 0;
+  const tickMs = Math.max(1000, Number(cfg.tickMs) || 5000);
+  return Math.min(1, tickMs / (avgHours * 3600 * 1000));
+}
+
+/** 两条重大新闻之间最少隔多少轮（0 = 不限制） */
+export function majorNewsGapTicks(cfg = {}) {
+  const hours = Math.max(0, Number(cfg.majorNewsMinGapHours ?? 1));
+  if (!(hours > 0)) return 0;
+  const tickMs = Math.max(1000, Number(cfg.tickMs) || 5000);
+  return Math.round((hours * 3600 * 1000) / tickMs);
+}
+
 export function spawnMajorNews(db) {
   const cfg = db.config;
   if (Number(cfg.majorNewsEnabled ?? 1) === 0) return null;
   const pool = db.majorPool || [];
   if (!pool.length) return null;
 
-  // 概率 = 普通新闻概率 × 系数
-  const ratio = Math.max(0, Math.min(1, Number(cfg.majorNewsChanceRatio ?? 0.03)));
-  const base = Math.max(0, Number(cfg.eventChance ?? 0.015));
+  // 概率：平均 majorNewsAvgHours 小时一条（和 eventChance 解耦，按真实时间算）
+  //   每轮命中概率 = tickMs / (avgHours × 3600000)；12 小时 → 1/8640
+  const prob = majorNewsProbPerTick(cfg);
+  if (!(prob > 0)) return null;
 
-  // 硬闸：两条重大新闻之间至少隔 majorNewsMinGapTicks 轮（默认 120 轮 ≈ 10 分钟）
-  // 概率参数被填大（比如误填 3 而不是 0.03）也不会「一下子刷出好几条」
-  const minGap = Math.max(0, Math.round(Number(cfg.majorNewsMinGapTicks ?? 120)));
+  // 硬闸：两条之间至少隔 majorNewsMinGapHours 小时（默认 1 小时 = 720 轮）
+  // 概率参数被填大也不会「一下子刷出好几条」
+  const minGap = majorNewsGapTicks(cfg);
   if (!db.majorStats || typeof db.majorStats !== 'object') {
     db.majorStats = { count: 0, lastTick: -1e9, lastAt: 0 };
   }
@@ -637,7 +654,7 @@ export function spawnMajorNews(db) {
   const sinceLast = Number(db.tick) - Number(st0.lastTick);
   if (minGap > 0 && sinceLast < minGap) return null;
 
-  if (Math.random() > base * ratio) return null;
+  if (Math.random() > prob) return null;
 
   // 同一只票还有「正在冲击」的重大新闻时不再叠一条（避免同一只票连吃两次）
   const busy = new Set();
