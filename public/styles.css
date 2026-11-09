@@ -970,6 +970,42 @@ input.tpsl-input {
   font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 8px;
   white-space: nowrap;
 }
+/* ---------- 重大利好 / 重大利空（红底 + 闪烁） ---------- */
+.news-item.is-major {
+  position: relative;
+  border: 1px solid rgba(220, 38, 38, .35);
+  background: linear-gradient(90deg, rgba(220, 38, 38, .16), rgba(220, 38, 38, .07));
+  box-shadow: 0 0 0 1px rgba(220, 38, 38, .12) inset, 0 4px 14px rgba(220, 38, 38, .12);
+  font-weight: 600;
+  animation: majorBlink 1.4s ease-in-out infinite, newsIn .45s cubic-bezier(.2, .9, .3, 1.1) both;
+}
+/* 利空用更冷的红（避免和「利好红」混淆），文字仍然醒目 */
+.news-item.is-major-down {
+  border-color: rgba(190, 24, 93, .38);
+  background: linear-gradient(90deg, rgba(190, 24, 93, .16), rgba(190, 24, 93, .06));
+  box-shadow: 0 0 0 1px rgba(190, 24, 93, .12) inset, 0 4px 14px rgba(190, 24, 93, .12);
+}
+.news-item.is-major .news-text { color: #b91c1c; }
+.news-item.is-major-down .news-text { color: #9d174d; }
+
+@keyframes majorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .62; }
+}
+
+.badge-major {
+  background: #dc2626; color: #fff; font-weight: 700;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .35) inset;
+  animation: majorBlink 1.4s ease-in-out infinite;
+}
+.news-item.is-major-down .badge-major { background: #be185d; }
+.news-age.is-major-age { color: #b91c1c; font-weight: 600; white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .news-item.is-major { font-size: 12.5px; padding: 9px 10px; font-weight: 600; }
+  .badge-major { font-size: 10.5px; padding: 2px 7px; }
+}
+
 .badge-up { background: rgba(240, 75, 75, .12); color: var(--up); }
 .badge-down { background: rgba(18, 184, 134, .13); color: var(--down); }
 .badge-hot { background: var(--hl-warm); color: #d97706; box-shadow: 0 0 0 1px #fcd9b0 inset; }

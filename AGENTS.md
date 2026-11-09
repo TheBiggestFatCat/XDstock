@@ -42,6 +42,7 @@ node tests/index-trades.mjs          # 指数的虚假成交 + 按权重推动�
 node tests/candles5.mjs              # 5 分钟 K 线单独打包（改 K 线接口/存储必跑，24 条断言）
 node tests/trade-history.mjs          # 我的·交易记录 48 小时/翻页/筛选（改流水必跑，21 条断言）
 node tests/chat.mjs                 # 聊天大厅：消息上限/拼手气拆分/抢红包规则（改聊天必跑，35 条断言）
+node tests/major-news.mjs          # 重大利好/利空：概率/幅度/零和/3 小时公告（改新闻必跑，43 条断言）
 node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占比/天花板（不是断言套，看表格）
 ```
 

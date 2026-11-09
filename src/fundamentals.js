@@ -362,6 +362,11 @@ export function genNextReport(st, ctx = {}) {
   // 大多数路径慢慢缩水（Itô 漂移），玩家看到的就成了「所有公司都在缩」
   const logShift = clamp(gauss() * vol, -0.35, 0.35);
   let growth = clamp(Math.exp(logShift) - 1, -0.3, 0.3);
+  // 重大利好 / 重大利空：新闻给这一期财报预定的偏移（对数空间，只影响一期）
+  const majorBias = clamp(Number(st.majorBias) || 0, -0.6, 0.6);
+  if (majorBias !== 0) {
+    growth = clamp(Math.exp(Math.log1p(clamp(growth, -0.99, 5)) + majorBias) - 1, -0.5, 0.6);
+  }
   // 没被特质覆盖时，市场预期就是「不变」——随机偏移本身就是意外
   let plainRandom = true;
   let bias = 0;

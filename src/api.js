@@ -502,6 +502,8 @@ export function marketPayload(db, me) {
         text: e.text,
         companies: e.companies,
         dir: e.dir || (e.trend > 0 ? 1 : -1),
+        major: !!e.major,          // 重大利好/重大利空（前端红底闪烁 + 排最前）
+        leftTicks: e.major ? Math.max(0, Number(e.remaining) || 0) : undefined,
         createdAt: e.createdAt,
         ageTicks: Number(e.createdTick) > 0
           ? Math.max(0, db.tick - Number(e.createdTick))
@@ -1139,6 +1141,8 @@ export async function handleApi(ctx) {
       'marketTradesRate', 'redBonusRate', 'redBonusMinTicks', 'bearBonusRate', 'bearBonusMinTicks',
       // ---- 虚假成交（会推动股价）/ 游资 / 市场资金冲击 ----
       'marketTradesSmallP', 'marketTradesMidP', 'marketTradesBigP', 'marketTradesChase', 'marketTradesPanic', 'marketTradesTrigger', 'marketTradesWindow', 'marketTradesSizeExp', 'marketTradesSentBias', 'marketTradesSentVol', 'reopenSurgeMult', 'indexTradeScale',
+    'majorNewsEnabled', 'majorNewsChanceRatio', 'majorNewsPriceShock', 'majorNewsTicks',
+    'majorNewsFairShift', 'majorNewsReportBias', 'majorNewsAnnounceHours',
       'hotMoneyEnabled', 'hotMoneySwitchMin', 'hotMoneySwitchMax', 'hotMoneyMin', 'hotMoneyMax',
       'marketImpactEnabled', 'marketImpactRef', 'marketImpactStrength', 'marketImpactMax',
       'marketImpactDecay', 'marketImpactFlowMax',

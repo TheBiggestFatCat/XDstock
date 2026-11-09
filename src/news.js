@@ -231,3 +231,144 @@ export const NEWS_POOL = [
   { companies: ['MCD'], dir: 1, text: '麦当劳的冰淇淋机今天居然没坏，全公司当成大喜事发了内部通告' },
   { companies: ['MCD'], dir: -1, text: '麦当劳的冰淇淋机又坏了，这已经是本周第十七次，维修师傅已住店里' },
 ];
+
+
+/**
+ * 重大利好 / 重大利空池（2026-11 新增）
+ *
+ * 和 NEWS_POOL 的区别：
+ *   - 出现概率只有普通新闻的 1/100（由 `majorNewsChanceRatio` 控制）
+ *   - 短时间大幅推动股价（`majorNewsPriceShock`），同时**直接改价值线**（`majorNewsFairShift`）
+ *     并给下一期财报留一个偏移（`majorNewsReportBias`）
+ *   - 利好 ×(1+s)、利空 ×1/(1+s)，严格互为倒数 —— 长期零漂移，不会凭空造钱
+ *
+ * 每只票 5 条利好 + 5 条利空，写的是「结构性大事」的口吻（监管、并购、专利、事故、退市风险）。
+ */
+export const MAJOR_NEWS_POOL = [
+  // ================= 丰川集团 TGW =================
+  { companies: ['TGW'], dir: 1, text: '【重大】丰川集团拿下全市地铁广告十年独家经营权，百货人流一夜翻倍' },
+  { companies: ['TGW'], dir: 1, text: '【重大】丰川集团宣布并购三家区域连锁，门店数直接翻一番，卖方连夜签字' },
+  { companies: ['TGW'], dir: 1, text: '【重大】丰川集团自有品牌入驻全国便利店渠道，铺货量顶过去三年总和' },
+  { companies: ['TGW'], dir: 1, text: '【重大】丰川集团物流板块拿到跨境资质，第一批货柜已经出发' },
+  { companies: ['TGW'], dir: 1, text: '【重大】丰川集团被纳入核心消费指数，被动资金下周开始买' },
+  { companies: ['TGW'], dir: -1, text: '【重大】丰川集团主力商场被查出消防隐患，全城门店停业整改' },
+  { companies: ['TGW'], dir: -1, text: '【重大】丰川集团供应商集体断供，仓库三天没进新货' },
+  { companies: ['TGW'], dir: -1, text: '【重大】丰川集团被曝财务造假，审计所当场辞任' },
+  { companies: ['TGW'], dir: -1, text: '【重大】丰川集团债务到期无法兑付，评级机构连降两级' },
+  { companies: ['TGW'], dir: -1, text: '【重大】丰川集团董事长被带走协助调查，公司电话无人接听' },
+
+  // ================= 无畏科技 MAMA =================
+  { companies: ['MAMA'], dir: 1, text: '【重大】无畏科技自研芯片流片成功，性能对标国际大厂' },
+  { companies: ['MAMA'], dir: 1, text: '【重大】无畏科技拿下海外三大渠道独家代理，订单排到明年' },
+  { companies: ['MAMA'], dir: 1, text: '【重大】无畏科技的AI模型通过官方认证，成为行业标准' },
+  { companies: ['MAMA'], dir: 1, text: '【重大】无畏科技被巨头溢价收购要约，溢价四成' },
+  { companies: ['MAMA'], dir: 1, text: '【重大】无畏科技新品发布会现场签下十亿级订单' },
+  { companies: ['MAMA'], dir: -1, text: '【重大】无畏科技核心团队集体出走，另立门户' },
+  { companies: ['MAMA'], dir: -1, text: '【重大】无畏科技芯片项目宣布终止，前期投入全部计提' },
+  { companies: ['MAMA'], dir: -1, text: '【重大】无畏科技被海外监管列入清单，出货渠道被切断' },
+  { companies: ['MAMA'], dir: -1, text: '【重大】无畏科技新品大规模召回，涉及金额超全年利润' },
+  { companies: ['MAMA'], dir: -1, text: '【重大】无畏科技专利诉讼败诉，赔偿金额创行业纪录' },
+
+  // ================= 肥鱼科技 DFY =================
+  { companies: ['DFY'], dir: 1, text: '【重大】肥鱼科技深海养殖基地投产，产能翻三倍' },
+  { companies: ['DFY'], dir: 1, text: '【重大】肥鱼科技拿下国家级农业龙头称号，补贴到位' },
+  { companies: ['DFY'], dir: 1, text: '【重大】肥鱼科技与全球零售巨头签下五年长约' },
+  { companies: ['DFY'], dir: 1, text: '【重大】肥鱼科技冷链技术获国际专利，同行争相授权' },
+  { companies: ['DFY'], dir: 1, text: '【重大】肥鱼科技直播间单场销售额破纪录，服务器三次扩容' },
+  { companies: ['DFY'], dir: -1, text: '【重大】肥鱼科技养殖区爆发病害，整片海域封锁' },
+  { companies: ['DFY'], dir: -1, text: '【重大】肥鱼科技罐头被检出违禁添加剂，全线下架' },
+  { companies: ['DFY'], dir: -1, text: '【重大】肥鱼科技冷链断链事故，一船货全部报废' },
+  { companies: ['DFY'], dir: -1, text: '【重大】肥鱼科技遭集体诉讼，索赔金额超净资产' },
+  { companies: ['DFY'], dir: -1, text: '【重大】肥鱼科技大股东质押爆仓，被动减持公告连夜发布' },
+
+  // ================= 瑞幸咖啡 LU =================
+  { companies: ['LU'], dir: 1, text: '【重大】瑞幸咖啡单季门店数突破新高，同店增长回正' },
+  { companies: ['LU'], dir: 1, text: '【重大】瑞幸咖啡与顶流IP联名，首日售罄加印三次' },
+  { companies: ['LU'], dir: 1, text: '【重大】瑞幸咖啡供应链自建烘焙厂投产，成本下降一成' },
+  { companies: ['LU'], dir: 1, text: '【重大】瑞幸咖啡获境外机构上调评级至强烈推荐' },
+  { companies: ['LU'], dir: 1, text: '【重大】瑞幸咖啡海外首店开业，排队绕了三个街区' },
+  { companies: ['LU'], dir: -1, text: '【重大】瑞幸咖啡被曝原料过期，涉事门店全部关停' },
+  { companies: ['LU'], dir: -1, text: '【重大】瑞幸咖啡联名活动翻车，合作方连夜解约' },
+  { companies: ['LU'], dir: -1, text: '【重大】瑞幸咖啡遭做空报告狙击，称其单店数据造假' },
+  { companies: ['LU'], dir: -1, text: '【重大】瑞幸咖啡补贴战被迫跟进，毛利被压到地板上' },
+  { companies: ['LU'], dir: -1, text: '【重大】瑞幸咖啡海外扩张受挫，首批门店全数关闭' },
+
+  // ================= 奶蛙传媒 NW =================
+  { companies: ['NW'], dir: 1, text: '【重大】奶蛙传媒签下全网顶流独家经纪约' },
+  { companies: ['NW'], dir: 1, text: '【重大】奶蛙传媒出品的短剧登顶热榜，广告主排队加价' },
+  { companies: ['NW'], dir: 1, text: '【重大】奶蛙传媒拿到大型晚会独家制作权' },
+  { companies: ['NW'], dir: 1, text: '【重大】奶蛙传媒会员数单月净增创历史新高' },
+  { companies: ['NW'], dir: 1, text: '【重大】奶蛙传媒与海外平台达成内容出海协议' },
+  { companies: ['NW'], dir: -1, text: '【重大】奶蛙传媒头部主播集体解约，转投对手平台' },
+  { companies: ['NW'], dir: -1, text: '【重大】奶蛙传媒被点名批评内容低俗，多档节目下架' },
+  { companies: ['NW'], dir: -1, text: '【重大】奶蛙传媒广告收入断崖下滑，大客户撤单' },
+  { companies: ['NW'], dir: -1, text: '【重大】奶蛙传媒版权纠纷败诉，被判天价赔偿' },
+  { companies: ['NW'], dir: -1, text: '【重大】奶蛙传媒财务总监辞职，审计报告被出具保留意见' },
+
+  // ================= 弦卷财团 XJ =================
+  { companies: ['XJ'], dir: 1, text: '【重大】弦卷财团旗下地产项目被纳入城市更新重点名单' },
+  { companies: ['XJ'], dir: 1, text: '【重大】弦卷财团完成百亿级资产注入，负债率大幅下降' },
+  { companies: ['XJ'], dir: 1, text: '【重大】弦卷财团拿到海外主权基金的战略投资' },
+  { companies: ['XJ'], dir: 1, text: '【重大】弦卷财团核心资产重估，溢价远超市场预期' },
+  { companies: ['XJ'], dir: 1, text: '【重大】弦卷财团债务重组方案获批，利息压力骤减' },
+  { companies: ['XJ'], dir: -1, text: '【重大】弦卷财团债券展期失败，进入交叉违约程序' },
+  { companies: ['XJ'], dir: -1, text: '【重大】弦卷财团核心项目被叫停，前期投入全部沉没' },
+  { companies: ['XJ'], dir: -1, text: '【重大】弦卷财团被评级机构下调至投机级' },
+  { companies: ['XJ'], dir: -1, text: '【重大】弦卷财团遭债权人集体申请重整' },
+  { companies: ['XJ'], dir: -1, text: '【重大】弦卷财团实控人被列为失信被执行人' },
+
+  // ================= 矿工银行 MB =================
+  { companies: ['MB'], dir: 1, text: '【重大】矿工银行获批黄金进口资质，自营盘规模翻倍' },
+  { companies: ['MB'], dir: 1, text: '【重大】矿工银行金库扩容完成，承接三家央行寄存业务' },
+  { companies: ['MB'], dir: 1, text: '【重大】矿工银行并购一家大型矿业基金，管理规模跃升' },
+  { companies: ['MB'], dir: 1, text: '【重大】金价创历史新高，矿工银行自营浮盈超全年利润' },
+  { companies: ['MB'], dir: 1, text: '【重大】矿工银行被纳入金融权重指数，被动资金大举买入' },
+  { companies: ['MB'], dir: -1, text: '【重大】矿工银行自营盘踩雷，单日亏损吞掉半年利润' },
+  { companies: ['MB'], dir: -1, text: '【重大】矿工银行金库被查出账实不符，监管进场' },
+  { companies: ['MB'], dir: -1, text: '【重大】矿工银行大客户违约，坏账率飙升' },
+  { companies: ['MB'], dir: -1, text: '【重大】金价单日闪崩，矿工银行质押盘连环平仓' },
+  { companies: ['MB'], dir: -1, text: '【重大】矿工银行被列入反洗钱调查名单' },
+
+  // ================= 肯德基 KFC =================
+  { companies: ['KFC'], dir: 1, text: '【重大】肯德基疯狂星期四单日销售额创全球纪录' },
+  { companies: ['KFC'], dir: 1, text: '【重大】肯德基推出联名限定套餐，首发即售罄' },
+  { companies: ['KFC'], dir: 1, text: '【重大】肯德基母公司宣布加码本土市场，追加百亿投资' },
+  { companies: ['KFC'], dir: 1, text: '【重大】肯德基供应链本土化完成，成本大幅下降' },
+  { companies: ['KFC'], dir: 1, text: '【重大】肯德基拿到新一线城市核心商圈整栋物业' },
+  { companies: ['KFC'], dir: -1, text: '【重大】肯德基被曝食安问题，涉事门店全部停业' },
+  { companies: ['KFC'], dir: -1, text: '【重大】肯德基疯狂星期四活动被叫停整改' },
+  { companies: ['KFC'], dir: -1, text: '【重大】肯德基供应商工厂停产，全国门店缺货' },
+  { companies: ['KFC'], dir: -1, text: '【重大】肯德基加盟商集体维权，多地门店停业' },
+  { companies: ['KFC'], dir: -1, text: '【重大】肯德基母公司下调全年指引，称成本压力超预期' },
+
+  // ================= 小灯证券 XD =================
+  { companies: ['XD'], dir: 1, text: '【重大】小灯证券拿到全牌照，业务范围全面放开' },
+  { companies: ['XD'], dir: 1, text: '【重大】小灯证券开户数单日破纪录，系统扩容三次' },
+  { companies: ['XD'], dir: 1, text: '【重大】小灯证券自营盘收益翻倍，被同行争相挖角' },
+  { companies: ['XD'], dir: 1, text: '【重大】小灯证券与巨头达成战略合作，共享投研体系' },
+  { companies: ['XD'], dir: 1, text: '【重大】小灯证券被纳入券商指数，权重超出市场预期' },
+  { companies: ['XD'], dir: -1, text: '【重大】小灯证券自营盘巨亏，风控被监管点名' },
+  { companies: ['XD'], dir: -1, text: '【重大】小灯证券交易系统宕机两小时，客户集体索赔' },
+  { companies: ['XD'], dir: -1, text: '【重大】小灯证券保荐项目被查，投行业务暂停' },
+  { companies: ['XD'], dir: -1, text: '【重大】小灯证券融资融券违约率飙升，计提大额减值' },
+  { companies: ['XD'], dir: -1, text: '【重大】小灯证券董事长被调查，公司紧急停牌' },
+
+  // ================= 麦当劳 MCD =================
+  { companies: ['MCD'], dir: 1, text: '【重大】麦当劳全球门店单季营收创历史新高' },
+  { companies: ['MCD'], dir: 1, text: '【重大】麦当劳拿到新兴市场十年独家经营权' },
+  { companies: ['MCD'], dir: 1, text: '【重大】麦当劳宣布史上最大回购计划' },
+  { companies: ['MCD'], dir: 1, text: '【重大】麦当劳供应链升级完成，单店利润率提升三个点' },
+  { companies: ['MCD'], dir: 1, text: '【重大】麦当劳被纳入全球核心消费指数' },
+  { companies: ['MCD'], dir: -1, text: '【重大】麦当劳全球范围食安事件，多国门店停业' },
+  { companies: ['MCD'], dir: -1, text: '【重大】麦当劳被工会集体诉讼，赔偿金额创纪录' },
+  { companies: ['MCD'], dir: -1, text: '【重大】麦当劳核心市场同店销售转负' },
+  { companies: ['MCD'], dir: -1, text: '【重大】麦当劳特许经营商大面积退出' },
+  { companies: ['MCD'], dir: -1, text: '【重大】麦当劳被曝财务重述，历史数据全部修正' }
+];
+
+/** 这只票的（利好, 利空）文案对数——测试用 */
+export function majorPoolByCode(code) {
+  const up = MAJOR_NEWS_POOL.filter((x) => x.companies.includes(code) && x.dir > 0);
+  const down = MAJOR_NEWS_POOL.filter((x) => x.companies.includes(code) && x.dir < 0);
+  return { up, down };
+}

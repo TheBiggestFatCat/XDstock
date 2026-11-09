@@ -15,7 +15,7 @@ import { marketPhase, phaseText } from './src/schedule.js';
 import { checkDelist } from './src/delist.js';
 import { fetchAudJpy } from './src/fx.js';
 import { handleApi } from './src/api.js';
-import { NEWS_POOL } from './src/news.js';
+import { NEWS_POOL, MAJOR_NEWS_POOL } from './src/news.js';
 import { pushNotify, notifyList } from './src/notify.js';
 import { visibleEmotes } from './src/emoji.js';
 import { latestVersionPost } from './src/version.js';
@@ -32,6 +32,7 @@ const PORT = Number(process.env.PORT || 8971);
 const db = getDb();
 // 新闻池以代码为准，每次启动都刷新（改 news.js 后重启即可生效）
 db.newsPool = NEWS_POOL;
+db.majorPool = MAJOR_NEWS_POOL;   // 重大利好/重大利空（概率 1/100）
 db.localNewsPool = [];
 // 清掉旧机制留下的新闻（没有 leakTicks 字段的都是上一版的）
 const stale = (db.events || []).filter((e) => typeof e.leakTicks !== 'number');
@@ -347,6 +348,8 @@ function tickPayload(forPlayerId) {
         text: e.text,
         companies: e.companies,
         dir: e.dir || (e.trend > 0 ? 1 : -1),
+        major: !!e.major,          // 重大利好/重大利空（前端红底闪烁 + 排最前）
+        leftTicks: e.major ? Math.max(0, Number(e.remaining) || 0) : undefined,
         createdAt: e.createdAt,
         ageTicks: Number(e.createdTick) > 0
           ? Math.max(0, d.tick - Number(e.createdTick))

@@ -3257,7 +3257,11 @@ function renderNews() {
   const feed = $('#newsFeed');
   if (!feed) return;
   const notices = (state.market?.notices || []).slice().sort((a, b) => (b.at || 0) - (a.at || 0));
-  const list = (state.market?.events || []).slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const allEvents = (state.market?.events || []).slice()
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  // 重大利好/重大利空永远排最前（要挂 3 小时，不能被后来的普通新闻挤下去）
+  const majors = allEvents.filter((e) => e.major);
+  const list = allEvents.filter((e) => !e.major);
   const cnt = $('#newsCount');
   const total = notices.length + list.length;
   if (cnt) cnt.textContent = total ? `${total} 条` : '';
@@ -3279,6 +3283,16 @@ function renderNews() {
     return `<span class="news-age">还剩 ${left} 轮</span>`;
   };
 
+  // 重大新闻：还剩多久（服务端给 leftTicks）
+  const majorLeftTip = (ev) => {
+    const left = Number(ev.leftTicks);
+    if (!Number.isFinite(left)) return '';
+    const mins = Math.round((left * (state.market?.tickMs || 5000)) / 60000);
+    if (mins <= 0) return '<span class="news-age is-major-age">即将结束</span>';
+    if (mins >= 60) return `<span class="news-age is-major-age">剩 ${(mins / 60).toFixed(1)} 小时</span>`;
+    return `<span class="news-age is-major-age">剩 ${mins} 分钟</span>`;
+  };
+
   const noticeHtml = notices.slice(0, 3).map((n) => `
     <div class="news-item news-notice">
       <span class="news-badge badge-notice">公告</span>
@@ -3286,7 +3300,16 @@ function renderNews() {
       ${noticeTip(n)}
     </div>`).join('');
 
-  const newsHtml = list.slice(0, Math.max(1, 4 - Math.min(3, notices.length))).map((ev) => `
+  // 重大新闻最多占 2 条，剩下位置给普通新闻
+  const majorSlots = Math.min(2, majors.length);
+  const slots = Math.max(1, 4 - Math.min(3, notices.length));
+  const newsHtml = majors.slice(0, majorSlots).map((ev) => `
+    <div class="news-item is-major ${Number(ev.dir) > 0 ? 'is-major-up' : 'is-major-down'}">
+      <span class="news-badge badge-major">${Number(ev.dir) > 0 ? '重大利好' : '重大利空'}</span>
+      <span class="news-text">${ev.text}</span>
+      ${majorLeftTip(ev)}
+    </div>`).join('')
+    + list.slice(0, Math.max(1, slots - majorSlots)).map((ev) => `
     <div class="news-item">
       ${newsBadge(ev)}
       <span class="news-text">${ev.text}</span>
@@ -6132,6 +6155,13 @@ async function loadAdmin() {
           ['marketTradesSentBias', '情绪方向权重(百分点)', '散户看多时买盘概率 +这个数/100；情绪 v=+1、填 25 → 买盘 +25pp。0 = 情绪不影响方向'],
           ['marketTradesSentVol', '情绪放量(百分比)', '散户越兴奋成交越多：|v|=1 时这只票笔数 ×(1+这个数/100)，60 → ×1.6'],
           ['reopenSurgeMult', '开盘巨量(休市后第一轮倍率)', '夜间/定时休市结束后的第一轮，虚假成交笔数 ×这个倍率（3 = 三倍量）；0 或 1 = 不放量'],
+          ['majorNewsEnabled', '重大新闻开关(1=开 0=关)', '重大利好/重大利空：短期大幅推价 + 平移价值线 + 影响下一期财报'],
+          ['majorNewsChanceRatio', '重大新闻概率系数(0.03 = 普通新闻的 3%)', '出现概率 = 普通新闻概率 × 这个系数；0.01 就是 1/100'],
+          ['majorNewsPriceShock', '重大新闻价格冲击(0.2 = ±20%)', '利好 ×(1+s)、利空 ×1/(1+s)，互为倒数保证长期零漂移'],
+          ['majorNewsTicks', '重大新闻冲击轮数(5)', '上面那段幅度分这么多轮走完，越大越像「慢牛式暴动」'],
+          ['majorNewsFairShift', '重大新闻价值线平移(0.15 = ±15%)', '事件发生立刻平移 fair，价格会被均值回归往新的价值线拉'],
+          ['majorNewsReportBias', '重大新闻财报偏移(0.4)', '下一期财报增速在 log 空间上的偏移，只影响一期，用完清零'],
+          ['majorNewsAnnounceHours', '重大新闻公告时长(小时, 3)', '价格冲击只有前面几轮；公告本身在快讯里挂满这么久'],
           ['indexTradeScale', '指数虚假成交权重', '指数也有散户在成交：权重 = 成分股流通市值之和 × 这个系数（0.08 ≈ 指数占全部虚假成交的 15%）；0 = 指数没有虚假成交']
         ]
       },

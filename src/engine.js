@@ -607,6 +607,81 @@ export function spawnNews(db) {
   return ev;
 }
 
+/**
+ * 重大利好 / 重大利空（2026-11 新增）
+ *
+ * 和普通新闻的区别：
+ *   - 概率只有普通的 1/100（`majorNewsChanceRatio`）
+ *   - 短期股价大幅波动（`majorNewsPriceShock`，分 `majorNewsTicks` 轮走完）
+ *   - 立刻平移价值线（`majorNewsFairShift`），并给下一期财报留偏移（`majorNewsReportBias`）
+ *   - **零和**：利好 ×(1+s)、利空 ×1/(1+s) 互为倒数；价值线/财报偏移也对称
+ *     → 长期期望零漂移，不会凭空造钱，也不会让所有票长期阴跌
+ */
+export function spawnMajorNews(db) {
+  const cfg = db.config;
+  if (Number(cfg.majorNewsEnabled ?? 1) === 0) return null;
+  const pool = db.majorPool || [];
+  if (!pool.length) return null;
+
+  // 概率 = 普通新闻概率 × 系数（默认 1/100）
+  const ratio = Math.max(0, Math.min(1, Number(cfg.majorNewsChanceRatio ?? 0.01)));
+  const base = Number(cfg.eventChance ?? 0.015);
+  if (Math.random() > base * ratio) return null;
+
+  const tpl = pool[Math.floor(Math.random() * pool.length)];
+  const dir = tpl.dir >= 0 ? 1 : -1;
+
+  const shock = Math.max(0, Math.min(0.5, Number(cfg.majorNewsPriceShock ?? 0.12)));
+  const ticks = Math.max(1, Math.min(60, Math.round(Number(cfg.majorNewsTicks ?? 6))));
+  const fairShift = Math.max(0, Math.min(0.5, Number(cfg.majorNewsFairShift ?? 0.08)));
+  const reportBias = Math.max(0, Math.min(0.6, Number(cfg.majorNewsReportBias ?? 0.4)));
+  // 公告要在快讯里挂多久（默认 3 小时）——价格只动前面 majorNewsTicks 轮，公告留满时长
+  const announceHours = Math.max(0, Math.min(48, Number(cfg.majorNewsAnnounceHours ?? 3)));
+  const tickMs = Math.max(1000, Number(cfg.tickMs) || 5000);
+  const announceTicks = Math.round((announceHours * 3600 * 1000) / tickMs);
+
+  // 利好每轮 ×(1+shock)^(1/ticks)，利空每轮 ×(1+shock)^(-1/ticks) —— 走完正好互为倒数
+  const perTick = Math.log1p(shock) / ticks;
+  const trend = dir > 0 ? perTick : -perTick;
+
+  const ev = {
+    id: 'mj_' + Math.random().toString(36).slice(2, 10),
+    kind: 'major',
+    major: true,
+    text: tpl.text,
+    companies: tpl.companies || [],
+    dir,
+    trend,
+    leakTicks: ticks,
+    leakLeft: ticks,
+    priceLeft: ticks,          // 还剩几轮价格冲击（走完就置 0）
+    duration: ticks + announceTicks,   // 公告存活：价格阶段 + 公告时长
+    remaining: ticks + announceTicks,
+    announceTicks,
+    announceUntil: now() + announceHours * 3600 * 1000,
+    createdAt: now(),
+    createdTick: db.tick,
+    announced: true,          // 重大新闻立刻公布，没有偷跑阶段
+    shock,
+    fairShift,
+    reportBias
+  };
+  db.events.push(ev);
+
+  // 立刻平移价值线 + 给下一期财报留偏移（同一只票可能叠加，但概率极低）
+  for (const code of ev.companies) {
+    const st = db.stocks[code];
+    if (!st || st.isIndex) continue;
+    const fair = Number(st.fair) || 0;
+    if (fair > 0) {
+      st.fair = Number((dir > 0 ? fair * (1 + fairShift) : fair / (1 + fairShift)).toFixed(4));
+    }
+    const prev = Number(st.majorBias) || 0;
+    st.majorBias = Math.max(-0.6, Math.min(0.6, prev + dir * reportBias));
+  }
+  return ev;
+}
+
 /** 偷跑结束 → 公布新闻，掷骰子决定「继续」还是「打脸」 */
 function publishEvent(e) {
   e.announced = true;
@@ -643,6 +718,9 @@ export function lotteryFactor(up, pct) {
 export function stepMarket(db) {
   const cfg = db.config;
 
+  // 0. 重大利好 / 重大利空（概率只有普通的 1/100，先掷）
+  spawnMajorNews(db);
+
   // 1. 新闻：推进阶段 + 到期清理
   const survivors = [];
   for (const e of db.events) {
@@ -651,6 +729,16 @@ export function stepMarket(db) {
     if (!e.announced) {
       e.leakLeft -= 1;
       if (e.leakLeft <= 0) publishEvent(e);
+    }
+
+    // 重大新闻：价格冲击只走前面几轮，走完 trend 归零；公告本身继续挂满 majorNewsAnnounceHours
+    if (e.major) {
+      if (Number(e.priceLeft) > 0) {
+        e.priceLeft = Number(e.priceLeft) - 1;
+        if (e.priceLeft <= 0) e.trend = 0;
+      } else {
+        e.trend = 0;
+      }
     }
 
     if (e.remaining > 0) survivors.push(e);
@@ -1142,6 +1230,8 @@ export function runReports(db) {
     if (db.fx) db.fx.reportBase = fxNow;
     if (db.gold) db.gold.reportBase = Number(db.gold.price) || 0;
     st.pendingReport = null;
+    // 重大新闻对财报的一次性影响用掉了
+    st.majorBias = 0;
 
     // 合理价：新财报算出来的值 70% + 上期 30%，避免一次财报把线拉到天上。
     // 2026-11：优先用「最近 5 期 EPS 趋势拟合」出来的价值线，历史不够才退回只看最后一期
