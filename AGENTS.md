@@ -83,6 +83,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 | 市场预期写死成 0 | 玩家看不到「预期」，超预期/不及预期成了内部参数的游戏 | 用 `expectedGrowthFromHistory()`（最近 5 期营收回归外推），不够 3 期才回退模型口径 |
 | 券商活跃度用绝对口径 | 线上成交笔数少 → 营收被 25% 地板夹死 → 每期财报 0%、大鳄预览永远是「符合预期 0%」 | 用 `volumeFactorOf()`（volumeAvg / 慢速 volumeRef），migrate 会给贴地板的券商重置基准营收 |
 | 指数只算「在交易」的成分股 | 一停牌指数就闪崩（麦当劳停牌时 DENG −32%），复牌还回不来 | 遍历 status !== 'delisted'，停牌按最后价计；只有退市才剔除并强制调仓 |
+| v5 之后 B/S 标记消失 | 图上没有 B/S，也不报错（老守卫 `typeof setMarkers !== 'function'` 直接 return） | v5 用 `LightweightCharts.createSeriesMarkers(series, markers)`，见 `markerApi()` |
 | 升级图表库忘了改 API | v5 没有 `addCandlestickSeries`，调了直接抛，整页白屏 | v5 一律 `chart.addSeries(LightweightCharts.XxxSeries, opts)`；窗格用 `addPane()` + `setStretchFactor()`，别和 `setHeight()` 混用 |
 | payload 把引擎参数抖出去 | F12 里能看到 `trait.lotteryChance` / `volMult` / `fair` / `sentimentStrength`，等于把价格模型交给玩家 | 所有下发字段必须过 `src/wire.js` 白名单；跑 `node tests/payload-wire.mjs` |
 
@@ -135,7 +136,7 @@ public/styles.css  全部样式（主题变量 + 移动端媒体查询）
 - `tickMs = 5000`，1 轮 5 秒
 - `playerImpactRef = 1000000`、`impactRefFreeCap = 100亿`
 - `levelBaseAsset = 1000万`、`levelGrowth = 2`、`levelUpRatio = 0.6`
-- `marketTradesRate = 6`（每轮 6~12 笔虚假成交）、`marketTradesWindow = 12`（追涨杀跌看 1 分钟动量）、`sentimentRollTicks = 720`
+- `marketTradesRate = 6`（每轮 6~12 笔虚假成交；笔数按流通市值分配 + 散户情绪定方向/放量）、`marketTradesWindow = 12`（追涨杀跌看 1 分钟动量）、`sentimentRollTicks = 720`
 - 市场资金（虚假成交 + 游资，2026-11）：虚假成交三档 1万~10万 / 10万~100万 / 100万~1000万（权重 70/24/6）；
   游资每笔 1000万~3000万、每 20~300 轮换一次板块；推动力 = 压力 × 0.002 × impactFactor，单轮封顶 0.8%
   → 实测一笔 1000 万 ≈ +0.3%~1%，一笔 3000 万 ≈ +1%~3%（大盘股取低值）

@@ -868,6 +868,8 @@ export async function handleApi(ctx) {
       'sentStrength', 'sentTicks', 'sentRollMin', 'sentRollMax', 'sentRollTicks', 'sentDrift', 'sentEdge',
       // 追涨杀跌：判定窗口 / 触发幅度 / 追涨系数 / 杀跌系数，留空 = 跟随全局
       'mktWindow', 'mktTrigger', 'mktChase', 'mktPanic',
+      // 散户情绪落地：按市值分配 / 情绪定方向 / 情绪放量（留空 = 跟随全局）
+      'mktSizeExp', 'mktSizeScale', 'mktSentBias', 'mktSentVol',
       // 实时汇率（留美外汇）
       'coef', 'lev', 'fxEnabled', 'refreshMs', 'track'
     ];
@@ -1033,7 +1035,7 @@ export async function handleApi(ctx) {
       'sentimentRollMin', 'sentimentRollMax', 'sentimentDrift', 'sentimentEdge',
       'marketTradesRate', 'redBonusRate', 'redBonusMinTicks', 'bearBonusRate', 'bearBonusMinTicks',
       // ---- 虚假成交（会推动股价）/ 游资 / 市场资金冲击 ----
-      'marketTradesSmallP', 'marketTradesMidP', 'marketTradesBigP', 'marketTradesChase', 'marketTradesPanic', 'marketTradesTrigger', 'marketTradesWindow',
+      'marketTradesSmallP', 'marketTradesMidP', 'marketTradesBigP', 'marketTradesChase', 'marketTradesPanic', 'marketTradesTrigger', 'marketTradesWindow', 'marketTradesSizeExp', 'marketTradesSentBias', 'marketTradesSentVol',
       'hotMoneyEnabled', 'hotMoneySwitchMin', 'hotMoneySwitchMax', 'hotMoneyMin', 'hotMoneyMax',
       'marketImpactEnabled', 'marketImpactRef', 'marketImpactStrength', 'marketImpactMax',
       'marketImpactDecay', 'marketImpactFlowMax',

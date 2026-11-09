@@ -17,6 +17,7 @@
  */
 
 import { addMarketFlow } from './trading.js';
+import { freeCap } from './fundamentals.js';
 
 /** 散户昵称池（虚假成交 / 游资共用） */
 export const MARKET_NAMES = [
@@ -150,6 +151,66 @@ export function marketIdentity(rnd = Math.random) {
   return { nickname: pickWith(MARKET_NAMES), emoji: pickWith(MARKET_EMOJIS) };
 }
 
+const num = (v, fb) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fb;
+};
+
+/**
+ * 一只票本轮「该分到多少虚假成交」的权重（2026-11 新增：散户情绪落地）
+ *
+ * 原来 9 笔成交在 12 只票里**均匀**抽 → 大票小票各 ~0.75 笔，
+ * 但同样金额对大票（流通 2594 亿）几乎推不动、对小票（126 亿）能推 5 倍。
+ * 现在按**流通市值**分配笔数：市值大的票成交笔数多，单笔金额不变，
+ * 于是各票「总成交额 / 流通市值」接近 → 推动力接近，手感一致。
+ *
+ * 情绪再加两层：
+ *   1. 方向：st.sentiment.v ∈ [-1,1]，正=散户看多 → 买盘概率 +
+ *   2. 放量：|v| 越大这笔票的成交笔数越多（散户越兴奋越爱交易）
+ *
+ * 个股可以在「个股 → 每只票」里覆盖：mktSizeScale / mktSentBias / mktSentVol，
+ * 留空就跟随全局 marketTradesSizeExp / marketTradesSentBias / marketTradesSentVol。
+ */
+/** 情绪放量系数：|v|=1 时这只票的成交笔数 ×(1 + sentVol/100) */
+export function marketSentimentVolume(st, cfg = {}) {
+  const t = st.trait || {};
+  const sentVol = Math.max(0, num(t.mktSentVol ?? cfg.marketTradesSentVol, 60)) / 100;
+  const v = Math.min(1, Math.abs(num(st.sentiment?.v, 0)));
+  return 1 + sentVol * v;
+}
+
+export function marketTradeWeight(st, cfg = {}) {
+  const t = st.trait || {};
+  const exp = Math.max(0, Math.min(2, num(t.mktSizeExp ?? cfg.marketTradesSizeExp, 1)));
+  const sizeScale = Math.max(0, num(t.mktSizeScale, 1));
+  // 流通市值（元）→ 相对权重；exp=0 时退化成「所有票一样重」（老行为）
+  const cap = Math.max(1, freeCap(st));
+  const capW = exp === 0 ? 1 : Math.pow(cap / 1e8, exp);   // 以「亿」为单位，数字不会太夸张
+  // 情绪放量：除了让这只票占更大份额，还会把总笔数一起抬高（见下面的 avgSent）
+  return capW * sizeScale * marketSentimentVolume(st, cfg);
+}
+
+/** 情绪对方向的影响（百分点）：正=偏买，负=偏卖 */
+export function marketSentimentBias(st, cfg = {}) {
+  const t = st.trait || {};
+  const bias = num(t.mktSentBias ?? cfg.marketTradesSentBias, 25);
+  const v = Math.max(-1, Math.min(1, num(st.sentiment?.v, 0)));
+  return (bias / 100) * v;
+}
+
+/** 按权重抽一只票（权重全 0 时退回均匀） */
+function pickWeighted(list, weights, rnd = Math.random) {
+  let sum = 0;
+  for (const w of weights) sum += w;
+  if (!(sum > 0)) return list[Math.floor(rand01(rnd) * list.length) % list.length];
+  let r = rand01(rnd) * sum;
+  for (let i = 0; i < list.length; i++) {
+    r -= weights[i];
+    if (r <= 0) return list[i];
+  }
+  return list[list.length - 1];
+}
+
 /**
  * 生成 1~2 笔（× 倍率）虚假成交并写进流水，同时给对应股票加市场资金压力。
  * @param {object} db
@@ -168,11 +229,17 @@ export function genMarketTrades(db, maxTrades = 2) {
   // 倍率 0 = 彻底关掉这一项（以前还会硬编 1 笔，等于关不掉）
   if (!(rate > 0)) return [];
 
-  const base = Math.max(1, Math.round(rand(1, maxTrades) * rate));
+  // 情绪放量：全市场平均「兴奋度」会抬高总笔数（v 全 0 时 = 1，不动）
+  const avgSent = list.reduce((a, s) => a + marketSentimentVolume(s, cfg), 0) / list.length;
+  const base = Math.max(1, Math.round(rand(1, maxTrades) * rate * avgSent));
+
+  // 每只票的成交权重（市值 × 个股倍率 × 情绪放量），每轮算一次
+  const weights = list.map((s) => marketTradeWeight(s, cfg));
+  const weightedPicker = () => pickWeighted(list, weights);
 
   const out = [];
   for (let i = 0; i < base; i++) {
-    const st = pick(list);
+    const st = weightedPicker();
     // 判定参数：个股 trait 里有覆盖就用个股的（管理面板「个股 → 每只票」里填），否则跟随全局
     const eff = {
       marketTradesWindow: st.trait?.mktWindow ?? cfg.marketTradesWindow,
@@ -186,7 +253,9 @@ export function genMarketTrades(db, maxTrades = 2) {
     const chg = marketWindowChange(ser, win) || (prev > 0 ? st.price / prev - 1 : 0);
 
     // 涨了偏买（追涨），跌了偏卖（杀跌）；pressure = 这只票当前的市场资金压力，越大越不追
-    const buyProb = marketBuyProb(chg, eff, st.mflow);
+    // 再叠加散户情绪：看多 → 买盘概率更高，看空 → 卖盘更高（个股可覆盖）
+    const sentBias = marketSentimentBias(st, cfg);
+    const buyProb = Math.max(0.1, Math.min(0.9, marketBuyProb(chg, eff, st.mflow) + sentBias));
     const isBuy = Math.random() < buyProb;
 
     // 三档金额：越低档越常见

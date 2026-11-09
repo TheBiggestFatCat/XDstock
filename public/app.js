@@ -27,6 +27,9 @@ const state = {
   // K 线指标开关（成交量 / MACD），存在 localStorage 里
   ind: { vol: false, macd: false },
   indSeries: null,
+  // B/S 标记把手：v5 用 createSeriesMarkers 拿到，v4 退回 series.setMarkers
+  markersApi: null,
+  markersSeries: null,
   candles: [],
   adminToken: localStorage.getItem('xd_admin') || '',
   adminTab: 'console',        // 管理页当前标签
@@ -3278,6 +3281,8 @@ function buildChart() {
     wickDownColor: '#12b886'
   });
   state.chart = chart;
+  state.markersApi = null;
+  state.markersSeries = null;
   bindHoverInfo();
   state.candleSeries = candle;
 
@@ -3959,10 +3964,34 @@ function buildMarkers(trades) {
   return markers;
 }
 
+/**
+ * 拿 B/S 标记的「把手」。
+ * ⚠️ lightweight-charts v5 把 `series.setMarkers()` 移走了，换成了
+ * `LightweightCharts.createSeriesMarkers(series, markers)`（返回一个带 setMarkers 的对象）。
+ * 升级 v5 时这里没跟着改，导致 `typeof setMarkers !== 'function'` 直接 return，
+ * **BS 点整块消失**（2026-11 修）。
+ */
+function markerApi() {
+  const series = state.candleSeries;
+  if (!series) return null;
+  if (state.markersApi && state.markersSeries === series) return state.markersApi;
+  let api = null;
+  if (typeof LightweightCharts !== 'undefined'
+    && typeof LightweightCharts.createSeriesMarkers === 'function') {
+    api = LightweightCharts.createSeriesMarkers(series, []);
+  } else if (typeof series.setMarkers === 'function') {
+    api = { setMarkers: (m) => series.setMarkers(m) };   // v4 兜底
+  }
+  state.markersApi = api;
+  state.markersSeries = series;
+  return api;
+}
+
 function updateMarkers() {
-  if (!state.candleSeries || typeof state.candleSeries.setMarkers !== 'function') return;
+  const api = markerApi();
+  if (!api || typeof api.setMarkers !== 'function') return;
   const markers = buildMarkers(state.myTrades || []);
-  state.candleSeries.setMarkers(markers);
+  api.setMarkers(markers);
   const hint = $('#bsHint');
   if (hint) {
     hint.classList.toggle('hidden', markers.length === 0);
@@ -5740,7 +5769,10 @@ async function loadAdmin() {
           ['marketTradesWindow', '判定窗口(轮)', '看最近多少轮的涨跌幅，12 轮 = 1 分钟。原来是单轮（5 秒），噪声太大几乎帧帧打满'],
           ['marketTradesTrigger', '触发幅度(0.03=1分钟3%算一档)', '窗口内涨跌多少算「一档」；不到一档不偏，2 档满幅，超过 3 档反而减弱（涨太多没人追）'],
           ['marketTradesChase', '追涨系数(满幅偏移百分点)', '满幅时买盘概率 = 0.5 + 这个数/100，25 → 0.75'],
-          ['marketTradesPanic', '杀跌系数(满幅偏移百分点)', '满幅时卖盘概率 = 0.5 + 这个数/100，25 → 0.75']
+          ['marketTradesPanic', '杀跌系数(满幅偏移百分点)', '满幅时卖盘概率 = 0.5 + 这个数/100，25 → 0.75'],
+          ['marketTradesSizeExp', '按流通市值分配笔数(0~2)', '1 = 完全按流通市值：大票笔数多、小票笔数少，各票推动力才接近；0 = 各票一样多（小票会被推飞、大票不动）'],
+          ['marketTradesSentBias', '情绪方向权重(百分点)', '散户看多时买盘概率 +这个数/100；情绪 v=+1、填 25 → 买盘 +25pp。0 = 情绪不影响方向'],
+          ['marketTradesSentVol', '情绪放量(百分比)', '散户越兴奋成交越多：|v|=1 时这只票笔数 ×(1+这个数/100)，60 → ×1.6']
         ]
       },
       {
@@ -6251,12 +6283,18 @@ const TRAIT_LABELS = {
   mktWindow: ['追涨杀跌·判定窗口(轮)', '看最近多少轮的涨跌幅，12 轮 = 1 分钟；留空跟随全局'],
   mktTrigger: ['追涨杀跌·触发幅度', '窗口内涨跌多少算一档，0.03 = 1 分钟 3%；留空跟随全局'],
   mktChase: ['追涨杀跌·追涨系数', '满幅时买盘概率 = 0.5 + 这个数/100，25 → 0.75；留空跟随全局'],
-  mktPanic: ['追涨杀跌·杀跌系数', '满幅时卖盘概率 = 0.5 + 这个数/100，25 → 0.75；留空跟随全局']
+  mktPanic: ['追涨杀跌·杀跌系数', '满幅时卖盘概率 = 0.5 + 这个数/100，25 → 0.75；留空跟随全局'],
+  // 散户情绪落地（虚假成交）：每只票可以单独覆盖，留空跟随全局
+  mktSizeExp: ['情绪成交·按市值分配', '0~2，1 = 完全按流通市值分配笔数（大票笔数多）；留空跟随全局'],
+  mktSizeScale: ['情绪成交·成交倍率', '这只票的虚假成交笔数再乘这个倍数，1 = 正常，2 = 翻倍；留空跟随全局'],
+  mktSentBias: ['情绪成交·方向权重(百分点)', '散户看多时买盘概率 +这个数/100；留空跟随全局'],
+  mktSentVol: ['情绪成交·放量(百分比)', '|情绪|=1 时笔数 ×(1+这个数/100)；留空跟随全局']
 };
 
 /** 这些个股参数是「可选覆盖」：留空就跟随全局参数 */
 const OPTIONAL_TRAITS = ['sentStrength', 'sentTicks', 'sentRollMin', 'sentRollMax', 'sentDrift', 'sentEdge',
-  'mktWindow', 'mktTrigger', 'mktChase', 'mktPanic'];
+  'mktWindow', 'mktTrigger', 'mktChase', 'mktPanic',
+  'mktSizeExp', 'mktSizeScale', 'mktSentBias', 'mktSentVol'];
 
 function renderTraitForm(stocks) {
   const box = $('#traitForm');
@@ -6286,7 +6324,11 @@ function renderTraitForm(stocks) {
       mktWindow: cfg.marketTradesWindow,
       mktTrigger: cfg.marketTradesTrigger,
       mktChase: cfg.marketTradesChase,
-      mktPanic: cfg.marketTradesPanic
+      mktPanic: cfg.marketTradesPanic,
+      mktSizeExp: cfg.marketTradesSizeExp,
+      mktSizeScale: 1,
+      mktSentBias: cfg.marketTradesSentBias,
+      mktSentVol: cfg.marketTradesSentVol
     };
     const fields = keys.map((k) => {
       const [label, hint] = TRAIT_LABELS[k];
