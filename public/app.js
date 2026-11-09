@@ -273,7 +273,9 @@ function maybeAchvToasts(achv) {
 async function api(path, opts = {}) {
   const headers = { 'Content-Type': 'application/json', ...(opts.headers || {}) };
   if (state.token) headers.Authorization = 'Bearer ' + state.token;
-  const res = await fetch(path, { ...opts, headers });
+  // body 允许直接传对象（老调用混用两种写法，统一在这里序列化）
+  const body = opts.body && typeof opts.body === 'object' ? JSON.stringify(opts.body) : opts.body;
+  const res = await fetch(path, { ...opts, headers, body });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || '请求失败');
   return data;
@@ -4306,6 +4308,8 @@ function onTick(d) {
   updateCostPreview();
   syncLimitPrice();
   updateOrderBtnLabel();
+  // 聊天大厅跟着行情一轮一刷（只在聊天页开着时拉，省流量）
+  if (state.chat?.open) loadChat(state.chat.seq || 0);
   updatePriceLines();
   renderPositions();
   renderMyOrders();
@@ -6833,6 +6837,335 @@ async function publishNews() {
   }
 }
 
+// ---------------- 聊天大厅 ----------------
+const CHAT_AVATARS = ['🐱', '🐶', '🐼', '🦊', '🐸', '🐯', '🦁', '🐨', '🐷', '🐵', '🦄', '🐧', '🐳', '🦉', '🐺', '🐹'];
+const CHAT_PAGE = 100;
+const CHAT_MAX_UI = 300;   // 前端最多留多少条在 DOM 里（后端保留 500）
+
+function chatAvatarOf(nick) {
+  const s = String(nick || '');
+  let h = 0;
+  for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) % 9973;
+  return CHAT_AVATARS[h % CHAT_AVATARS.length];
+}
+
+function chatTimeOf(ts) {
+  const d = new Date(Number(ts) || Date.now());
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+state.chat = { rows: [], seq: 0, open: false, packets: {}, loading: false };
+
+/** 弹一条小提示（发送失败 / 抢到多少） */
+function chatTip(text, cls = '') {
+  const el = $('#chatTip');
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'chat-tip ' + cls;
+  clearTimeout(state.chat.tipTimer);
+  state.chat.tipTimer = setTimeout(() => {
+    el.className = 'chat-tip hidden';
+  }, 3200);
+}
+
+function chatNearBottom() {
+  const box = $('#chatBody');
+  if (!box) return true;
+  return box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+}
+
+function chatScrollBottom() {
+  const box = $('#chatBody');
+  if (!box) return;
+  box.scrollTop = box.scrollHeight;
+  // 表情贴纸是懒加载的，图片加载完高度才定，所以连续贴几次底
+  let n = 0;
+  const stick = () => {
+    if (!box.isConnected) return;
+    box.scrollTop = box.scrollHeight;
+    n += 1;
+    if (n < 6) setTimeout(stick, 120);
+  };
+  setTimeout(stick, 60);
+}
+
+function renderChatRow(m) {
+  const me = state.market?.me?.id;
+  const mine = m.pid === me;
+  const nick = escapeHtml(m.nick || '匿名');
+  const avatar = chatAvatarOf(m.nick);
+  const time = chatTimeOf(m.at);
+  let body = '';
+  if (m.type === 'emoji') {
+    body = `<img class="chat-emo" src="${emoSrc(m.emo)}" alt="表情" loading="lazy" />`;
+  } else if (m.type === 'packet') {
+    const pk = m.packet || state.chat.packets[m.packetId];
+    if (!pk) {
+      body = '<div class="chat-packet is-dead"><span class="cp-emoji"><span class="packet-ic">福</span></span>'
+        + '<div class="cp-main"><b>红包已过期</b><span class="cp-sub">手慢了…</span></div></div>';
+    } else {
+      const got = pk.count - pk.left;
+      const grabbedByMe = (pk.shares || []).some((s) => s.nick === (state.market?.me?.nickname || ''));
+      const own = pk.pid === me;
+      const soldOut = pk.left <= 0;
+      const dead = !!pk.expired;
+      const cls = own ? 'is-own' : (soldOut || dead) ? 'is-dead' : '';
+      const btn = soldOut
+        ? '<span class="cp-state">已抢光</span>'
+        : dead
+          ? '<span class="cp-state">已过期</span>'
+          : own
+          ? '<span class="cp-state">自己发的</span>'
+          : grabbedByMe
+            ? '<span class="cp-state">已抢到</span>'
+            : `<button class="cp-grab" data-grab="${pk.id}" type="button">抢</button>`;
+      const tail = (pk.shares || []).slice(-2).map((s) => `${escapeHtml(s.nick)} ${money(s.amount)}`).join(' · ');
+      body = `<div class="chat-packet ${cls}">
+        <span class="cp-emoji">🧧</span>
+        <div class="cp-main">
+          <b>恭喜发财，大吉大利</b>
+          <span class="cp-sub">拼手气 · 共 ${money(pk.amount)} · ${pk.count} 个 · 已抢 ${got}/${pk.count}</span>
+          ${tail ? `<span class="cp-who">${tail}</span>` : ''}
+        </div>
+        ${btn}
+      </div>`;
+    }
+  } else {
+    body = `<div class="chat-bubble">${escapeHtml(m.text || '')}</div>`;
+  }
+  return `<div class="chat-row ${mine ? 'is-me' : ''}" data-seq="${m.seq}">
+    <span class="chat-avatar" aria-hidden="true">${avatar}</span>
+    <div class="chat-main">
+      <div class="chat-meta">
+        <span class="chat-nick">${nick}</span>
+        <span class="chat-lv">Lv.${Number(m.lv) || 1}</span>
+        <span class="chat-time">${time}</span>
+      </div>
+      ${body}
+    </div>
+  </div>`;
+}
+
+/** 整段重画（首次进入 / 数据量大时） */
+function renderChat(full = true) {
+  const box = $('#chatBody');
+  if (!box) return;
+  const rows = state.chat.rows;
+  const empty = $('#chatEmpty');
+  if (!rows.length) {
+    box.innerHTML = '';
+    if (!empty) {
+      box.innerHTML = '<div class="chat-empty">还没有人说话，来抢第一个 🎤</div>';
+    } else {
+      box.appendChild(empty);
+      empty.classList.remove('hidden');
+    }
+    return;
+  }
+  if (empty) empty.classList.add('hidden');
+  if (full) {
+    box.innerHTML = rows.map(renderChatRow).join('');
+  } else {
+    const last = box.querySelector('.chat-row:last-child');
+    box.insertAdjacentHTML('beforeend', rows.slice(state.chat.rendered || 0).map(renderChatRow).join(''));
+    if (!last) box.innerHTML = rows.map(renderChatRow).join('');
+  }
+  state.chat.rendered = rows.length;
+  const sub = $('#chatSub');
+  if (sub) sub.textContent = `全服一起聊 · 保留最近 ${state.chat.max || 500} 条`;
+}
+
+/** 拉消息：afterSeq 有值就拉增量 */
+async function loadChat(afterSeq = 0) {
+  if (state.chat.loading) return;
+  state.chat.loading = true;
+  try {
+    const q = afterSeq > 0 ? `?after=${afterSeq}&limit=${CHAT_PAGE}` : `?limit=${CHAT_PAGE}`;
+    const d = await api('/api/chat' + q);
+    state.chat.packets = { ...(state.chat.packets || {}), ...(d.packets || {}) };
+    if (afterSeq > 0 && (d.rows || []).length) {
+      const known = new Set(state.chat.rows.map((m) => m.seq));
+      const add = d.rows.filter((m) => !known.has(m.seq));
+      if (add.length) {
+        const near = chatNearBottom();
+        state.chat.rows = state.chat.rows.concat(add).slice(-CHAT_MAX_UI);
+        state.chat.rendered = state.chat.rows.length - add.length;
+        renderChat(false);
+        if (near) chatScrollBottom();
+      } else {
+        // 没有新消息，但红包状态可能变了 → 局部刷新红包气泡
+        refreshPacketBubbles();
+      }
+    } else if (afterSeq <= 0) {
+      state.chat.rows = d.rows || [];
+      state.chat.max = d.max || 500;
+      state.chat.rendered = 0;
+      renderChat(true);
+      chatScrollBottom();
+    }
+    state.chat.seq = Math.max(state.chat.seq || 0, Number(d.seq) || 0);
+  } catch (e) {
+    chatTip('聊天加载失败：' + e.message, 'is-bad');
+  } finally {
+    state.chat.loading = false;
+  }
+}
+
+/** 红包状态变了但没新消息：只把红包气泡换掉 */
+function refreshPacketBubbles() {
+  const box = $('#chatBody');
+  if (!box) return;
+  for (const el of box.querySelectorAll('.chat-row')) {
+    const seq = Number(el.dataset.seq);
+    const m = state.chat.rows.find((x) => x.seq === seq);
+    if (!m || m.type !== 'packet') continue;
+    m.packet = state.chat.packets[m.packetId] || m.packet;
+    el.outerHTML = renderChatRow(m);
+  }
+}
+
+async function openChat() {
+  state.chat.open = true;
+  if (!state.chat.rows.length) await loadChat(0);
+  else { renderChat(true); chatScrollBottom(); }
+}
+
+async function sendChatText() {
+  const inp = $('#chatInput');
+  if (!inp) return;
+  const text = inp.value.trim();
+  if (!text) return;
+  try {
+    const d = await api('/api/chat', { method: 'POST', body: { text } });
+    inp.value = '';
+    mergeChatPayload(d);
+  } catch (e) {
+    chatTip(e.message, 'is-bad');
+  }
+}
+
+async function sendChatEmoji(file) {
+  try {
+    const d = await api('/api/chat/emoji', { method: 'POST', body: { file } });
+    $('#chatEmojiPanel')?.classList.add('hidden');
+    mergeChatPayload(d);
+  } catch (e) {
+    chatTip(e.message, 'is-bad');
+  }
+}
+
+/** 发送成功后把返回的消息并进列表 */
+function mergeChatPayload(d) {
+  if (!d || !Array.isArray(d.rows)) return;
+  state.chat.packets = { ...(state.chat.packets || {}), ...(d.packets || {}) };
+  const known = new Set(state.chat.rows.map((m) => m.seq));
+  const add = d.rows.filter((m) => !known.has(m.seq));
+  if (add.length) {
+    state.chat.rows = state.chat.rows.concat(add).slice(-CHAT_MAX_UI);
+    state.chat.rendered = state.chat.rows.length - add.length;
+    renderChat(false);
+    chatScrollBottom();
+  }
+  state.chat.seq = Math.max(state.chat.seq || 0, Number(d.seq) || 0);
+}
+
+async function grabChatPacket(id) {
+  try {
+    const d = await api('/api/chat/grab', { method: 'POST', body: { id } });
+    state.chat.packets = { ...(state.chat.packets || {}), ...(d.packets || {}) };
+    if (d.packet) state.chat.packets[d.packet.id] = d.packet;
+    chatTip(`抢到 ${money(d.amount)}！`, 'is-good');
+    await loadChat(state.chat.seq);
+    refreshPacketBubbles();
+    if (state.market?.me) state.market.me.cash = d.cash;
+  } catch (e) {
+    chatTip(e.message, 'is-bad');
+    await loadChat(state.chat.seq);
+  }
+}
+
+function renderChatEmojiPanel() {
+  const panel = $('#chatEmojiPanel');
+  if (!panel) return;
+  const list = Array.isArray(state.market?.me?.emojis) ? state.market.me.emojis : [];
+  if (!list.length) {
+    panel.innerHTML = '<p class="chat-emo-empty">还没有解锁表情</p>';
+    return;
+  }
+  panel.innerHTML = list.map((f) => `<button class="chat-emo-btn" data-emo="${escapeHtml(f)}" type="button">`
+    + `<img src="${emoSrc(f)}" alt="表情" loading="lazy" /></button>`).join('');
+}
+
+function openPacketModal() {
+  const mask = $('#packetModal');
+  if (!mask) return;
+  const cash = Number(state.market?.me?.cash) || 0;
+  const hint = $('#packetHint');
+  if (hint) hint.textContent = `拼手气：每份金额随机。你现在有 ${money(cash)}`;
+  const amountEl = $('#packetAmount');
+  if (amountEl && !amountEl.value) amountEl.value = String(Math.min(1000, Math.max(100, Math.floor(cash * 0.05 / 100) * 100)));
+  mask.classList.remove('hidden');
+  mask.setAttribute('aria-hidden', 'false');
+}
+
+function closePacketModal() {
+  const mask = $('#packetModal');
+  if (!mask) return;
+  mask.classList.add('hidden');
+  mask.setAttribute('aria-hidden', 'true');
+}
+
+async function sendPacket() {
+  const amount = Math.floor(Number($('#packetAmount')?.value) || 0);
+  const count = Math.floor(Number($('#packetCount')?.value) || 0);
+  const btn = $('#packetSend');
+  if (btn) btn.disabled = true;
+  try {
+    const d = await api('/api/chat/packet', { method: 'POST', body: { amount, count } });
+    closePacketModal();
+    chatTip(`红包已发出：${money(amount)} / ${count} 个`, 'is-good');
+    mergeChatPayload(d);
+    if (state.market?.me) state.market.me.cash = (Number(state.market.me.cash) || 0) - amount;
+  } catch (e) {
+    chatTip(e.message, 'is-bad');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function bindChatUi() {
+  $('#chatSend')?.addEventListener('click', sendChatText);
+  $('#chatInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); sendChatText(); }
+  });
+  $('#chatEmojiBtn')?.addEventListener('click', () => {
+    const panel = $('#chatEmojiPanel');
+    if (!panel) return;
+    if (panel.classList.contains('hidden')) renderChatEmojiPanel();
+    panel.classList.toggle('hidden');
+  });
+  $('#chatEmojiPanel')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.chat-emo-btn');
+    if (btn) sendChatEmoji(btn.dataset.emo);
+  });
+  $('#chatBody')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('.cp-grab');
+    if (btn) grabChatPacket(btn.dataset.grab);
+  });
+  $('#chatPacketBtn')?.addEventListener('click', openPacketModal);
+  $('#packetClose')?.addEventListener('click', closePacketModal);
+  $('#packetSend')?.addEventListener('click', sendPacket);
+  $('#packetModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'packetModal') closePacketModal();
+  });
+  // 窗口尺寸变了（横竖屏切换 / 桌面窗口拖动）聊天区高度会变，重新贴到底
+  window.addEventListener('resize', () => {
+    if (state.chat?.open) chatScrollBottom();
+  });
+}
+
+
 // ---------------- 视图切换 ----------------
 function switchView(name) {
   $$('.tab').forEach((t) => t.classList.toggle('active', t.dataset.view === name));
@@ -6843,6 +7176,8 @@ function switchView(name) {
   if (name === 'rank') loadRank(true);
   if (name === 'shop') renderShop();
   if (name === 'achv') renderAchvPage();
+  if (name === 'chat') openChat();
+  else state.chat.open = false;
   // 切回行情时图表容器可能刚从 display:none 恢复，补一次尺寸校正
   const onAdmin = name === 'portfolio' && (state.pfPane || 'overview') === 'admin';
   if (!onAdmin) stopConsole();
@@ -7084,6 +7419,7 @@ function bind() {
     e.target.value = '';
   });
 
+  bindChatUi();
   $('#refreshTrades')?.addEventListener('click', () => loadTrades(state.tradePage || 1));
   // 标的筛选：换了就回到第 1 页
   $('#tradeFilter')?.addEventListener('change', (e) => {

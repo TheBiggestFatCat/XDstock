@@ -4,7 +4,11 @@ import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
 import { candlesFromSeries, changesFor, timeFromAxis, tickTimeAxis, pushNotice, noticeAlive, liveIndexWeights } from './engine.js';
 import { stockFullWire, configWire, positionWire } from './wire.js';
 import { bars15Candles, bars5Candles } from './bars15.js';
-import { unlockedEmojis, pushEmote, visibleEmotes } from './emoji.js';
+import { unlockedEmojis, pushEmote, visibleEmotes, isEmojiUnlocked } from './emoji.js';
+import {
+  ensureChat, pushChat, chatRows, createPacket, grabPacket, packetView,
+  CHAT_TEXT_MAX, CHAT_GAP_MS, PACKET_MIN_AMOUNT, PACKET_MAX_COUNT, PACKET_COOLDOWN_MS
+} from './chat.js';
 import { pushVersionPost, latestVersionPost, listVersionPosts, deleteVersionPost, updateVersionPost } from './version.js';
 import { nightInfoFor } from './theme.js';
 import { TIMEFRAMES } from './config.js';
@@ -1387,6 +1391,82 @@ export async function handleApi(ctx) {
       sampleTicks: db.config.equitySampleTicks || 12,
       tick: db.tick
     });
+  }
+
+  // ---------- 聊天大厅（全服聊天室） ----------
+  // 拉消息：after=<seq> 拉增量（前端每轮 tick 用），不给就是最近 limit 条
+  if (pathname === '/api/chat' && method === 'GET') {
+    ensureChat(db);
+    const afterSeq = Number(query.after) || 0;
+    const limit = Number(query.limit) || 100;
+    return json(res, 200, { ...chatRows(db, { afterSeq, limit }), me: me.id, gapMs: CHAT_GAP_MS });
+  }
+
+  // 发文字
+  if (pathname === '/api/chat' && method === 'POST') {
+    ensureChat(db);
+    const nowMs = Date.now();
+    if (nowMs - (Number(me.chatAt) || 0) < CHAT_GAP_MS) {
+      const left = Math.ceil((CHAT_GAP_MS - (nowMs - Number(me.chatAt))) / 1000);
+      return json(res, 429, { error: `说太快啦，${left} 秒后再发` });
+    }
+    const text = String(body.text || '')
+      .replace(/[\u0000-\u001f\u007f]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, CHAT_TEXT_MAX);
+    if (!text) return json(res, 400, { error: '不能发空消息' });
+    me.chatAt = nowMs;
+    const msg = pushChat(db, me, { type: 'text', text });
+    return json(res, 200, { ok: true, msg, ...chatRows(db, { afterSeq: msg.seq - 1, limit: 10 }) });
+  }
+
+  // 发表情贴纸（只能发自己等级解锁的）
+  if (pathname === '/api/chat/emoji' && method === 'POST') {
+    ensureChat(db);
+    const file = String(body.file || '');
+    if (!file || !isEmojiUnlocked(Number(me.level) || 1, file)) {
+      return json(res, 400, { error: '这个表情还没解锁' });
+    }
+    const nowMs = Date.now();
+    if (nowMs - (Number(me.chatAt) || 0) < CHAT_GAP_MS) {
+      return json(res, 429, { error: '发太快啦，等一下' });
+    }
+    me.chatAt = nowMs;
+    const msg = pushChat(db, me, { type: 'emoji', emo: file });
+    return json(res, 200, { ok: true, msg, ...chatRows(db, { afterSeq: msg.seq - 1, limit: 10 }) });
+  }
+
+  // 发拼手气红包
+  if (pathname === '/api/chat/packet' && method === 'POST') {
+    ensureChat(db);
+    const nowMs = Date.now();
+    if (nowMs - (Number(me.packetAt) || 0) < PACKET_COOLDOWN_MS) {
+      const left = Math.ceil((PACKET_COOLDOWN_MS - (nowMs - Number(me.packetAt))) / 1000);
+      return json(res, 429, { error: `红包发太勤了，${left} 秒后再来` });
+    }
+    const amount = Math.floor(Number(body.amount) || 0);
+    const count = Math.floor(Number(body.count) || 0);
+    if (!(amount >= PACKET_MIN_AMOUNT)) return json(res, 400, { error: `红包总额至少 ${PACKET_MIN_AMOUNT} 元` });
+    if (!(count >= 1 && count <= PACKET_MAX_COUNT)) return json(res, 400, { error: `个数要在 1 ~ ${PACKET_MAX_COUNT} 之间` });
+    if (amount < count) return json(res, 400, { error: '总额不能小于个数（每份至少 1 元）' });
+    if (Number(me.cash) < amount) return json(res, 400, { error: '现金不够' });
+    me.cash -= amount;
+    me.packetAt = nowMs;
+    const pk = createPacket(db, me, amount, count);
+    const msg = pushChat(db, me, { type: 'packet', packetId: pk.id });
+    return json(res, 200, { ok: true, msg, packet: packetView(pk), ...chatRows(db, { afterSeq: msg.seq - 1, limit: 10 }) });
+  }
+
+  // 抢红包
+  if (pathname === '/api/chat/grab' && method === 'POST') {
+    ensureChat(db);
+    const pk = db.redPackets[String(body.id || '')];
+    const r = grabPacket(pk, me);
+    if (!r.ok) return json(res, 400, { error: r.error });
+    me.cash = (Number(me.cash) || 0) + r.amount;
+    me.chatGrabbed = (Number(me.chatGrabbed) || 0) + r.amount;
+    return json(res, 200, { ok: true, amount: r.amount, left: r.left, packet: packetView(pk), cash: me.cash });
   }
 
   // 我的成交记录：默认最近 48 小时，支持按标的筛选 + 翻页。

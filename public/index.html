@@ -102,6 +102,7 @@
 
   <nav class="tabs" id="tabs">
     <button class="tab active" data-view="market">行情</button>
+    <button class="tab" data-view="chat">聊天</button>
     <button class="tab" data-view="portfolio">我的</button>
     <button class="tab" data-view="work">打工</button>
     <button class="tab" data-view="shop">商城</button>
@@ -305,6 +306,27 @@
       <div class="panel positions-panel">
         <div class="panel-title">我的持仓</div>
         <div id="positionsTable" class="table-wrap"></div>
+      </div>
+    </div>
+
+    <!-- ---------- 聊天大厅 ---------- -->
+    <div class="view" id="view-chat">
+      <div class="chat-shell">
+        <div class="chat-head">
+          <span class="chat-title">💬 聊天大厅</span>
+          <span class="chat-sub" id="chatSub">全服一起聊</span>
+        </div>
+        <div class="chat-body" id="chatBody">
+          <div class="chat-empty" id="chatEmpty">还没有人说话，来抢第一个 🎤</div>
+        </div>
+        <div class="chat-tip hidden" id="chatTip"></div>
+        <div class="chat-inputbar">
+          <button id="chatEmojiBtn" class="chat-ico" type="button" title="表情">😀</button>
+          <button id="chatPacketBtn" class="chat-ico chat-ico-packet" type="button" title="拼手气红包"><span class="packet-ic" aria-hidden="true">福</span></button>
+          <input id="chatInput" class="chat-input" type="text" maxlength="200" placeholder="说点什么…（回车发送）" />
+          <button id="chatSend" class="chat-send" type="button">发送</button>
+        </div>
+        <div id="chatEmojiPanel" class="chat-emoji-panel hidden"></div>
       </div>
     </div>
 
@@ -1195,6 +1217,25 @@
   </div>
 </div>
 
+  <!-- ---------- 拼手气红包 ---------- -->
+  <div id="packetModal" class="modal-mask hidden" aria-hidden="true">
+    <div class="modal-card packet-card" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <strong class="packet-head"><span class="packet-ic" aria-hidden="true">福</span> 发拼手气红包</strong>
+        <button id="packetClose" class="modal-close" type="button" aria-label="关闭">×</button>
+      </div>
+      <label class="packet-field">
+        <span>总金额</span>
+        <input id="packetAmount" class="input" type="number" min="100" step="100" placeholder="最少 100" />
+      </label>
+      <label class="packet-field">
+        <span>个数</span>
+        <input id="packetCount" class="input" type="number" min="1" max="20" step="1" value="3" />
+      </label>
+      <p class="packet-hint" id="packetHint">拼手气：每份金额随机，抢到多少看运气</p>
+      <button id="packetSend" class="btn btn-primary btn-block" type="button">塞钱进红包</button>
+    </div>
+  </div>
 <div id="versionModal" class="modal-mask hidden" aria-hidden="true">
   <div class="modal-card" role="dialog" aria-modal="true">
     <div class="modal-head">

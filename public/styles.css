@@ -4421,3 +4421,178 @@ body[data-theme="bear"] .brand-logo {
   .trade-pager { gap: 5px; }
   .pager-btn { min-width: 32px; height: 34px; font-size: 13px; }
 }
+
+
+/* ================= 聊天大厅（QQ 风格） ================= */
+.chat-shell {
+  display: flex; flex-direction: column;
+  height: calc(100vh - 190px); min-height: 420px;
+  background: var(--card);
+  border: 1px solid var(--line); border-radius: 16px;
+  overflow: hidden;
+}
+.chat-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 11px 15px; border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--soft), var(--card));
+}
+.chat-title { font-size: 15px; font-weight: 700; color: var(--ink); }
+.chat-sub { font-size: 11.5px; color: var(--ink-3); }
+
+.chat-body {
+  flex: 1; overflow-y: auto; overscroll-behavior: contain;
+  padding: 14px 15px 6px;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(18, 184, 134, .05), transparent 42%),
+    radial-gradient(circle at 88% 92%, rgba(240, 75, 75, .045), transparent 42%),
+    var(--card);
+}
+.chat-empty { text-align: center; color: var(--ink-3); font-size: 13px; padding: 40px 0; }
+
+.chat-row {
+  display: flex; gap: 9px; margin-bottom: 14px; align-items: flex-start;
+  animation: chatIn .18s ease-out;
+}
+@keyframes chatIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.chat-row.is-me { flex-direction: row-reverse; }
+
+.chat-avatar {
+  flex: none; width: 34px; height: 34px; border-radius: 11px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 19px; background: var(--soft-2, #eef4f2);
+  border: 1px solid var(--line);
+}
+.chat-row.is-me .chat-avatar { background: rgba(18, 184, 134, .14); border-color: rgba(18, 184, 134, .3); }
+
+.chat-main { max-width: min(76%, 620px); display: flex; flex-direction: column; gap: 4px; }
+.chat-row.is-me .chat-main { align-items: flex-end; }
+.chat-meta { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-3); }
+.chat-row.is-me .chat-meta { flex-direction: row-reverse; }
+.chat-nick { font-weight: 600; color: var(--ink-2, #5b6f6a); }
+.chat-lv {
+  font-size: 10px; padding: 0 5px; border-radius: 6px; line-height: 15px;
+  background: var(--soft-2, #eef4f2); color: var(--ink-3);
+}
+.chat-time { font-variant-numeric: tabular-nums; opacity: .8; }
+
+.chat-bubble {
+  padding: 9px 12px; border-radius: 13px;
+  font-size: 14px; line-height: 1.6; color: var(--ink);
+  background: var(--soft-2, #f1f5f4);
+  border: 1px solid var(--line);
+  white-space: pre-wrap; word-break: break-word;
+}
+.chat-row.is-me .chat-bubble {
+  background: rgba(18, 184, 134, .13);
+  border-color: rgba(18, 184, 134, .28);
+}
+.chat-emo { width: 96px; height: 96px; object-fit: contain; display: block; }
+
+/* 红包气泡 */
+.chat-packet {
+  display: flex; align-items: center; gap: 10px;
+  min-width: 240px; padding: 10px 12px; border-radius: 13px;
+  background: linear-gradient(135deg, #ff7a45, #f5573b);
+  border: 1px solid rgba(0, 0, 0, .06);
+  box-shadow: 0 2px 10px rgba(245, 87, 59, .22);
+  color: #fff;
+}
+.chat-packet.is-own { background: linear-gradient(135deg, #ffb457, #ff8a3d); }
+.chat-packet.is-dead { filter: grayscale(.45) brightness(1.06); }
+.cp-emoji { flex: none; line-height: 1; }
+
+/* 红包图标：不依赖 emoji 字体（有的系统没有 🧧） */
+.packet-ic {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 32px; border-radius: 6px;
+  background: linear-gradient(160deg, #ff8a3d, #f0503a);
+  color: #fff; font-size: 14px; font-weight: 700; line-height: 1;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .12);
+}
+.chat-ico-packet .packet-ic { width: 22px; height: 26px; font-size: 12px; }
+.packet-head .packet-ic { width: 20px; height: 25px; font-size: 12px; margin-right: 4px; vertical-align: -6px; }
+.cp-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.cp-main b { font-size: 13.5px; font-weight: 700; }
+.cp-sub { font-size: 11px; opacity: .92; word-break: keep-all; }
+.cp-who { font-size: 11px; opacity: .82; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cp-grab {
+  flex: none; padding: 7px 14px; border-radius: 10px; border: 0;
+  background: #fff; color: #f5573b; font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: transform .12s;
+}
+.cp-grab:active { transform: scale(.94); }
+.cp-state { flex: none; font-size: 11.5px; opacity: .9; white-space: nowrap; align-self: center; }
+
+/* 底部输入栏 */
+.chat-inputbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-top: 1px solid var(--line); background: var(--card);
+}
+.chat-ico {
+  flex: none; width: 36px; height: 36px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--soft-2, #f1f5f4);
+  font-size: 18px; line-height: 1; cursor: pointer;
+}
+.chat-ico-packet { background: rgba(245, 87, 59, .1); border-color: rgba(245, 87, 59, .3); }
+.chat-input {
+  flex: 1; height: 36px; padding: 0 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--soft-2, #f1f5f4);
+  font-size: 14px; color: var(--ink); outline: none;
+}
+.chat-input:focus { border-color: var(--brand); background: var(--card); }
+.chat-send {
+  flex: none; height: 36px; padding: 0 16px; border-radius: 10px; border: 0;
+  background: var(--brand); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.chat-send:active { transform: scale(.97); }
+
+.chat-tip {
+  margin: 0 12px; padding: 6px 10px; border-radius: 9px;
+  font-size: 12px; color: #b45309; background: rgba(245, 158, 11, .12);
+}
+.chat-tip.is-bad { color: #b91c1c; background: rgba(220, 38, 38, .1); }
+.chat-tip.is-good { color: #047857; background: rgba(5, 150, 105, .12); }
+.chat-tip.hidden { display: none; }
+
+/* 表情面板 */
+.chat-emoji-panel {
+  border-top: 1px solid var(--line); background: var(--card);
+  padding: 8px 10px; max-height: 168px; overflow-y: auto;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 4px;
+}
+.chat-emoji-panel.hidden { display: none; }
+.chat-emo-btn { padding: 3px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
+.chat-emo-btn:hover { background: var(--soft-2, #f1f5f4); }
+.chat-emo-btn img { width: 100%; max-width: 44px; display: block; margin: 0 auto; }
+.chat-emo-empty { grid-column: 1 / -1; color: var(--ink-3); font-size: 12px; padding: 8px; text-align: center; }
+
+/* 红包弹窗 */
+.packet-card { max-width: 340px; }
+.packet-head { font-size: 15px; }
+.packet-field { display: flex; align-items: center; gap: 10px; margin: 12px 0; }
+.packet-field > span { width: 56px; font-size: 13px; color: var(--ink-3); flex: none; }
+.packet-field .input { flex: 1; height: 38px; }
+.packet-hint { font-size: 11.5px; color: var(--ink-3); margin: 4px 0 12px; line-height: 1.6; }
+
+/* 顶栏「聊天」红点可以以后再加，这里先不管 */
+@media (max-width: 760px) {
+  .chat-shell { height: calc(100vh - 168px); min-height: 380px; border-radius: 14px; }
+  .chat-head { padding: 9px 12px; }
+  .chat-title { font-size: 14px; }
+  .chat-sub { font-size: 10.5px; }
+  .chat-body { padding: 10px 10px 4px; }
+  .chat-row { gap: 7px; margin-bottom: 11px; }
+  .chat-avatar { width: 30px; height: 30px; font-size: 17px; border-radius: 10px; }
+  .chat-main { max-width: 82%; }
+  .chat-bubble { font-size: 13.5px; padding: 8px 11px; }
+  .chat-emo { width: 76px; height: 76px; }
+  .chat-packet { min-width: 0; width: 100%; padding: 9px 10px; gap: 8px; }
+  .cp-emoji { font-size: 22px; }
+  .cp-main b { font-size: 12.5px; }
+  .chat-inputbar { padding: 8px 9px; gap: 6px; }
+  .chat-ico { width: 33px; height: 33px; font-size: 16px; }
+  .chat-input { height: 33px; font-size: 13.5px; }
+  .chat-send { height: 33px; padding: 0 13px; font-size: 13.5px; }
+  .chat-emoji-panel { grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); max-height: 140px; }
+  .packet-card { max-width: none; }
+}

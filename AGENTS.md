@@ -40,6 +40,7 @@ node tests/market-schedule.mjs       # 定时休市 / 循环作息（改开市�
 node tests/index-volume.mjs          # 指数成交量按权重拆到个股（改成交量/指数必跑，23 条断言）
 node tests/candles5.mjs              # 5 分钟 K 线单独打包（改 K 线接口/存储必跑，24 条断言）
 node tests/trade-history.mjs          # 我的·交易记录 48 小时/翻页/筛选（改流水必跑，21 条断言）
+node tests/chat.mjs                 # 聊天大厅：消息上限/拼手气拆分/抢红包规则（改聊天必跑，35 条断言）
 node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占比/天花板（不是断言套，看表格）
 ```
 

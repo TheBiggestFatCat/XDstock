@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { ensureChat } from './chat.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_CONFIG } from './config.js';
@@ -466,6 +467,9 @@ export function migrate(d) {
     }
     if (typeof s.volTick !== 'number') s.volTick = 0;
   }
+  // 聊天大厅：消息 / 红包结构补齐（老存档第一次启动就是空的）
+  ensureChat(merged);
+
   // 定时休市计划：一次性 / 每天（脏数据顺手清掉，过期的一次性自动停用）
   ensureSchedules(merged);
   if (!merged.hotMoney || typeof merged.hotMoney !== 'object') {
