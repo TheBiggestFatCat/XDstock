@@ -596,18 +596,26 @@ log('=== 9 开盘巨量：休市结束后的第一轮 ×N 倍 ===');
     burst.push(...genMarketTrades(surgeDb, 2));
   }
   check('标记只消费一次（放完就清）', surgeDb.reopenSurge === false, String(surgeDb.reopenSurge));
-  // 只有第一轮放量，40 轮整体只多出「一轮的增量」（约 +5%），这里只要求确实更多
-  check('40 轮里有巨量那一轮总笔数更多', burst.length > flatRows.length,
+  // 只有第一轮放量：40 轮整体只多出「一轮的增量」，被随机噪声淹没，所以不比对总和，
+  // 改成对比「第一轮 vs 之后的轮」——巨量只作用于第一轮
+  const plainFirst = rowsOf(calmDb({ marketTradesEnabled: 1, marketTradesRate: 30, reopenSurgeMult: 3 }), 1).length;
+  check('巨量只作用第一轮（40 轮整体不会翻倍）', burst.length < flatRows.length * 1.3,
     flatRows.length + ' → ' + burst.length);
 
-  // 单独比第一轮
-  const plainOnce = calmDb({ marketTradesEnabled: 1, marketTradesRate: 30, reopenSurgeMult: 3 });
-  const plainCount = rowsOf(plainOnce, 1).length;
-  const surgeOnce = calmDb({ marketTradesEnabled: 1, marketTradesRate: 30, reopenSurgeMult: 3 });
-  surgeOnce.reopenSurge = true;
-  const surgeCount = rowsOf(surgeOnce, 1).length;
-  check('第一轮约是平时的 3 倍', surgeCount > plainCount * 2 && surgeCount < plainCount * 4.5,
-    plainCount + ' → ' + surgeCount);
+  // 单独比第一轮：单次抖动大（rand(1,2) 本身有 2 倍浮动），所以各取 30 次的平均值
+  const avgFirst = (surge) => {
+    let sum = 0;
+    for (let i = 0; i < 30; i++) {
+      const db = calmDb({ marketTradesEnabled: 1, marketTradesRate: 30, reopenSurgeMult: 3 });
+      if (surge) db.reopenSurge = true;
+      sum += rowsOf(db, 1).length;
+    }
+    return sum / 30;
+  };
+  const plainCount = avgFirst(false);
+  const surgeCount = avgFirst(true);
+  check('第一轮平均约是平时的 3 倍', surgeCount > plainCount * 2.2 && surgeCount < plainCount * 4,
+    plainCount.toFixed(1) + ' → ' + surgeCount.toFixed(1));
 
   // 倍率 0 = 不放量
   const offOnce = calmDb({ marketTradesEnabled: 1, marketTradesRate: 30, reopenSurgeMult: 0 });

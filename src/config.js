@@ -350,15 +350,15 @@ export const DEFAULT_CONFIG = {
 };
 
 // 交易周期（tick 数）：一根 K 线由多少个 tick 聚合而成
+// 注意：'10 轮' 那一档 2026-11 下线了（前端按钮删掉，接口也不再支持），
+// 5m / 15m 各自有独立数据包（bars5 / bars15），这里只留 1m
 export const TIMEFRAMES = {
-  'tick': 10,    // 每 10 轮一根（50 秒）；3600 轮历史正好 360 根
   '1m': 12,
   '5m': 60,
   '15m': 180
 };
 
 export const TF_LABELS = {
-  'tick': '10 轮',
   '1m': '1 分钟',
   '5m': '5 分钟',
   '15m': '15 分钟'

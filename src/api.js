@@ -650,10 +650,13 @@ export async function handleApi(ctx) {
     return json(res, 200, skillTextPayload(db));
   }
 
+  // 1 分钟 K 线：从 series 现算（5m / 15m 各自有独立数据包，见下面两个接口）
+  // 2026-11 起「10 轮」档位下线：只认配置里有的周期，别的 tf 直接拒掉，别再静默回落成 12
   if (pathname === '/api/candles' && method === 'GET') {
     const code = String(query.code || '').toUpperCase();
     const tf = String(query.tf || '1m');
-    const group = TIMEFRAMES[tf] || 12;
+    if (!TIMEFRAMES[tf]) return json(res, 400, { error: `不支持的周期：${tf}（现在只有 1m / 5m / 15m）` });
+    const group = TIMEFRAMES[tf];
     const isIndex = code === 'INDEX';
     const src = isIndex ? db.index : db.stocks[code];
     if (!src) return json(res, 404, { error: '标的不存在' });

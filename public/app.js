@@ -11,7 +11,7 @@ function fmtLocalTime(sec, withDate = false) {
 }
 
 // K 线周期 → 一根 K 线聚合多少个 tick（必须和 src/config.js 的 TIMEFRAMES 一致）
-const TF_SECONDS = { 'tick': 10, '1m': 12, '5m': 60, '15m': 180 };
+const TF_SECONDS = { '1m': 12, '5m': 60, '15m': 180 };
 
 const state = {
   token: localStorage.getItem('xd_token') || '',
