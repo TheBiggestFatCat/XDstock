@@ -9,6 +9,8 @@ import { SMALL_INDEX_STOCK } from './stocks.js';
 import { freeFeeActive, stampRateFor } from './perks.js';
 
 const TRADE_LOG_MAX = 4000;
+/** 哪些流水动作算「换手」（记成交量）：只有开仓 / 平仓 */
+const VOLUME_ACTIONS = new Set(['open', 'close']);
 // 「我的 → 交易记录」要能翻 48 小时：全局日志里 95% 是虚假成交，几十分钟就把玩家的单挤没了，
 // 所以每个玩家单独存一份自己的流水（只留前端要用的字段，控制 db 体积）
 const TRADE_HISTORY_MAX = 300;
@@ -90,8 +92,12 @@ export function logTrade(db, entry) {
       owner.tradeLog.splice(0, owner.tradeLog.length - TRADE_HISTORY_MAX);
     }
   }
-  // 成交量（股）：指数单按权重拆给成分股，普通票记自己头上
-  if (entry && entry.code) addVolume(db, entry.code, entry.qty);
+  // 成交量（股）：只有**真实撮合出来的成交**才记量。
+  // 分红（含空头贴息）、偷钱这些只是资金转移，不是换手 —— 算进去会把量能虚增
+  // （分红一条就按持仓股数记一笔，等于凭空多出几千手）。
+  if (entry && entry.code && VOLUME_ACTIONS.has(entry.action)) {
+    addVolume(db, entry.code, entry.qty);
+  }
   if (db.trades.length > TRADE_LOG_MAX) {
     db.trades.splice(0, db.trades.length - TRADE_LOG_MAX);
   }

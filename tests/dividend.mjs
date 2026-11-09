@@ -11,6 +11,7 @@
 import { createDb } from '../src/store.js';
 import { dividendPerShare, dividendPayout } from '../src/fundamentals.js';
 import { runReports } from '../src/engine.js';
+import { logTrade } from '../src/trading.js';
 
 let fails = 0;
 let passes = 0;
@@ -271,6 +272,24 @@ log('=== 8 派息要写进交易记录（不然玩家只能看到一条一闪而
   check('空头那条方向记的是空', !!shortRow && shortRow.side === 'short');
   check('本期才开的仓没有派息记录', !divs.some((t) => t.playerId === 'fresh1'));
   check('记录里带了昵称和股票名', !!longRow && longRow.nickname === '多头一号' && !!longRow.name);
+
+  // 分红 / 贴息（空头补息）不是换手，不能算进成交量
+  const volTicks = Number(st.volTick) || 0;
+  const volSum = (st.volSeries || []).reduce((a, b) => a + (Number(b) || 0), 0);
+  check('分红没有往本轮成交量里加股数', volTicks === 0, `volTick=${volTicks}`);
+  check('分红没有写进成交量序列', volSum === 0, `volSeries 合计=${volSum}`);
+
+  // 对照：真实开平仓还是要记量
+  const st2 = db.stocks.MB;
+  st2.volTick = 0;
+  logTrade(db, { playerId: 'x', code: 'MB', action: 'open', side: 'long', qty: 500, price: 10 });
+  check('开仓照常记成交量', Number(st2.volTick) === 500, String(st2.volTick));
+  logTrade(db, { playerId: 'x', code: 'MB', action: 'close', side: 'long', qty: 300, price: 10 });
+  check('平仓也记成交量', Number(st2.volTick) === 800, String(st2.volTick));
+  logTrade(db, { playerId: 'x', code: 'MB', action: 'dividend', side: 'long', qty: 999, price: 1 });
+  check('股息流水不加量', Number(st2.volTick) === 800, String(st2.volTick));
+  logTrade(db, { playerId: 'x', code: 'MB', action: 'steal', side: 'long', qty: 0, price: 0 });
+  check('偷钱流水不加量', Number(st2.volTick) === 800, String(st2.volTick));
 }
 
 console.log(out.join('\n'));
