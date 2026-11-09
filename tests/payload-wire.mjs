@@ -96,6 +96,7 @@ log('=== 1 个股字段：只留界面要用的 ===');
   const ALLOWED_STOCK_KEYS = new Set([
     'code', 'name', 'icon', 'industry', 'desc', 'isIndex', 'shares', 'nextReportTick',
     'trait', 'report', 'price', 'changePct', 'changes', 'status', 'st', 'stTicks',
+    'vol',   // 本轮成交量（前端给当前 K 线累加量能，2026-11 新增）
     'dps', 'payout', 'previewIn', 'preview', 'sent'
   ]);
   const extra = Object.keys(tgw).filter((k) => !ALLOWED_STOCK_KEYS.has(k));

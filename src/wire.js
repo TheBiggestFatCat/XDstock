@@ -126,6 +126,8 @@ export function stockWire(db, st, me) {
     status: st.status,
     st: !!st.st,
     stTicks: num(st.stTicks),
+    // 本轮成交量（股）：前端拿它给当前这根 K 线累加量能，不然成交量柱要等下次拉 K 线才更新
+    vol: num(Array.isArray(st.volSeries) ? st.volSeries[st.volSeries.length - 1] : 0),
     // 本期每股股息（跟现价封顶，每轮都变）
     dps: st.isIndex ? 0 : dividendPerShare(st, { rate: cfg.dividendRate, cap: cfg.dividendCap }),
     payout: st.isIndex ? 0 : dividendPayout(st, cfg.dividendRate)

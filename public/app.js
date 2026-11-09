@@ -3913,6 +3913,17 @@ function applyIndLayout() {
   }
 }
 
+/** 只更新成交量柱的最后一根（tick 实时用，避免整段重画） */
+function updateVolBar(candle) {
+  if (!state.ind.vol || !state.volSeries || !candle) return;
+  const v = Math.max(0, Number(candle.volume) || 0);
+  state.volSeries.update({
+    time: candle.time,
+    value: v,
+    color: candle.close >= candle.open ? 'rgba(240,75,75,.55)' : 'rgba(18,184,134,.55)'
+  });
+}
+
 /** 把成交量柱 / MACD 画到图上（关掉就清空并隐藏） */
 function renderIndicators() {
   const candles = state.candles || [];
@@ -4092,6 +4103,12 @@ function applyTickToChart(price) {
     last.high = Math.max(last.high, price);
     last.low = Math.min(last.low, price);
     state.candleSeries.update(last);
+    // 成交量也跟着涨（本轮这一笔的成交量已经算在行情里了）
+    const volNow = Number(state.market?.stocks?.[state.code]?.vol) || 0;
+    if (volNow > 0) {
+      last.volume = (Number(last.volume) || 0) + volNow;
+      updateVolBar(last);
+    }
     for (const period of [5, 10, 30]) {
       if (!state.maVisible[period]) continue;
       const n = state.candles.length;
@@ -4109,10 +4126,13 @@ function applyTickToChart(price) {
   // 开始新的一根：时间必须严格大于上一根
   const nowSec = Math.floor(Date.now() / 1000);
   const time = last ? Math.max(last.time + bucketSec, nowSec) : nowSec;
-  const c = { time, open: price, high: price, low: price, close: price };
+  // 这一轮的量就是新那根 K 线的开端（之后每轮往上累加）
+  const volNew = Number(state.market?.stocks?.[state.code]?.vol) || 0;
+  const c = { time, open: price, high: price, low: price, close: price, volume: volNew };
   state.candles.push(c);
   if (state.candles.length > 1200) state.candles.shift();
   state.candleSeries.update(c);
+  updateVolBar(c);
   renderMAs();
   if (state.ind.vol || state.ind.macd) renderIndicators();
   state.tickBucket = bucket;
@@ -4249,6 +4269,8 @@ function onTick(d) {
     if (s.changes) m.stocks[code].changes = s.changes;
     if (s.st !== undefined) m.stocks[code].st = s.st;
     if (s.stTicks !== undefined) m.stocks[code].stTicks = s.stTicks;
+    // 本轮成交量：K 线当前那根的量能要跟着实时涨
+    if (s.vol !== undefined) m.stocks[code].vol = s.vol;
     if (s.fxTarget !== undefined) m.stocks[code].fxTarget = s.fxTarget;
     // 金融大鳄的预览状态每轮同步
     if (s.preview !== undefined) m.stocks[code].preview = s.preview;
