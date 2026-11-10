@@ -14,6 +14,9 @@ const state = {
   lev: 20,
   ttab: 'order',       // 下单 / 成交记录
   tf: 1,               // K 线周期（分钟）
+  bars: [],            // 当前周期的 K 线（后端 /api/tour/candles 给的 OHLC）
+  barsTf: '',          // state.bars 属于哪个周期，切周期时据此判定要不要先清空
+  barsAt: 0,           // 上次拉到 K 线的时间（毫秒）
   ma: { 5: true, 10: true, 30: false },
   qtyManual: false,
   busy: false,
@@ -125,6 +128,42 @@ async function load() {
   }
 }
 
+function tfKey() {
+  return `${state.tf}m`;
+}
+
+let candlesSeq = 0;
+/** 拉某个周期的 K 线：历史包 + 实时聚合都在后端算好，前端只画 */
+async function loadCandles(reset = false) {
+  const tf = tfKey();
+  const seq = ++candlesSeq;
+  try {
+    const r = await api(`/api/tour/candles?tf=${tf}`);
+    if (seq !== candlesSeq) return;      // 连点周期，丢掉过期的响应
+    if (tf !== tfKey()) return;
+    state.bars = Array.isArray(r.candles) ? r.candles : [];
+    state.barsTf = tf;
+    state.barsAt = Date.now();
+    drawChart(state.bars, reset);
+  } catch (e) {
+    console.error('[tour] K 线拉取失败', e);
+  }
+}
+
+/**
+ * 每 2 秒只拉一次快照，里面不带 K 线；用最新价把最后一根补上，
+ * 这样整根图不用为每个 tick 重新请求，10 秒左右再整包对齐一次。
+ */
+function patchLastBar(price) {
+  const px = Number(price) || 0;
+  const bars = state.bars;
+  if (!(px > 0) || !Array.isArray(bars) || !bars.length) return;
+  const last = bars[bars.length - 1];
+  if (px > last.high) last.high = px;
+  if (px < last.low) last.low = px;
+  last.close = px;
+}
+
 // ---------- 渲染 ----------
 function render() {
   const d = state.data;
@@ -192,7 +231,9 @@ function render() {
     : status === 'running'
       ? (d.stock.fxStale ? '汇率更新中断' : '行情实时')
       : (px > 0 ? '赛前走势' : '连接汇率中');
-  drawChart(d.stock.series, d.stock.seriesAt);
+  // K 线走独立接口，这里只把最新价补到最后一根上
+  patchLastBar(px);
+  drawChart(state.bars);
 
   // 交易面板
   renderTrade(me, status);
@@ -534,8 +575,7 @@ function escapeHtml(s) {
 }
 
 // ---------- 走势图（与主站同一套 lightweight-charts 样式）----------
-// 一根 K 线 = 12 个 tick ≈ 1 分钟，和主站 1m 周期同口径；5分/15分由它再合并
-const KLINE_POINTS = 12;
+// K 线由后端 /api/tour/candles 直接给（历史包 + 实时聚合），根数照抄主站：300/300/192
 const MA_DEFS = [
   { n: 5, color: '#f59e0b' },
   { n: 10, color: '#3b82f6' },
@@ -657,30 +697,8 @@ function ensureChart() {
   return chart;
 }
 
-/** 5 秒一个的报价点 → 指定周期的 OHLC */
-function toCandles(series, seriesAt, tickMs, mult = 1) {
-  if (!Array.isArray(series) || !series.length || !Array.isArray(seriesAt)) return [];
-  const tf = Math.max(10, Math.round((Number(tickMs) || 5000) / 1000) * KLINE_POINTS * Math.max(1, mult));
-  const byTime = new Map();
-  const out = [];
-  for (let i = 0; i < series.length; i++) {
-    const ts = Number(seriesAt[i]);
-    const px = Number(series[i]);
-    if (!(ts > 0) || !(px > 0)) continue;
-    const time = Math.floor(ts / 1000 / tf) * tf;
-    let b = byTime.get(time);
-    if (!b) {
-      b = { time, open: px, high: px, low: px, close: px };
-      byTime.set(time, b);
-      out.push(b);
-    } else {
-      if (px > b.high) b.high = px;
-      if (px < b.low) b.low = px;
-      b.close = px;
-    }
-  }
-  return out;
-}
+/** 5 秒一个的报价点 → 指定周期的 OHLC 现在由后端算（/api/tour/candles），
+ *  前端只负责画图和算均线 —— 条数和主站一致，见 TOUR_TFS */
 
 /** 均线点：不足周期就不出点，别从第 1 根就开始画 */
 function maLine(bars, n) {
@@ -694,14 +712,14 @@ function maLine(bars, n) {
   return out;
 }
 
-function drawChart(series, seriesAt, reset = false) {
+function drawChart(bars, reset = false) {
   const hint = $('#chartHint');
-  const bars = toCandles(series, seriesAt, state.data?.tickMs, state.tf);
-  // 一根 K 线画面没意义（还在攒第一根），继续显示提示。
+  const list = Array.isArray(bars) ? bars : [];
+  // 一根 K 线画面没意义，继续显示提示。
   // 注意得先把图清空：否则切到 5 分/15 分时会留着上一个周期的柱子，
   // 提示文字叠在旧 K 线上，看起来像卡住了。
-  if (bars.length < 2) {
-    // 数据被清空了，等攒够两根再重新定视野
+  if (list.length < 2) {
+    // 数据被清空了，等下次拉回来再重新定视野
     viewFitted = false;
     if (candle) {
       candle.setData([]);
@@ -709,19 +727,17 @@ function drawChart(series, seriesAt, reset = false) {
     }
     if (hint) {
       hint.classList.remove('hidden');
-      hint.textContent = Array.isArray(series) && series.length
-        ? '正在攒第一根 K 线…'
-        : '正在连接实时汇率…';
+      hint.textContent = list.length ? '正在攒第一根 K 线…' : '正在连接实时汇率…';
     }
     return;
   }
   if (hint) hint.classList.add('hidden');
   const c = ensureChart();
   if (!c || !candle) return;
-  candle.setData(bars);
+  candle.setData(list);
   for (const m of MA_DEFS) {
     const s = maSeries[m.n];
-    if (s) s.setData(state.ma[m.n] ? maLine(bars, m.n) : []);
+    if (s) s.setData(state.ma[m.n] ? maLine(list, m.n) : []);
   }
   // 数据还没铺满一屏时手动定视野（默认从「最新一根往前 80 根」开始，左边空一大块）；
   // 左右各留一点空，最后一根不贴边，价格轴上的现价标签和时间轴刻度才不被裁。
@@ -729,8 +745,8 @@ function drawChart(series, seriesAt, reset = false) {
   if (reset || !viewFitted) {
     const el = $('#chart');
     const visible = Math.max(1, (el?.clientWidth || 0) - 60);
-    if (bars.length * 6 < visible) {
-      c.timeScale().setVisibleLogicalRange({ from: -0.5, to: bars.length + 1.5 });
+    if (list.length * 6 < visible) {
+      c.timeScale().setVisibleLogicalRange({ from: -0.5, to: list.length + 1.5 });
     } else {
       c.timeScale().fitContent();
     }
@@ -743,7 +759,14 @@ function switchTab(name) {
   state.tab = name;
   $$('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
   $$('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === 'panel-' + name));
-  if (name === 'market') requestAnimationFrame(() => drawChart(state.data?.stock?.series, state.data?.stock?.seriesAt, true));
+  // 图表容器在隐藏的 tab 里没有宽度，建不出来；切过来时再建图 + 拉一次 K 线
+  if (name === 'market') {
+    requestAnimationFrame(() => {
+      viewFitted = false;
+      drawChart(state.bars, true);
+      loadCandles(true);
+    });
+  }
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -895,7 +918,11 @@ function bind() {
     if (!b) return;
     state.tf = Math.max(1, Number(b.dataset.tf) || 1);
     $$('#tfGroup .tf').forEach((x) => x.classList.toggle('active', x === b));
-    drawChart(state.data?.stock?.series, state.data?.stock?.seriesAt, true);
+    // 先把上一个周期的柱子清掉，别让新周期的提示叠在旧图上
+    state.bars = [];
+    state.barsTf = '';
+    drawChart(state.bars, true);
+    loadCandles(true);
   });
 
   // 均线开关
@@ -903,12 +930,12 @@ function bind() {
     const inp = e.target.closest('input[data-ma]');
     if (!inp) return;
     state.ma[Number(inp.dataset.ma)] = inp.checked;
-    drawChart(state.data?.stock?.series, state.data?.stock?.seriesAt);
+    drawChart(state.bars);
   });
 
   window.addEventListener('resize', () => {
     syncTopHeight();
-    drawChart(state.data?.stock?.series, state.data?.stock?.seriesAt);
+    drawChart(state.bars);
   });
 }
 
@@ -934,6 +961,8 @@ async function boot() {
   }, 1000);
   setInterval(() => {
     if (!document.hidden) load();
+    // 行情 tab 上每 10 秒把 K 线整包对齐一次（其余时间靠 patchLastBar 打补丁）
+    if (!document.hidden && state.tab === 'market' && Date.now() - state.barsAt > 10000) loadCandles();
   }, 2000);
 }
 

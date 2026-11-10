@@ -11,10 +11,10 @@ import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, logTrade } from './src/trading.js';
 import { processOrders, fillCapFor } from './src/orders.js';
 import { autoDcaTick } from './src/autoDca.js';
-import { tourTick, setTourRate } from './src/tour.js';
+import { tourTick, setTourRate, setTourHist, TOUR_TFS } from './src/tour.js';
 import { marketPhase, phaseText } from './src/schedule.js';
 import { checkDelist } from './src/delist.js';
-import { fetchAudJpy } from './src/fx.js';
+import { fetchAudJpy, fetchAudJpyBars } from './src/fx.js';
 import { handleApi } from './src/api.js';
 import { NEWS_POOL, MAJOR_NEWS_POOL } from './src/news.js';
 import { pushNotify, notifyList } from './src/notify.js';
@@ -736,8 +736,7 @@ async function refreshFx() {
 
 let fxTimer = null;
 let fxLastAt = 0;
-function startFxLoop() {
-  // 每 5 秒瞄一眼：到点没到点、开没开，都是现读个股设置。
+function startFxLoop() {  // 每 5 秒瞄一眼：到点没到点、开没开，都是现读个股设置。
   // 主市场已经没有 fx 票了（LMFX 退市），这个循环现在主要喂锦标赛：
   // 没有 fx 票时按锦标赛的 10 秒节奏抓，抓到的值同时写进 db.fx 和 db.tour.fx。
   const tick = () => {
@@ -759,6 +758,30 @@ function startFxLoop() {
   if (timer.unref) timer.unref();
 }
 
+// 赛区 K 线的历史部分：赛区只从服务启动那刻开始攒 5 秒报价点，
+// 1m 的 300 根（5 小时）、5m 的 25 小时、15m 的 48 小时都攒不出来，
+// 所以定期抓真实行情的历史包补上（3 个请求一次，5 分钟一轮，很轻）。
+let histLastAt = 0;
+async function refreshTourHist() {
+  const d = getDb();
+  for (const tf of Object.keys(TOUR_TFS)) {
+    const bars = await fetchAudJpyBars(tf, TOUR_TFS[tf].max + 20);
+    if (bars) setTourHist(d, tf, bars);
+  }
+  saveDb();
+}
+function startTourHistLoop() {
+  const tick = () => {
+    if (Date.now() - histLastAt < 5 * 60 * 1000) return;
+    histLastAt = Date.now();
+    refreshTourHist().catch((e) => console.error('[tour] 历史 K 线抓取失败:', e.message));
+  };
+  histLastAt = Date.now();
+  refreshTourHist().catch((e) => console.error('[tour] 历史 K 线初始化失败:', e.message));
+  const timer = setInterval(tick, 60 * 1000);
+  if (timer.unref) timer.unref();
+}
+
 const timer = setInterval(loop, Math.max(1000, db.config.tickMs || 5000));
 
 // 启动时先备份一次，之后每 30 分钟一份
@@ -766,6 +789,7 @@ backupDb('boot');
 setInterval(() => backupDb(), 30 * 60 * 1000);
 
 startFxLoop();
+startTourHistLoop();
 
 server.listen(PORT, () => {
   console.log(`\n  小灯证券 · 网页版`);

@@ -16,8 +16,21 @@ export const TOUR_TARGET = 20000000;
 /** 手续费：0 —— 零摩擦，进出只按价格差结算（1000 倍杠杆下任何费率都会吃掉大块保证金） */
 export const TOUR_FEE_RATE = 0;
 export const TOUR_MAX_LEVERAGE = 1000;
-/** 报价序列上限（每个 tick 一个点） */
-const SERIES_MAX = 900;
+/**
+ * 报价序列上限（每个 tick 一个点）——和主站 config.historyTicks 同一口径：
+ * 5 秒 × 3600 = 5 小时，正好铺满 1 分钟图的 300 根。
+ */
+const SERIES_MAX = 3600;
+/**
+ * 三个周期各自保留多少根，根数照抄主站：
+ * 1m 300 根 = 5 小时、5m 300 根 = 25 小时、15m 192 根 = 48 小时。
+ * 单靠 5 秒的 series 攒不出 25/48 小时，所以历史部分由 setTourHist 从真实行情补进来。
+ */
+export const TOUR_TFS = {
+  '1m': { sec: 60, max: 300 },
+  '5m': { sec: 300, max: 300 },
+  '15m': { sec: 900, max: 192 }
+};
 const TRADE_LOG_MAX = 120;
 const PLAYER_LOG_MAX = 24;
 
@@ -70,7 +83,10 @@ export function createTour(nowMs = Date.now()) {
       price: 0,
       prev: 0,
       series: [],
-      seriesAt: []
+      seriesAt: [],
+      // 历史 K 线包（1m / 5m / 15m），每个是一串标准 OHLC，按时间升序
+      hist: { '1m': [], '5m': [], '15m': [] },
+      histAt: 0
     },
     players: {},
     trades: [],
@@ -109,6 +125,12 @@ export function ensureTour(db) {
   }
   delete t.fx.base;              // 老存档的归一化基准，一并清掉
   if (!(num(t.fx.rate) > 0)) t.fx.rate = 0;
+  // 历史包：老存档没有就补空包
+  if (!t.stock.hist || typeof t.stock.hist !== 'object') t.stock.hist = { '1m': [], '5m': [], '15m': [] };
+  for (const tf of Object.keys(TOUR_TFS)) {
+    if (!Array.isArray(t.stock.hist[tf])) t.stock.hist[tf] = [];
+  }
+  if (!(num(t.stock.histAt) > 0)) t.stock.histAt = 0;
   if (!t.players || typeof t.players !== 'object') t.players = {};
   if (!Array.isArray(t.trades)) t.trades = [];
   return t;
@@ -242,6 +264,75 @@ export function setTourRate(db, rate, at = Date.now(), source = '') {
     t.stock.seriesAt = [num(at, Date.now())];
   }
   return true;
+}
+
+/**
+ * 写入一段历史 K 线（server.js#refreshTourHist 调用）。
+ * 只收最后 TOUR_TFS[tf].max 根，按时间升序、同一时间覆盖旧的。
+ */
+export function setTourHist(db, tf, bars, at = Date.now()) {
+  const t = ensureTour(db);
+  const cfg = TOUR_TFS[tf];
+  if (!cfg || !Array.isArray(bars) || !bars.length) return false;
+  const byTime = new Map();
+  for (const b of bars) {
+    const time = num(b.time, 0);
+    const close = num(b.close, 0);
+    const open = num(b.open, close);
+    if (!(time > 0) || !(close > 0) || !(open > 0)) continue;
+    byTime.set(time, {
+      time,
+      open,
+      high: Math.max(num(b.high, close), open, close),
+      low: Math.min(num(b.low, close) || open, open, close),
+      close
+    });
+  }
+  if (!byTime.size) return false;
+  t.stock.hist[tf] = [...byTime.values()].sort((a, b) => a.time - b.time).slice(-cfg.max);
+  t.stock.histAt = num(at, Date.now());
+  return true;
+}
+
+/** 5 秒报价点 → 指定周期的 OHLC（和主站 candlesFromSeries 一个口径） */
+function barsFromSeries(t, sec) {
+  const out = [];
+  const series = Array.isArray(t.stock.series) ? t.stock.series : [];
+  const at = Array.isArray(t.stock.seriesAt) ? t.stock.seriesAt : [];
+  for (let i = 0; i < series.length; i++) {
+    const px = num(series[i], 0);
+    const ts = num(at[i], 0);
+    if (!(px > 0) || !(ts > 0)) continue;
+    const time = Math.floor(ts / 1000 / sec) * sec;
+    const last = out[out.length - 1];
+    if (!last || last.time !== time) {
+      out.push({ time, open: px, high: px, low: px, close: px });
+    } else {
+      if (px > last.high) last.high = px;
+      if (px < last.low) last.low = px;
+      last.close = px;
+    }
+  }
+  return out;
+}
+
+/**
+ * 某周期的完整 K 线：历史包打底 + 实时聚合接在后面，条数和主站一致（300/300/192）。
+ * 接缝按时间裁：历史里和实时重叠的那几根（含正在走的那根）一律让给实时数据，
+ * 否则会出现两根时间戳相同、OHLC 却不一致的柱子。
+ */
+export function tourCandles(db, tf = '1m') {
+  const t = ensureTour(db);
+  const cfg = TOUR_TFS[tf] || TOUR_TFS['1m'];
+  const live = barsFromSeries(t, cfg.sec);
+  const firstLive = live.length ? live[0].time : Infinity;
+  const hist = (t.stock.hist[tf] || []).filter((b) => num(b.time, 0) < firstLive);
+  return {
+    tf,
+    tickMs: num(db.config?.tickMs, 5000),
+    histAt: num(t.stock.histAt),
+    candles: hist.concat(live).slice(-cfg.max)
+  };
 }
 
 /** 爆仓线：保证金只剩 5% 时强平 */
@@ -471,10 +562,12 @@ export function tourState(db, player) {
   const status = tourStatus(t);
   const me = player ? joinTour(t, player) : null;
   const rows = rankRows(db, t);
-  const series = t.stock.series.slice(-SERIES_MAX);
-  // 时间戳跟价格点一一对应，前端拿它画 K 线的 x 轴
-  const seriesAt = (Array.isArray(t.stock.seriesAt) ? t.stock.seriesAt : []).slice(-series.length);
-  const first = series.length ? series[0] : t.stock.price;
+  // 涨跌幅基准：1 分钟历史包最老一根的开盘价（5 小时前，和图上第一根柱子对齐）。
+  // 拿不到历史包时退回实时序列的第一个点，再不行就用现价（显示 0.00%）
+  const h1 = t.stock.hist['1m'];
+  const first = h1 && h1.length
+    ? num(h1[0].open, t.stock.price)
+    : (t.stock.series.length ? num(t.stock.series[0]) : t.stock.price);
 
   let myRank = null;
   if (me) {
@@ -510,8 +603,8 @@ export function tourState(db, player) {
       fxAt: num(t.fx.at),
       fxSource: t.fx.source || '',
       fxStale: t.fx.stale !== false,
-      series,
-      seriesAt
+      // K 线不在这里发：三个周期各自走 /api/tour/candles?tf=
+      histAt: num(t.stock.histAt)
     },
     me: me
       ? {

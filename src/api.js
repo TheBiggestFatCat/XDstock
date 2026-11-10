@@ -16,7 +16,7 @@ import { getBuild } from './build.js';
 import { marketPhase, phaseText, normalizeSchedule, ensureSchedules, scheduleWindow, cyclePhase, fmtMinute, parseMinute, MINUTE_MS } from './schedule.js';
 import { playerEquity, positionPnl } from './trading.js';
 import { levelUpPlayer, withdrawFromBank, bankStatus } from './bank.js';
-import { tourState, tourOpen, tourClose, tourJob } from './tour.js';
+import { tourState, tourOpen, tourClose, tourJob, tourCandles, TOUR_TFS } from './tour.js';
 import { placeLimitOrder, cancelOrder, orderLimitBlocked, consumeOrderSlot, fillCapFor } from './orders.js';
 import {
   THEMES as ACHV_THEMES, THEME_EMOJI, THEME_ACHIEVEMENTS, achvPayload, ensureAchvState,
@@ -739,6 +739,13 @@ export async function handleApi(ctx) {
   if (pathname === '/api/tour' && method === 'GET') {
     const a = auth(ctx);
     return json(res, 200, tourState(db, a ? a.player : null));
+  }
+
+  // 赛区 K 线：历史包（真实行情）+ 实时报价点聚合，条数对齐主站
+  if (pathname === '/api/tour/candles' && method === 'GET') {
+    const tf = String(query.tf || '1m');
+    if (!TOUR_TFS[tf]) return json(res, 400, { error: `不支持的周期：${tf}（只有 1m / 5m / 15m）` });
+    return json(res, 200, tourCandles(db, tf));
   }
 
   if (pathname === '/api/tour/order' && method === 'POST') {

@@ -9,6 +9,7 @@ import { createDb } from '../src/store.js';
 import {
   createTour, ensureTour, nextStartAt, tourTick, tourOpen, tourClose, tourJob,
   tourState, tourEquity, tourStatus, joinTour, setTourRate,
+  setTourHist, tourCandles, TOUR_TFS,
   TOUR_START_CASH, TOUR_TARGET, TOUR_MAX_LEVERAGE
 } from '../src/tour.js';
 
@@ -162,8 +163,10 @@ const pB = { id: 'b', nickname: '阿乙' };
   check('赛前价格跟着实时汇率', near(db.tour.stock.price, 110.14, 1e-9), String(db.tour.stock.price));
   check('赛前 tick 不推进', db.tour.tick === 0, String(db.tour.tick));
   check('赛前仍不能交易', tourOpen(db, pA, { side: 'long', qty: 10, leverage: 5 }).ok === false);
-  check('赛前快照带着走势序列', tourState(db, pA).stock.series.length === 5,
-    String(tourState(db, pA).stock.series.length));
+  const pre = tourCandles(db, '1m');
+  check('赛前 K 线接口照常能给（实时聚合的部分）',
+    Array.isArray(pre.candles) && pre.candles.length >= 1, String(pre.candles.length));
+  check('K 线不再塞进 /api/tour 快照', tourState(db, pA).stock.series === undefined);
 }
 
 // ---------------- 3. 开赛推进 ----------------
@@ -343,8 +346,9 @@ const pB = { id: 'b', nickname: '阿乙' };
   check('自己的名次正确', st.me.rank === 2, String(st.me.rank));
   check('快照带持仓', st.me.position?.side === 'long', JSON.stringify(st.me.position));
   check('快照带收益率', Number.isFinite(st.me.retPct), String(st.me.retPct));
-  check('快照不带内部压力字段', st.stock.flow === undefined && st.stock.series !== undefined);
-  check('快照带走势序列', Array.isArray(st.stock.series) && st.stock.series.length > 0);
+  check('快照不带内部压力字段', st.stock.flow === undefined && st.stock.premium === undefined);
+  check('K 线不在快照里发（走 /api/tour/candles）',
+    st.stock.series === undefined && st.stock.seriesAt === undefined);
   check('未登录也能看排行', tourState(db, null).ranks.length === 2);
   check('未登录没有个人数据', tourState(db, null).me === null);
 }
@@ -369,6 +373,77 @@ const pB = { id: 'b', nickname: '阿乙' };
   check('没有往主市场塞标的', Object.keys(db.stocks).length === before.stocks);
   check('主市场股价没动', db.stocks.TGW?.price === before.price);
   check('锦标赛账户独立记账', !!db.tour.players.a);
+}
+
+// ---------------- 12. K 线：历史包 + 实时聚合（条数对齐主站） ----------------
+{
+  const db = createDb();
+  db.tour.startAt = Date.now() - 1000;
+  setTourRate(db, 108.9, Date.now(), 'test');
+  tourTick(db);
+
+  // 根数跟着主站走：1m 300、5m 300、15m 192
+  check('1m 保留 300 根', TOUR_TFS['1m'].max === 300, String(TOUR_TFS['1m'].max));
+  check('5m 保留 300 根', TOUR_TFS['5m'].max === 300, String(TOUR_TFS['5m'].max));
+  check('15m 保留 192 根', TOUR_TFS['15m'].max === 192, String(TOUR_TFS['15m'].max));
+  check('1m 一根 60 秒', TOUR_TFS['1m'].sec === 60);
+  check('15m 一根 900 秒', TOUR_TFS['15m'].sec === 900);
+
+  // 历史包：给 400 根，只留最后 300 根，且按时间升序
+  const base = 1_700_000_040;                 // 能被 60 整除，桶边界干净
+  const hist = [];
+  for (let i = 0; i < 400; i++) {
+    const px = 100 + i * 0.01;
+    hist.push({ time: base + i * 60, open: px, high: px + 0.05, low: px - 0.05, close: px });
+  }
+  setTourHist(db, '1m', hist, Date.now());
+  check('历史包按周期上限裁剪', db.tour.stock.hist['1m'].length === 300,
+    String(db.tour.stock.hist['1m'].length));
+  check('历史包按时间升序', db.tour.stock.hist['1m'][0].time < db.tour.stock.hist['1m'][299].time);
+  check('历史包丢掉最老的那些',
+    db.tour.stock.hist['1m'][0].time === base + 100 * 60, String(db.tour.stock.hist['1m'][0].time));
+
+  // 实时点：接在历史最后一根之后，12 个 5 秒点聚成 1 分钟
+  const lastHist = db.tour.stock.hist['1m'][299].time;
+  db.tour.stock.series = [];
+  db.tour.stock.seriesAt = [];
+  for (let i = 0; i < 12; i++) {
+    db.tour.stock.series.push(110 + i * 0.01);
+    db.tour.stock.seriesAt.push((lastHist + 120 + i * 5) * 1000);
+  }
+  const c = tourCandles(db, '1m');
+  check('实时点聚合成 1 根 1 分钟 K 线',
+    c.candles.at(-1).time === lastHist + 120, String(c.candles.at(-1).time));
+  check('实时那根的 OHLC 正确',
+    near(c.candles.at(-1).open, 110, 1e-9) && near(c.candles.at(-1).close, 110.11, 1e-9),
+    JSON.stringify(c.candles.at(-1)));
+  check('总根数仍然卡在上限 300', c.candles.length === 300, String(c.candles.length));
+  check('历史 + 实时在时间上不重叠',
+    new Set(c.candles.map((b) => b.time)).size === c.candles.length);
+
+  // 5m / 15m 用的是各自的历史包
+  setTourHist(db, '5m', hist.filter((_, i) => i % 5 === 0));
+  setTourHist(db, '15m', hist.filter((_, i) => i % 15 === 0));
+  check('5m 独立一组历史包', db.tour.stock.hist['5m'].length === 80,
+    String(db.tour.stock.hist['5m'].length));
+  check('15m 独立一组历史包', db.tour.stock.hist['15m'].length === 27,
+    String(db.tour.stock.hist['15m'].length));
+  check('取 5m 不会串到 1m 的包', tourCandles(db, '5m').tf === '5m');
+
+  // 序列上限：和主站 historyTicks 同口径 3600 个点 = 5 小时
+  const db2 = createDb();
+  db2.tour.startAt = Date.now() - 1000;
+  setTourRate(db2, 108.9, Date.now(), 'test');
+  tourTick(db2);
+  for (let i = 0; i < 3700; i++) {
+    db2.tour.fx.rate = 108.9 + (i % 7) * 0.001;
+    tourTick(db2);
+  }
+  check('报价序列上限 3600（5 小时）', db2.tour.stock.series.length === 3600,
+    String(db2.tour.stock.series.length));
+  check('序列和时间戳同步裁剪',
+    db2.tour.stock.seriesAt.length === db2.tour.stock.series.length,
+    `${db2.tour.stock.seriesAt.length} / ${db2.tour.stock.series.length}`);
 }
 
 console.log(out.join('\n'));
