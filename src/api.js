@@ -995,6 +995,8 @@ export async function handleApi(ctx) {
       const gone = id;
       const nick = p.nickname;
       delete db.players[gone];
+      // 赛区记录跟着删，否则排行榜会留一条没有主人的空壳
+      if (db.tour && db.tour.players) delete db.tour.players[gone];
       for (const [tk, sess] of Object.entries(db.sessions || {})) {
         if (sess.playerId === gone) delete db.sessions[tk];
       }
