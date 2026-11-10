@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getDb, saveDb, now, backupDb } from './src/store.js';
 import { getBuild } from './src/build.js';
-import { stepMarket, seedHistory, changesFor, noticeAlive, liveIndexWeights } from './src/engine.js';
+import { stepMarket, seedHistory, changesFor, noticeAlive, noticeLink, liveIndexWeights } from './src/engine.js';
 import { stockWire, positionWire } from './src/wire.js';
 import { stealCooldownFor, nightInfoFor, isNightWindow } from './src/theme.js';
 import { TIMEFRAMES } from './src/config.js';
@@ -341,6 +341,8 @@ function tickPayload(forPlayerId) {
       .map((n) => ({
         id: n.id, text: n.text, at: n.at,
         kind: n.kind || null,
+        // 公告可带一个站内跳转地址（如 /tournament），前端渲染成可点链接
+        href: noticeLink(n) || null,
         ageTicks: Number(n.tick) > 0 ? Math.max(0, d.tick - Number(n.tick)) : null,
         leftTicks: Number(n.expireTick) > 0 ? Math.max(0, Number(n.expireTick) - d.tick) : null
       })),

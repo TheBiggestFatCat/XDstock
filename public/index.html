@@ -588,6 +588,10 @@
                   <span>显示时长（轮，0 = 永久）</span>
                   <input id="noticeTicks" type="number" min="0" max="43200" step="10" value="720" />
                 </label>
+                <label class="field">
+                  <span>跳转链接（可选，只能填站内路径）</span>
+                  <input id="noticeHref" type="text" maxlength="120" placeholder="例如 /tournament" />
+                </label>
                 <p class="panel-sub" style="margin:-4px 0 12px">720 轮 ≈ 1 小时（1 轮 = 5 秒）。到点自动从「市场快讯」里消失，填 0 表示一直挂着。</p>
                 <button id="noticeBtn" class="btn btn-primary">发布公告</button>
                 <div id="noticeList" class="notice-list"></div>

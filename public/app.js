@@ -3379,6 +3379,7 @@ function renderNews() {
     <div class="news-item news-notice">
       <span class="news-badge badge-notice">公告</span>
       <span class="news-text">${escapeHtml(n.text)}</span>
+      ${n.href ? `<a class="news-link" href="${escapeHtml(n.href)}">查看 ›</a>` : ''}
       ${noticeTip(n)}
     </div>`).join('');
 
@@ -6171,6 +6172,7 @@ async function loadAdmin() {
         const leftText = expire > 0 ? `剩 ${Math.max(0, expire - tickNow)} 轮` : '永久';
         return `<div class="notice-row">
           <span class="notice-text">${escapeHtml(n.text)}</span>
+          ${n.href ? `<span class="notice-left">↗ ${escapeHtml(n.href)}</span>` : ''}
           <span class="notice-left">${leftText}</span>
           <button class="mini-btn danger" data-del-notice="${n.id}">删除</button>
         </div>`;
@@ -6993,10 +6995,14 @@ async function publishNotice() {
   // 显示时长（轮）：0 = 永久
   const rawTicks = Number($('#noticeTicks')?.value);
   const ticks = Number.isFinite(rawTicks) && rawTicks > 0 ? Math.round(rawTicks) : 0;
+  // 跳转链接：只能站内路径，服务端还会再校验一次
+  const href = ($('#noticeHref')?.value || '').trim();
   try {
-    await adminApi('/api/admin/announce', { text, ticks });
+    await adminApi('/api/admin/announce', { text, ticks, href });
     toast(ticks > 0 ? `公告已发布，${ticks} 轮后自动消失` : '公告已发布（永久）', 'ok');
     $('#noticeText').value = '';
+    const h = $('#noticeHref');
+    if (h) h.value = '';
     loadAdmin();
     refreshMarket();
   } catch (e) {

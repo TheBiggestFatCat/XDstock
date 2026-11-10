@@ -38,9 +38,24 @@ export function noticeAlive(db, n) {
 }
 
 /**
+ * 公告的可跳转地址（2026-11 加）。
+ *
+ * 只认**站内绝对路径**（以单个 `/` 开头），其余一律当作没有：
+ *   - `//evil.com`、`https://...`、`javascript:...` 全部挡掉，
+ *     公告是不可信输入，绝不能让它变成外链跳板；
+ *   - 字符集也收紧，避免引号/尖括号混进来做属性注入。
+ * 返回 '' 表示这条公告不可点。
+ */
+export function noticeLink(n) {
+  const s = String((n && n.href) || '').trim();
+  if (!s || s[0] !== '/' || s[1] === '/') return '';
+  return /^\/[A-Za-z0-9\-_/?=&%.#~]*$/.test(s) ? s : '';
+}
+
+/**
  * 发一条公告。
  * @param {number} ticks 显示时长（轮）；0 = 永久，不会自动消失
- * @param {object} extra 额外字段（比如 kind: 'up' | 'down'）
+ * @param {object} extra 额外字段（比如 kind: 'up' | 'down'、href: '/tournament'）
  */
 export function pushNotice(db, text, ticks = 0, extra = {}) {
   if (!Array.isArray(db.notices)) db.notices = [];

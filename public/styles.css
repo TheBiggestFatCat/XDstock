@@ -1083,6 +1083,15 @@ input.tpsl-input {
 .badge-notice { background: var(--soft-blue); color: #4338ca; box-shadow: 0 0 0 1px #c7d2fe inset; }
 .news-item.news-notice { background: var(--hl-cool); }
 .news-item.news-notice .news-text { font-weight: 500; }
+/* 公告带跳转地址时的「查看 ›」，配色跟「公告」徽章一致 */
+.news-link {
+  flex: none; font-size: 12px; font-weight: 600; line-height: 1.6;
+  color: #4338ca; text-decoration: none; white-space: nowrap;
+  padding: 1px 9px; border-radius: 8px;
+  background: #e0e7ff; box-shadow: 0 0 0 1px #c7d2fe inset;
+}
+.news-link:hover { background: #c7d2fe; }
+.news-link:active { transform: translateY(1px); }
 
 .notice-list { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
 .notice-row {

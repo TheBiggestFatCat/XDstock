@@ -46,6 +46,23 @@ journalctl -u xdstock -f      # 看实时日志
 
 更新代码：把改动的文件传到 `/opt/xdstock` 对应位置，然后 `systemctl restart xdstock`。
 
+### 发一条带跳转的公告
+
+管理面板「管理 → 市场 → 发布公告」里，内容照写，**跳转链接**填站内路径（如 `/tournament`），
+玩家的「市场快讯」里就会出现一个「查看 ›」按钮。命令行发也行（服务器上执行）：
+
+```bash
+PIN=$(node -e "console.log(require('/opt/xdstock/data/db.json').config.adminPin)")
+TOKEN=$(curl -s -X POST localhost/api/admin/login -H 'Content-Type: application/json' \
+  -d "{\"pin\":\"$PIN\"}" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).token))")
+curl -s -X POST localhost/api/admin/announce -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"text":"🏆 锦标赛 21:00 开赛","ticks":1440,"href":"/tournament"}'
+```
+
+`ticks` 是显示时长（轮，1 轮 ≈ 5 秒，1440 ≈ 2 小时，0 = 永久）。`href` 只接受 `/` 开头的站内路径，
+填 `https://...` 会被拒绝。
+
 > 服务器上原本的 QQ 机器人（astrbot / snowluma / t2i-service / dashscope-shim）
 > 已经全部停止，并把重启策略改成了 `no`，开机不会自己起来。
 

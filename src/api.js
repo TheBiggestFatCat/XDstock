@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
-import { candlesFromSeries, changesFor, timeFromAxis, tickTimeAxis, pushNotice, noticeAlive, liveIndexWeights } from './engine.js';
+import { candlesFromSeries, changesFor, timeFromAxis, tickTimeAxis, pushNotice, noticeAlive, noticeLink, liveIndexWeights } from './engine.js';
 import { stockFullWire, configWire, positionWire } from './wire.js';
 import { bars15Candles, bars5Candles } from './bars15.js';
 import { unlockedEmojis, pushEmote, visibleEmotes, isEmojiUnlocked } from './emoji.js';
@@ -542,6 +542,8 @@ export function marketPayload(db, me) {
       .filter((n) => noticeAlive(db, n))
       .map((n) => ({
         id: n.id, text: n.text, at: n.at, kind: n.kind || null,
+        // 站内跳转地址（只认 / 开头，见 engine.js#noticeLink）
+        href: noticeLink(n) || null,
         ageTicks: Number(n.tick) > 0 ? Math.max(0, db.tick - Number(n.tick)) : null,
         // 有 tick 期限的公告，前端可以用来显示「还剩 N 轮」
         leftTicks: Number(n.expireTick) > 0 ? Math.max(0, Number(n.expireTick) - db.tick) : null
@@ -1140,7 +1142,13 @@ export async function handleApi(ctx) {
     const ticks = Number.isFinite(rawTicks) && rawTicks > 0
       ? Math.min(43200, Math.round(rawTicks))
       : 0;
-    const notice = pushNotice(db, text, ticks);
+    // 可选跳转地址（2026-11 加）：只能填站内路径，如 /tournament
+    const rawHref = String(body.href || '').trim();
+    const href = noticeLink({ href: rawHref });
+    if (rawHref && !href) {
+      return json(res, 400, { error: '跳转地址只能是站内路径，例如 /tournament' });
+    }
+    const notice = pushNotice(db, text, ticks, href ? { href } : {});
     saveDb();
     return json(res, 200, { ok: true, notice });
   }
