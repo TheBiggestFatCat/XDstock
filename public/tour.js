@@ -180,7 +180,7 @@ function render() {
     : status === 'running'
       ? (d.stock.fxStale ? '汇率更新中断' : '行情实时')
       : (px > 0 ? '赛前走势' : '连接汇率中');
-  drawChart(d.stock.series);
+  drawChart(d.stock.series, d.stock.seriesAt);
 
   // 交易面板
   renderTrade(me, status);
@@ -403,90 +403,123 @@ function escapeHtml(s) {
   }[c]));
 }
 
-// ---------- 走势图 ----------
-function drawChart(series) {
-  const canvas = $('#chart');
-  if (!canvas) return;
-  const dpr = window.devicePixelRatio || 1;
-  const w = canvas.clientWidth || canvas.parentElement.clientWidth || 320;
-  // 高度交给 CSS（移动 150 / 桌面 360），这里只负责把像素缓冲对齐
-  const h = canvas.clientHeight || 150;
-  canvas.width = Math.round(w * dpr);
-  canvas.height = Math.round(h * dpr);
-  const ctx = canvas.getContext('2d');
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, w, h);
+// ---------- 走势图（与主站同一套 lightweight-charts 样式）----------
+// 一根 K 线 = 12 个 tick ≈ 1 分钟，和主站 1m 周期同口径
+const KLINE_POINTS = 12;
 
-  // 还没拿到报价：画条虚线 + 提示，别留一块纯白
-  // （赛前也会走图，所以这里只剩「等第一个报价」这一种情况）
-  if (!Array.isArray(series) || series.length < 2) {
-    const d = state.data;
-    const hasPx = d && Number(d.stock.price) > 0;
-    const text = hasPx ? '等待下一个报价…' : '正在连接实时汇率…';
-    ctx.strokeStyle = 'rgba(15,42,38,.13)';
-    ctx.setLineDash([6, 6]);
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(10, h / 2);
-    ctx.lineTo(w - 10, h / 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = 'rgba(15,42,38,.40)';
-    ctx.font = '13px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(text, w / 2, h / 2 - 16);
+let chart = null;
+let candle = null;
+
+function p2(n) {
+  return String(n).padStart(2, '0');
+}
+
+/** 时间轴标签：HH:MM */
+function hmLabel(sec) {
+  const d = new Date(sec * 1000);
+  return `${p2(d.getHours())}:${p2(d.getMinutes())}`;
+}
+
+function ensureChart() {
+  const el = $('#chart');
+  if (!el || chart) return chart;
+  if (typeof LightweightCharts === 'undefined') return null;
+  // 容器还没布局（比如当前停在首页 tab）就等下一次 render 再建
+  if (!el.clientWidth) return null;
+  chart = LightweightCharts.createChart(el, {
+    localization: { timeFormatter: (t) => hmLabel(t) },
+    layout: {
+      background: { type: 'solid', color: 'transparent' },
+      textColor: '#5b7671',
+      fontFamily: 'inherit',
+      attributionLogo: false
+    },
+    grid: {
+      vertLines: { color: 'rgba(230,240,237,.7)' },
+      horzLines: { color: 'rgba(230,240,237,.7)' }
+    },
+    rightPriceScale: { borderColor: 'rgba(230,240,237,.9)' },
+    timeScale: {
+      borderColor: 'rgba(230,240,237,.9)',
+      timeVisible: true,
+      secondsVisible: false,
+      tickMarkFormatter: (t) => hmLabel(t)
+    },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+      vertLine: { color: 'rgba(20,184,166,.4)', labelBackgroundColor: '#14b8a6' },
+      horzLine: { color: 'rgba(20,184,166,.4)', labelBackgroundColor: '#14b8a6' }
+    },
+    handleScale: { axisPressedMouseMove: true },
+    // 手机上图表只有 150px 高，手指几乎避不开：别让它抢走页面的滑动
+    handleScroll: {
+      mouseWheel: true,
+      pressedMouseMove: true,
+      horzTouchDrag: window.innerWidth >= 760,
+      vertTouchDrag: false
+    },
+    autoSize: true
+  });
+  candle = chart.addSeries(LightweightCharts.CandlestickSeries, {
+    upColor: '#f04b4b',
+    downColor: '#12b886',
+    borderVisible: false,
+    wickUpColor: '#f04b4b',
+    wickDownColor: '#12b886',
+    priceFormat: { type: 'price', precision: 3, minMove: 0.001 }
+  });
+  return chart;
+}
+
+/** 5 秒一个的报价点 → 1 分钟 OHLC */
+function toCandles(series, seriesAt, tickMs) {
+  if (!Array.isArray(series) || !series.length || !Array.isArray(seriesAt)) return [];
+  const tf = Math.max(10, Math.round((Number(tickMs) || 5000) / 1000) * KLINE_POINTS);
+  const byTime = new Map();
+  const out = [];
+  for (let i = 0; i < series.length; i++) {
+    const ts = Number(seriesAt[i]);
+    const px = Number(series[i]);
+    if (!(ts > 0) || !(px > 0)) continue;
+    const time = Math.floor(ts / 1000 / tf) * tf;
+    let b = byTime.get(time);
+    if (!b) {
+      b = { time, open: px, high: px, low: px, close: px };
+      byTime.set(time, b);
+      out.push(b);
+    } else {
+      if (px > b.high) b.high = px;
+      if (px < b.low) b.low = px;
+      b.close = px;
+    }
+  }
+  return out;
+}
+
+function drawChart(series, seriesAt) {
+  const hint = $('#chartHint');
+  const bars = toCandles(series, seriesAt, state.data?.tickMs);
+  // 一根 K 线画面没意义（还在攒第一分钟），继续显示提示
+  if (bars.length < 2) {
+    if (hint) {
+      hint.classList.remove('hidden');
+      hint.textContent = Array.isArray(series) && series.length
+        ? '正在攒第一根 K 线…'
+        : '正在连接实时汇率…';
+    }
     return;
   }
-
-  const pad = 6;
-  let lo = Math.min(...series);
-  let hi = Math.max(...series);
-  // 序列最前面的价位（近似水平）时，别把 0.01 的抖动放大成崩盘
-  const MIN_SPAN = 0.05;
-  if (hi - lo < MIN_SPAN) {
-    const mid = (hi + lo) / 2;
-    lo = mid - MIN_SPAN / 2;
-    hi = mid + MIN_SPAN / 2;
+  if (hint) hint.classList.add('hidden');
+  const c = ensureChart();
+  if (!c || !candle) return;
+  candle.setData(bars);
+  // 数据还没铺满一屏时手动定视野（默认从「最新一根往前 80 根」开始，左边空一大块）；
+  // 左右各留一点空，最后一根不贴边，价格轴上的现价标签和时间轴刻度才不被裁
+  const el = $('#chart');
+  const visible = Math.max(1, (el?.clientWidth || 0) - 60);
+  if (bars.length * 6 < visible) {
+    c.timeScale().setVisibleLogicalRange({ from: -0.5, to: bars.length + 1.5 });
   }
-  const span = hi - lo;
-  lo -= span * 0.08;
-  hi += span * 0.08;
-
-  const x = (i) => pad + (i / (series.length - 1)) * (w - pad * 2);
-  const y = (v) => h - pad - ((v - lo) / (hi - lo)) * (h - pad * 2);
-
-  const up = series[series.length - 1] >= series[0];
-  const color = up ? '#f04b4b' : '#12b886';
-
-  // 面积
-  const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, up ? 'rgba(240,75,75,.18)' : 'rgba(18,184,134,.18)');
-  grad.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.beginPath();
-  ctx.moveTo(x(0), y(series[0]));
-  for (let i = 1; i < series.length; i++) ctx.lineTo(x(i), y(series[i]));
-  ctx.lineTo(x(series.length - 1), h - pad);
-  ctx.lineTo(x(0), h - pad);
-  ctx.closePath();
-  ctx.fillStyle = grad;
-  ctx.fill();
-
-  // 折线
-  ctx.beginPath();
-  ctx.moveTo(x(0), y(series[0]));
-  for (let i = 1; i < series.length; i++) ctx.lineTo(x(i), y(series[i]));
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.8;
-  ctx.lineJoin = 'round';
-  ctx.stroke();
-
-  // 最新价圆点
-  const lastX = x(series.length - 1);
-  const lastY = y(series[series.length - 1]);
-  ctx.beginPath();
-  ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
-  ctx.fillStyle = color;
-  ctx.fill();
 }
 
 // ---------- 交互 ----------
@@ -494,7 +527,7 @@ function switchTab(name) {
   state.tab = name;
   $$('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
   $$('.panel').forEach((p) => p.classList.toggle('active', p.id === 'panel-' + name));
-  if (name === 'market') requestAnimationFrame(() => drawChart(state.data?.stock?.series));
+  if (name === 'market') requestAnimationFrame(() => drawChart(state.data?.stock?.series, state.data?.stock?.seriesAt));
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -635,7 +668,7 @@ function bind() {
 
   window.addEventListener('resize', () => {
     syncTopHeight();
-    drawChart(state.data?.stock?.series);
+    drawChart(state.data?.stock?.series, state.data?.stock?.seriesAt);
   });
 }
 

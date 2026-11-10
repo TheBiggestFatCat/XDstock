@@ -283,7 +283,20 @@ main {
   font-size: 11.5px;
   color: var(--ink-2);
 }
-#chart { display: block; width: 100%; height: 150px; margin-top: 8px; }
+#chart { display: block; width: 100%; height: 150px; margin-top: 8px; position: relative; }
+/* 图还没数据时的居中提示（拿到第一个报价后由 JS 隐藏） */
+.chart-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: rgba(15, 42, 38, .4);
+  pointer-events: none;
+  z-index: 2;
+}
+.chart-hint.hidden { display: none; }
 
 /* ---------- 交易面板 ---------- */
 .seg {

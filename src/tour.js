@@ -69,7 +69,8 @@ export function createTour(nowMs = Date.now()) {
       desc: '外汇自营、套息交易、高杠杆',
       price: 0,
       prev: 0,
-      series: []
+      series: [],
+      seriesAt: []
     },
     players: {},
     trades: [],
@@ -94,6 +95,14 @@ export function ensureTour(db) {
   }
   delete t.stock.initialPrice;   // 不再用初始价，股价就是汇率原值
   if (!Array.isArray(t.stock.series)) t.stock.series = [];
+  // 每个点配一个时间戳（K 线的 x 轴用），老存档缺这半边就按 tickMs 反推补上
+  if (!Array.isArray(t.stock.seriesAt)) t.stock.seriesAt = [];
+  if (t.stock.seriesAt.length !== t.stock.series.length) {
+    const step = Math.max(1000, num(db.config?.tickMs, 5000));
+    const n = t.stock.series.length;
+    const tail = num(t.fx?.at, Date.now());
+    t.stock.seriesAt = t.stock.series.map((_, i) => tail - (n - 1 - i) * step);
+  }
   if (!t.fx || typeof t.fx !== 'object') t.fx = {};
   for (const [k, v] of Object.entries(base.fx)) {
     if (t.fx[k] === undefined || t.fx[k] === null) t.fx[k] = v;
@@ -200,8 +209,12 @@ function stepPrice(t) {
   t.stock.prev = num(t.stock.price, px);
   t.stock.price = px;
   t.stock.series.push(px);
+  if (!Array.isArray(t.stock.seriesAt)) t.stock.seriesAt = [];
+  t.stock.seriesAt.push(Date.now());
   if (t.stock.series.length > SERIES_MAX) {
-    t.stock.series.splice(0, t.stock.series.length - SERIES_MAX);
+    const cut = t.stock.series.length - SERIES_MAX;
+    t.stock.series.splice(0, cut);
+    t.stock.seriesAt.splice(0, cut);
   }
 }
 
@@ -226,6 +239,7 @@ export function setTourRate(db, rate, at = Date.now(), source = '') {
     t.stock.prev = r3(v);
     t.stock.price = r3(v);
     t.stock.series = [t.stock.price];
+    t.stock.seriesAt = [num(at, Date.now())];
   }
   return true;
 }
@@ -457,7 +471,9 @@ export function tourState(db, player) {
   const status = tourStatus(t);
   const me = player ? joinTour(t, player) : null;
   const rows = rankRows(db, t);
-  const series = t.stock.series.slice(-240);
+  const series = t.stock.series.slice(-SERIES_MAX);
+  // 时间戳跟价格点一一对应，前端拿它画 K 线的 x 轴
+  const seriesAt = (Array.isArray(t.stock.seriesAt) ? t.stock.seriesAt : []).slice(-series.length);
   const first = series.length ? series[0] : t.stock.price;
 
   let myRank = null;
@@ -494,7 +510,8 @@ export function tourState(db, player) {
       fxAt: num(t.fx.at),
       fxSource: t.fx.source || '',
       fxStale: t.fx.stale !== false,
-      series
+      series,
+      seriesAt
     },
     me: me
       ? {

@@ -142,7 +142,9 @@
         <span>报价源 <b id="fxSource">--</b> · AUD/JPY</span>
         <span id="frozenTag" class="tiny">行情实时</span>
       </div>
-      <canvas id="chart" height="150"></canvas>
+      <div id="chart" class="chart-canvas">
+        <div id="chartHint" class="chart-hint">正在连接实时汇率…</div>
+      </div>
     </div>
 
     <div class="card trade">
@@ -247,6 +249,7 @@
   </div>
 </div>
 
+<script src="/vendor/lightweight-charts.js"></script>
 <script type="module" src="/tour.js"></script>
 </body>
 </html>

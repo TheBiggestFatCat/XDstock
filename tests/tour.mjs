@@ -179,6 +179,9 @@ const pB = { id: 'b', nickname: '阿乙' };
     `${before} -> ${db.tour.stock.price}`);
   check('每轮落一个点（时间轴均匀）', db.tour.stock.series.length === db.tour.tick + 1,
     `${db.tour.stock.series.length} / tick ${db.tour.tick}`);
+  check('每个价格点都有时间戳（K 线 x 轴用）',
+    db.tour.stock.seriesAt.length === db.tour.stock.series.length,
+    `${db.tour.stock.seriesAt.length} / ${db.tour.stock.series.length}`);
 
   for (let i = 1; i <= 5; i++) {
     setTourRate(db, 108.5 + i * 0.1);     // 汇率每轮动一下
