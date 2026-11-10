@@ -42,10 +42,8 @@ function newDb() {
  * 所以改汇率（ratio^(1/8) 反解），再清掉溢价与资金压力
  */
 function setPrice(t, px) {
-  const ratio = Math.pow(px / t.stock.initialPrice, 1 / 8);
-  t.fx.rate = t.fx.base * ratio;
-  t.stock.premium = 0;
-  t.stock.flow = 0;
+  // 股价 = 初始价 × (汇率 / 基准汇率)，这里反解汇率，下一轮 stepPrice 会算出同一个价
+  t.fx.rate = t.fx.base * (px / t.stock.initialPrice);
   t.stock.price = px;
 }
 
@@ -174,7 +172,7 @@ const pB = { id: 'b', nickname: '阿乙' };
   check('现金不够被拒', tourOpen(db, pA, { side: 'long', qty: 1000000, leverage: 1 }).ok === false);
 
   tourOpen(db, pA, { side: 'long', qty: 100, leverage: 999 });
-  check('杠杆超上限被夹到 20', Math.round(g.positions.LMFX.leverage) === TOUR_MAX_LEVERAGE,
+  check(`杠杆超上限被夹到 ${TOUR_MAX_LEVERAGE}`, Math.round(g.positions.LMFX.leverage) === TOUR_MAX_LEVERAGE,
     String(g.positions.LMFX.leverage));
   const rev = tourOpen(db, pA, { side: 'short', qty: 100, leverage: 5 });
   check('反手被拒（先平再开）', rev.ok === false, rev.error);

@@ -115,8 +115,8 @@
       <div class="card">
         <span class="label">规则</span>
         <ul class="rules">
-          <li>起手现金 30 万日元，标的只有 <b>LMFX（留美外汇）</b> 一只。</li>
-          <li>支持 1~20 倍杠杆、做多/做空，手续费 0.02%（开平各收一次）。</li>
+          <li>起手现金 30 万日元，标的只有 <b>LMFX（留美外汇）</b> 一只，股价就是模拟汇率本身，不掺任何内部因素。</li>
+          <li>支持 1~100 倍杠杆、做多/做空，手续费 0.02%（开平各收一次）。</li>
           <li>保证金只剩 5% 时<b>强制平仓</b>，这一仓的钱就没了。</li>
           <li>第一个把权益做到 <b>2000 万</b> 的人夺冠，赛区立刻冻结，排名定格。</li>
         </ul>
@@ -157,9 +157,9 @@
 
       <div class="row between mt">
         <span class="label">杠杆</span>
-        <span class="mono"><b id="levVal">5</b>×</span>
+        <span class="mono"><b id="levVal">20</b>×</span>
       </div>
-      <input type="range" id="lev" min="1" max="20" step="1" value="5" class="range" />
+      <input type="range" id="lev" min="1" max="100" step="1" value="20" class="range" />
 
       <div class="row between mt">
         <span class="label">数量</span>

@@ -4,8 +4,9 @@
 //   · 完全独立的一套账：自己的现金（日元）、自己的持仓、自己的价格序列，
 //     不碰 db.players / db.stocks，主市场一行都不受影响。
 //   · 只挂在主循环的末尾跑一步（server.js#tourTick），赢了就 frozen，价格与成交一起冻结。
-//   · 标的机制沿用 LMFX 退市前的口径：股价 = 初始价 × (1 + 汇率涨跌 × 系数 × 杠杆)，
-//     只是汇率改成引擎内模拟（不依赖外部 Swissquote 接口，本地/离线都能跑）。
+//   · 标的机制：股价就是汇率本身 —— 每轮直接取「初始价 × 汇率 / 基准汇率」，
+//     不做杠杆放大、不叠加溢价、不记玩家成交冲击，行情图和汇率曲线完全重合。
+//     汇率由引擎内模拟（不依赖外部 Swissquote 接口，本地/离线都能跑）。
 //   · 这里不 import 任何模块，避免 store.js → tour.js → engine.js → store.js 的循环引用。
 
 /** 起手资金：30 万日元 */
@@ -14,21 +15,15 @@ export const TOUR_START_CASH = 300000;
 export const TOUR_TARGET = 20000000;
 /** 手续费（开平仓都收，按成交额） */
 export const TOUR_FEE_RATE = 0.0002;
-export const TOUR_MAX_LEVERAGE = 20;
-/** 玩家成交对价格的冲击：500 万日元算 1 单位压力 */
-const TOUR_FLOW_REF = 5000000;
-/** 汇率每轮波动（LMFX 再乘 8 倍杠杆） */
+export const TOUR_MAX_LEVERAGE = 100;
+/** 汇率每轮波动（股价 1:1 跟随，不做任何放大） */
 const FX_VOL = 0.0009;
 /** 汇率偶发跳空：概率 × 幅度 —— 一把翻身的来源，也是爆仓的来源 */
 const FX_JUMP_P = 0.004;
 const FX_JUMP_MIN = 0.012;
 const FX_JUMP_MAX = 0.03;
-/** 玩家冲击形成的溢价，每轮按这个比例衰减 */
-const PREMIUM_DECAY = 0.9;
-/** 1 单位资金压力（500 万日元）换来多少持久溢价 */
-const PREMIUM_PER_FLOW = 0.0015;
-const FX_COEF = 1;
-const FX_LEV = 8;
+/** 汇率往基准回归的强度，别跑成单边行情 */
+const FX_REVERT = 0.0006;
 const SERIES_MAX = 900;
 const TRADE_LOG_MAX = 120;
 const PLAYER_LOG_MAX = 24;
@@ -85,8 +80,6 @@ export function createTour(nowMs = Date.now()) {
       initialPrice: 100,
       price: 100,
       prev: 100,
-      flow: 0,
-      premium: 0,
       series: [100]
     },
     players: {},
@@ -201,7 +194,10 @@ function logTourTrade(t, g, row) {
   if (t.trades.length > TRADE_LOG_MAX) t.trades.splice(0, t.trades.length - TRADE_LOG_MAX);
 }
 
-/** 价格走一步：汇率随机游走 → 隐含价（与退市前的 LMFX 同一公式）→ 叠加玩家溢价 */
+/**
+ * 价格走一步：汇率随机游走一步，股价 = 初始价 × 汇率 / 基准汇率。
+ * 纯映射，不乘杠杆、不加溢价、不吃成交冲击 —— 第 N 轮的股价永远只由第 N 轮的汇率决定。
+ */
 function stepPrice(t) {
   const fx = t.fx;
   let ret = gauss() * FX_VOL;
@@ -212,27 +208,12 @@ function stepPrice(t) {
   fx.rate *= Math.exp(ret);
   if (fx.base > 0 && fx.rate > 0) {
     // 慢慢往基准拉回来，别跑成单边行情
-    fx.rate *= Math.exp(0.0006 * Math.log(fx.base / fx.rate));
+    fx.rate *= Math.exp(FX_REVERT * Math.log(fx.base / fx.rate));
     fx.rate = clamp(fx.rate, fx.base * 0.3, fx.base * 3);
   }
 
-  // 原来的口径：股价 = 初始价 × (1 + 汇率涨跌 × 系数 × 杠杆)
-  // 这里用等价的对数形式，避免大幅跳空时线性近似失真
   const ratio = fx.rate / Math.max(1e-9, fx.base);
-  const fxPrice = num(t.stock.initialPrice, 100) * Math.pow(ratio, FX_COEF * FX_LEV);
-
-  // 玩家自己的成交会留下一点持久溢价（买单推高、卖单压低），逐轮衰减
-  const flow = num(t.stock.flow);
-  t.stock.premium = clamp(
-    num(t.stock.premium) * PREMIUM_DECAY + flow * PREMIUM_PER_FLOW,
-    -0.5,
-    0.5
-  );
-  if (Math.abs(t.stock.premium) < 1e-5) t.stock.premium = 0;
-  t.stock.flow = flow * 0.85;
-  if (Math.abs(t.stock.flow) < 1e-4) t.stock.flow = 0;
-
-  const p = fxPrice * Math.exp(num(t.stock.premium));
+  const p = num(t.stock.initialPrice, 100) * ratio;
   t.stock.prev = num(t.stock.price, p);
   t.stock.price = Math.max(0.01, r2(p));
   t.stock.series.push(t.stock.price);
@@ -347,12 +328,6 @@ export function tourOpen(db, player, body = {}) {
     exist.leverage = (exist.qty * exist.entry) / exist.margin;
   }
 
-  t.stock.flow = clamp(
-    num(t.stock.flow) + ((side === 'long' ? 1 : -1) * notional) / TOUR_FLOW_REF,
-    -6,
-    6
-  );
-
   g.opens = (g.opens || 0) + 1;
   logTourTrade(t, g, {
     action: 'open',
@@ -401,12 +376,6 @@ export function tourClose(db, player, body = {}) {
   pos.qty -= qty;
   pos.margin = Math.max(0, num(pos.margin) - marginPart);
   if (pos.qty <= 0) delete g.positions.LMFX;
-
-  t.stock.flow = clamp(
-    num(t.stock.flow) - ((pos.side === 'long' ? 1 : -1) * qty * price) / TOUR_FLOW_REF,
-    -6,
-    6
-  );
 
   g.closes = (g.closes || 0) + 1;
   logTourTrade(t, g, {

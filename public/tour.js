@@ -10,7 +10,7 @@ const state = {
   data: null,
   tab: 'home',
   side: 'long',
-  lev: 5,
+  lev: 20,
   qtyManual: false,
   busy: false,
   timer: null
@@ -29,6 +29,12 @@ function money2(v) {
 
 function price2(v) {
   return (Number(v) || 0).toFixed(2);
+}
+
+/** 杠杆上限以后端 maxLeverage 为准，前端不写死数字 */
+function maxLev() {
+  const m = Number(state.data?.maxLeverage);
+  return m > 0 ? m : 100;
 }
 
 /**
@@ -216,6 +222,8 @@ function renderTrade(me, status) {
   const price = Number(d.stock.price) || 0;
   const cash = me ? Number(me.cash) || 0 : 0;
   const feeRate = Number(d.feeRate) || 0;
+  const levMax = maxLev();
+  if (state.lev > levMax) state.lev = levMax;   // 后端调低上限时别让滑条越界
   const lev = state.lev;
 
   // 可开数量：保证金 + 手续费 <= 现金
@@ -227,7 +235,10 @@ function renderTrade(me, status) {
 
   // 滑块已选区的填充比例（自绘轨道用）
   const levEl = $('#lev');
-  if (levEl) levEl.style.setProperty('--p', (((lev - 1) / 19) * 100).toFixed(1) + '%');
+  if (levEl) {
+    if (Number(levEl.max) !== levMax) levEl.max = String(levMax);
+    levEl.style.setProperty('--p', (((lev - 1) / Math.max(1, levMax - 1)) * 100).toFixed(1) + '%');
+  }
 
   const qtyEl = $('#qty');
   // 默认给 1/4 仓，别一进来就是满仓满杠杆
@@ -409,7 +420,13 @@ function drawChart(series) {
   const pad = 6;
   let lo = Math.min(...series);
   let hi = Math.max(...series);
-  if (hi - lo < 1e-6) { hi += 1; lo -= 1; }
+  // 股价 1:1 跟随汇率后单轮波动只有 0.09%，序列短的时候别把 0.05% 画成崩盘
+  const MIN_SPAN = 0.6;
+  if (hi - lo < MIN_SPAN) {
+    const mid = (hi + lo) / 2;
+    lo = mid - MIN_SPAN / 2;
+    hi = mid + MIN_SPAN / 2;
+  }
   const span = hi - lo;
   lo -= span * 0.08;
   hi += span * 0.08;
@@ -554,7 +571,7 @@ function bind() {
   });
 
   $('#lev').addEventListener('input', (e) => {
-    state.lev = Math.max(1, Math.min(20, Number(e.target.value) || 1));
+    state.lev = Math.max(1, Math.min(maxLev(), Number(e.target.value) || 1));
     $('#levVal').textContent = state.lev;
     state.qtyManual = false;
     render();
@@ -592,6 +609,11 @@ function bind() {
 async function boot() {
   bind();
   syncTopHeight();
+  const levEl = $('#lev');
+  if (levEl) {
+    levEl.max = String(maxLev());
+    levEl.value = String(state.lev);
+  }
   $('#levVal').textContent = state.lev;
 
   if (!state.token) {
