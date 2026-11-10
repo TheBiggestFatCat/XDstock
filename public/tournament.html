@@ -116,7 +116,7 @@
         <span class="label">规则</span>
         <ul class="rules">
           <li>起手现金 30 万日元，标的只有 <b>LMFX（留美外汇）</b> 一只，报价就是实时 AUD/JPY 汇率本身，不做任何加工。</li>
-          <li>支持 1~1000 倍杠杆、做多/做空，手续费 0.02%（开平各收一次）。</li>
+          <li>支持 1~1000 倍杠杆、做多/做空，<b>零手续费</b>，进出只按价格差结算。</li>
           <li>保证金只剩 5% 时<b>强制平仓</b>，这一仓的钱就没了。</li>
           <li>第一个把权益做到 <b>2000 万</b> 的人夺冠，赛区立刻冻结，排名定格。</li>
         </ul>
@@ -148,7 +148,7 @@
     <div class="card trade">
       <div class="row between">
         <span class="label">方向</span>
-        <span class="tiny muted">市价成交 · 手续费 0.02%</span>
+        <span class="tiny muted">市价成交 · 零手续费</span>
       </div>
       <div class="seg" id="sideSeg">
         <button class="seg-btn active up" data-side="long">做多</button>
@@ -183,7 +183,6 @@
       <div class="calc">
         <div class="row between"><span>名义价值</span><b class="mono" id="calcNotional">¥0</b></div>
         <div class="row between"><span>占用保证金</span><b class="mono" id="calcMargin">¥0</b></div>
-        <div class="row between"><span>手续费</span><b class="mono" id="calcFee">¥0</b></div>
         <div class="row between"><span>可用现金</span><b class="mono" id="calcCash">¥0</b></div>
         <div class="row between"><span>爆仓价位</span><b class="mono" id="calcLiq">--</b></div>
       </div>

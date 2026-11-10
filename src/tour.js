@@ -13,8 +13,8 @@
 export const TOUR_START_CASH = 300000;
 /** 夺冠线：2000 万日元（剧情里妈妈亏掉的数） */
 export const TOUR_TARGET = 20000000;
-/** 手续费（开平仓都收，按成交额） */
-export const TOUR_FEE_RATE = 0.0002;
+/** 手续费：0 —— 零摩擦，进出只按价格差结算（1000 倍杠杆下任何费率都会吃掉大块保证金） */
+export const TOUR_FEE_RATE = 0;
 export const TOUR_MAX_LEVERAGE = 1000;
 /** 报价序列上限（每个 tick 一个点） */
 const SERIES_MAX = 900;

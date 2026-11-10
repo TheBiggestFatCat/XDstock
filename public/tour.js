@@ -230,14 +230,13 @@ function renderTrade(me, status) {
   const d = state.data;
   const price = Number(d.stock.price) || 0;
   const cash = me ? Number(me.cash) || 0 : 0;
-  const feeRate = Number(d.feeRate) || 0;
   const levMax = maxLev();
   if (state.lev > levMax) state.lev = levMax;   // 后端调低上限时别让滑条越界
   const lev = state.lev;
 
-  // 可开数量：保证金 + 手续费 <= 现金
-  const perUnit = price * (1 / lev + feeRate);
-  const maxQty = perUnit > 0 ? Math.floor((cash * 0.995) / perUnit) : 0;
+  // 可开数量：只有保证金占款，零手续费
+  const perUnit = price / lev;
+  const maxQty = perUnit > 0 ? Math.floor(cash / perUnit) : 0;
   $('#qtyHint').textContent = state.token
     ? (price > 0
       ? (maxQty > 0 ? `最多 ${maxQty.toLocaleString('en-US')} 份` : '现金不够开仓')
@@ -259,10 +258,8 @@ function renderTrade(me, status) {
   if (qty > maxQty && maxQty > 0) qty = maxQty;
   const notional = qty * price;
   const margin = lev > 0 ? notional / lev : 0;
-  const fee = notional * feeRate;
   $('#calcNotional').textContent = money2(notional);
   $('#calcMargin').textContent = money2(margin);
-  $('#calcFee').textContent = money2(fee);
   $('#calcCash').textContent = money2(cash);
 
   // 保证金亏到 5% 就强平：价格逆向走 0.95 / 杠杆。1000 倍下只有 0.095%，必须让玩家看见
@@ -275,7 +272,7 @@ function renderTrade(me, status) {
   });
 
   const openBtn = $('#openBtn');
-  const canOpen = !!me && status === 'running' && qty > 0 && margin + fee <= cash + 1e-6;
+  const canOpen = !!me && status === 'running' && qty > 0 && margin <= cash + 1e-6;
   openBtn.disabled = !canOpen || state.busy;
   openBtn.textContent = state.side === 'long'
     ? `开多 · ${lev}×`
@@ -626,8 +623,8 @@ function bind() {
     const d = state.data;
     if (!d || !d.me) { toast('先登录', 'err'); return; }
     const price = Number(d.stock.price) || 0;
-    const perUnit = price * (1 / state.lev + (Number(d.feeRate) || 0));
-    const max = perUnit > 0 ? Math.floor((d.me.cash * 0.995) / perUnit) : 0;
+    const perUnit = price / state.lev;
+    const max = perUnit > 0 ? Math.floor(d.me.cash / perUnit) : 0;
     const frac = Number(b.dataset.frac) || 1;
     $('#qty').value = Math.max(0, Math.floor(max * frac));
     state.qtyManual = true;

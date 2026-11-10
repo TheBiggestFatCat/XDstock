@@ -189,8 +189,8 @@ const pB = { id: 'b', nickname: '阿乙' };
   check('开多成功', r.ok === true, r.error || '');
   check('建立了持仓', g.positions.LMFX?.qty === 1000, String(g.positions.LMFX?.qty));
   check('保证金 = 名义 / 杠杆', near(g.positions.LMFX.margin, 1000 * 100 / 10), String(g.positions.LMFX.margin));
-  check('现金 = 30 万 − 保证金 − 手续费',
-    near(g.cash, 300000 - 10000 - 1000 * 100 * 0.0002), String(g.cash));
+  check('现金 = 30 万 − 保证金（零手续费）',
+    near(g.cash, 300000 - 10000), String(g.cash));
   check('权益 = 现金 + 保证金（不亏不赚）', near(tourEquity(t, g), g.cash + 10000), String(tourEquity(t, g)));
   check('开仓计入战绩', g.opens === 1, String(g.opens));
   check('开仓写了流水', g.log.length === 1 && g.log[0].action === 'open', JSON.stringify(g.log[0]));
@@ -203,7 +203,8 @@ const pB = { id: 'b', nickname: '阿乙' };
   const c = tourClose(db, pA, {});
   check('平仓成功', c.ok === true, c.error || '');
   check('平仓后没有持仓', !g.positions.LMFX);
-  check('平仓盈亏 = 1 万（扣手续费）', near(c.pnl, 10000), String(c.pnl));
+  check('平仓盈亏 = 1 万', near(c.pnl, 10000), String(c.pnl));
+  check('零手续费：平仓现金 = 起手现金 + 盈亏', near(g.cash, 300000 + 10000), String(g.cash));
   check('平仓计入战绩', g.closes === 1, String(g.closes));
   check('无持仓时再平仓报错', tourClose(db, pA, {}).ok === false);
 }
