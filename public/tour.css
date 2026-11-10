@@ -275,6 +275,7 @@ main {
 .chg { font-size: 13.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .chg.up { color: var(--up); }
 .chg.down { color: var(--down); }
+.chg.muted { color: var(--ink-3); }
 .quote-sub {
   display: flex;
   justify-content: space-between;
@@ -494,6 +495,38 @@ main {
 .rank-val b { display: block; font-size: 13.5px; font-variant-numeric: tabular-nums; }
 .rank-val span { font-size: 11px; font-variant-numeric: tabular-nums; }
 
+/* 首页侧栏的迷你榜单 */
+.mini-rank { margin-top: 6px; }
+.mini-rank-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 6px;
+  border-radius: 8px;
+}
+.mini-rank-row + .mini-rank-row { border-top: 1px solid var(--line); }
+.mini-rank-row.me { background: var(--accent-soft); }
+.mini-no {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+.mini-no.n1 { color: #b45309; }
+.mini-no.n2 { color: #64748b; }
+.mini-no.n3 { color: #9a3412; }
+.mini-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mini-val { text-align: right; }
+.mini-val b { display: block; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.mini-val span { font-size: 11px; font-variant-numeric: tabular-nums; }
+
 /* ---------- toast / gate ---------- */
 .toast {
   position: fixed;
@@ -539,11 +572,81 @@ main {
 .gate-box p { margin: 8px 0 14px; font-size: 12.5px; color: var(--ink-2); }
 .gate-box .btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 
+/* ---------- 两列容器（移动端单列，桌面端并排） ---------- */
+.home-col { display: flex; flex-direction: column; }
+.home-col > *:last-child { margin-bottom: 0; }
+.home-col + .home-col { margin-top: 12px; }
+
+#chart { display: block; width: 100%; height: 150px; }
+
 /* ---------- 桌面 ---------- */
 @media (min-width: 761px) {
   .stats { grid-template-columns: repeat(4, 1fr); }
-  main { max-width: 640px; }
   .clock { font-size: 36px; }
+}
+
+/* 宽屏跟主站一个路数：内容铺开、两栏并排，别只在中间留一条窄列 */
+@media (min-width: 900px) {
+  main { max-width: 1120px; padding: 18px 24px 64px; }
+  /* 顶栏和标签栏跟着内容列一起内缩，别贴着屏幕边缘 */
+  .top, .tabs {
+    padding-left: max(24px, calc((100vw - 1120px) / 2 + 24px));
+    padding-right: max(24px, calc((100vw - 1120px) / 2 + 24px));
+  }
+  .tabs { justify-content: flex-start; }
+  .tab { min-width: 112px; height: 38px; }
+  .home-col + .home-col { margin-top: 0; }
+  #chart { height: 360px; }
+
+  /* 首页：左边剧情 / 状态 / 进度 / 打工，右边标的 / 排名 / 规则 */
+  #panel-home.active {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    gap: 16px;
+    align-items: stretch;
+  }
+  #panel-home.active > .home-col { gap: 16px; }
+  #panel-home.active > .home-col > * { margin-bottom: 0; }
+  /* 右栏内容比左栏短，卡片之间均分余量，别把空白全堆在最后一张卡里 */
+  #panel-home.active > .home-col:last-child { justify-content: space-between; }
+  #panel-home.active > .home-col:last-child > .card { flex: 0 0 auto; }
+
+  /* 行情：左边走势图，右边下单面板 */
+  #panel-market.active {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 388px;
+    gap: 16px;
+    align-items: start;
+  }
+  #panel-market.active > * { margin-bottom: 0; }
+
+  /* 我的：统计横跨整行；持仓放宽、战绩收窄成侧栏，成交占满 */
+  #panel-me.active {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 16px;
+    align-items: stretch;
+  }
+  #panel-me.active > * { margin-bottom: 0; }
+  #panel-me.active > .card { display: flex; flex-direction: column; }
+  #panel-me.active > .card > .row:first-child { flex: 0 0 auto; }
+  /* 持仓/成交内容少时，空态在卡片里居中，别贴着顶 */
+  #panel-me.active #posBox,
+  #panel-me.active #logBox {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  #panel-me.active #posBox .pos,
+  #panel-me.active #logBox .log-row { justify-content: space-between; }
+  #panel-me.active > .stats { grid-column: 1 / -1; }
+  #panel-me.active > .card:last-child { grid-column: 1 / -1; }
+  #panel-me.active .records { grid-template-columns: repeat(2, 1fr); }
+
+  /* 排行榜跟内容列左对齐，别单独居中；行高放开一点 */
+  #panel-rank.active { max-width: 860px; margin: 0; }
+  #panel-rank.active .rank-row { padding: 14px 12px; }
 }
 
 /* ---------- 窄屏 ---------- */

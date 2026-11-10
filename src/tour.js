@@ -146,9 +146,13 @@ function guard(t) {
   if (!t.startedAt) {
     const left = Math.max(0, num(t.startAt) - Date.now());
     const min = Math.ceil(left / 60000);
+    // 别写死时间：赛程随时可能改，统一从 startAt 算
+    const at = new Date(num(t.startAt));
+    const pad = (x) => String(x).padStart(2, '0');
+    const when = `${at.getMonth() + 1}/${at.getDate()} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
     return {
       ok: false,
-      error: left > 0 ? `锦标赛今晚 21:00 开始，还有约 ${min} 分钟` : '锦标赛即将开始，稍等一轮'
+      error: left > 0 ? `锦标赛 ${when} 开赛，还有约 ${min} 分钟` : '锦标赛即将开始，稍等一轮'
     };
   }
   return null;

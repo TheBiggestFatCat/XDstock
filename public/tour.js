@@ -31,6 +31,18 @@ function price2(v) {
   return (Number(v) || 0).toFixed(2);
 }
 
+/**
+ * 开赛时间文案：M/D HH:MM（服务器本地时间）。
+ * 时间以服务端 startAt 为准，别在前端写死 21:00 —— 改赛程只用改数据。
+ */
+function fmtStart(ts) {
+  const n = Number(ts) || 0;
+  if (!n) return '--';
+  const d = new Date(n);
+  const pad = (x) => String(x).padStart(2, '0');
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function pct(v, digit = 1) {
   const raw = Number(v) || 0;
   // 浮点误差会算出 -0.0000001，显示成「-0.00%」很怪：按显示精度归零
@@ -113,7 +125,7 @@ function render() {
     ? '冠军已产生，行情冻结'
     : status === 'running'
       ? '比赛进行中'
-      : '今晚 21:00 开赛';
+      : `${fmtStart(d.startAt)} 开赛`;
   renderClock();
 
   // 进度
@@ -175,6 +187,7 @@ function render() {
   renderPosition(me);
   renderLog(me);
   renderRank(d);
+  renderHomeRank(d);
 }
 
 function renderClock() {
@@ -184,7 +197,7 @@ function renderClock() {
   const hint = $('#clockHint');
   if (d.status === 'pending') {
     clock.textContent = clockText(d.startAt - Date.now());
-    hint.textContent = '距开赛（服务器本地时间 21:00）';
+    hint.textContent = `距开赛（${fmtStart(d.startAt)}，服务器时间）`;
     // 到点后主动拉一次，让状态尽快切过来
     if (Date.now() >= d.startAt) load();
   } else if (d.status === 'running') {
@@ -329,10 +342,31 @@ function renderRank(d) {
       </span>
       <span class="rank-val">
         <b>${money(r.equity)}</b>
-        <span class="${r.retPct >= 0 ? 'chg up' : 'chg down'}">${pct(r.retPct)}</span>
+        <span class="${chgClass(r.retPct)}">${pct(r.retPct)}</span>
       </span>
     </div>`;
   }).join('');
+}
+
+/** 首页侧栏的迷你榜单：只放前三名，完整榜单点进去看 */
+function renderHomeRank(d) {
+  const box = $('#homeRank');
+  if (!box) return;
+  const list = (d.ranks || []).slice(0, 3);
+  if (!list.length) {
+    box.innerHTML = '<p class="tiny muted">还没有人参赛，第一个进场的直接第一名</p>';
+    return;
+  }
+  const meId = d.me ? d.me.id : '';
+  box.innerHTML = list.map((r) => `
+    <div class="mini-rank-row${r.id === meId ? ' me' : ''}">
+      <span class="mini-no n${Math.min(3, r.rank)}">${r.rank}</span>
+      <span class="mini-name">${escapeHtml(r.nickname)}</span>
+      <span class="mini-val">
+        <b>${money(r.equity)}</b>
+        <span class="${chgClass(r.retPct)}">${pct(r.retPct)}</span>
+      </span>
+    </div>`).join('');
 }
 
 function escapeHtml(s) {
@@ -344,15 +378,33 @@ function escapeHtml(s) {
 // ---------- 走势图 ----------
 function drawChart(series) {
   const canvas = $('#chart');
-  if (!canvas || !Array.isArray(series) || series.length < 2) return;
+  if (!canvas) return;
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.clientWidth || canvas.parentElement.clientWidth || 320;
-  const h = 150;
+  // 高度交给 CSS（移动 150 / 桌面 360），这里只负责把像素缓冲对齐
+  const h = canvas.clientHeight || 150;
   canvas.width = Math.round(w * dpr);
   canvas.height = Math.round(h * dpr);
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
+
+  // 还没开赛：画条虚线 + 提示，别留一块纯白
+  if (!Array.isArray(series) || series.length < 2) {
+    ctx.strokeStyle = 'rgba(15,42,38,.13)';
+    ctx.setLineDash([6, 6]);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(10, h / 2);
+    ctx.lineTo(w - 10, h / 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(15,42,38,.40)';
+    ctx.font = '13px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('开赛后这里显示 LMFX 的实时走势', w / 2, h / 2 - 16);
+    return;
+  }
 
   const pad = 6;
   let lo = Math.min(...series);

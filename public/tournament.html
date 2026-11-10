@@ -33,80 +33,94 @@
 
   <!-- 首页 -->
   <section class="panel active" id="panel-home">
-    <div class="story">
-      <div class="story-tag">剧情</div>
-      <h1>把妈妈的 2000 万，赚回来</h1>
-      <p>
-        妈妈把家里攒了半辈子的 <b class="hl">2000 万日元</b> 全押在了外汇上，一夜之间清零。
-        她还在厨房里算这个月的账，什么都不知道。
-      </p>
-      <p>
-        桌上只剩 <b>30 万日元</b>。你打开了她那台老电脑，登进了同一个账户——
-        这一次，换你来。
-      </p>
-      <p class="story-goal">目标：账户权益做到 <b>2000 万日元</b>，第一个做到的人赢下一切。</p>
-    </div>
+    <div class="home-col">
+      <div class="story">
+        <div class="story-tag">剧情</div>
+        <h1>把妈妈的 2000 万，赚回来</h1>
+        <p>
+          妈妈把家里攒了半辈子的 <b class="hl">2000 万日元</b> 全押在了外汇上，一夜之间清零。
+          她还在厨房里算这个月的账，什么都不知道。
+        </p>
+        <p>
+          桌上只剩 <b>30 万日元</b>。你打开了她那台老电脑，登进了同一个账户——
+          这一次，换你来。
+        </p>
+        <p class="story-goal">目标：账户权益做到 <b>2000 万日元</b>，第一个做到的人赢下一切。</p>
+      </div>
 
-    <div class="card status-card">
-      <div class="status-head">
-        <span class="label">赛区状态</span>
-        <span id="statusText" class="status-text">--</span>
-      </div>
-      <div class="clock" id="clock">--:--:--</div>
-      <div class="clock-hint" id="clockHint">距开赛</div>
-    </div>
-
-    <div class="card">
-      <div class="row between">
-        <span class="label">夺冠进度</span>
-        <span class="mono" id="progressNum">--</span>
-      </div>
-      <div class="bar"><i id="progressBar" style="width:0%"></i></div>
-      <div class="row between small muted">
-        <span id="progressLeft">--</span>
-        <span id="progressPct">0%</span>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="row between">
-        <span class="label">打工</span>
-        <span class="small muted">无次数限制</span>
-      </div>
-      <p class="hint">
-        现金不足 30 万日元时，可以打一次工，一次性把现金补齐到 <b>30 万</b>。
-        亏光了也能重来——但对手不会等你。
-      </p>
-      <button class="btn btn-job" id="jobBtn" disabled>去打工（补齐到 30 万）</button>
-      <p class="tiny muted" id="jobNote"></p>
-    </div>
-
-    <div class="card">
-      <div class="row between">
-        <span class="label">唯一标的</span>
-        <a class="link" data-goto="market">去看行情</a>
-      </div>
-      <div class="mini-stock">
-        <img class="icon" src="/assets/stocks/LMFX.jpeg" alt="" />
-        <div class="mini-main">
-          <b>留美外汇 <span class="code">LMFX</span></b>
-          <span class="tiny muted">外汇自营 · 套息交易 · 高杠杆</span>
+      <div class="card status-card">
+        <div class="status-head">
+          <span class="label">赛区状态</span>
+          <span id="statusText" class="status-text">--</span>
         </div>
-        <div class="mini-price">
-          <b id="homePrice">--</b>
-          <span id="homeChg" class="tiny">--</span>
+        <div class="clock" id="clock">--:--:--</div>
+        <div class="clock-hint" id="clockHint">距开赛</div>
+      </div>
+
+      <div class="card">
+        <div class="row between">
+          <span class="label">夺冠进度</span>
+          <span class="mono" id="progressNum">--</span>
+        </div>
+        <div class="bar"><i id="progressBar" style="width:0%"></i></div>
+        <div class="row between small muted">
+          <span id="progressLeft">--</span>
+          <span id="progressPct">0%</span>
         </div>
       </div>
+
+      <div class="card">
+        <div class="row between">
+          <span class="label">打工</span>
+          <span class="small muted">无次数限制</span>
+        </div>
+        <p class="hint">
+          现金不足 30 万日元时，可以打一次工，一次性把现金补齐到 <b>30 万</b>。
+          亏光了也能重来——但对手不会等你。
+        </p>
+        <button class="btn btn-job" id="jobBtn" disabled>去打工（补齐到 30 万）</button>
+        <p class="tiny muted" id="jobNote"></p>
+      </div>
     </div>
 
-    <div class="card">
-      <span class="label">规则</span>
-      <ul class="rules">
-        <li>起手现金 30 万日元，标的只有 <b>LMFX（留美外汇）</b> 一只。</li>
-        <li>支持 1~20 倍杠杆、做多/做空，手续费 0.02%（开平各收一次）。</li>
-        <li>保证金只剩 5% 时<b>强制平仓</b>，这一仓的钱就没了。</li>
-        <li>第一个把权益做到 <b>2000 万</b> 的人夺冠，赛区立刻冻结，排名定格。</li>
-      </ul>
+    <div class="home-col">
+      <div class="card">
+        <div class="row between">
+          <span class="label">唯一标的</span>
+          <a class="link" data-goto="market">去看行情</a>
+        </div>
+        <div class="mini-stock">
+          <img class="icon" src="/assets/stocks/LMFX.jpeg" alt="" />
+          <div class="mini-main">
+            <b>留美外汇 <span class="code">LMFX</span></b>
+            <span class="tiny muted">外汇自营 · 套息交易 · 高杠杆</span>
+          </div>
+          <div class="mini-price">
+            <b id="homePrice">--</b>
+            <span id="homeChg" class="tiny">--</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row between">
+          <span class="label">实时排名</span>
+          <a class="link" data-goto="rank">完整榜单</a>
+        </div>
+        <div id="homeRank" class="mini-rank">
+          <p class="tiny muted">还没有人参赛</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <span class="label">规则</span>
+        <ul class="rules">
+          <li>起手现金 30 万日元，标的只有 <b>LMFX（留美外汇）</b> 一只。</li>
+          <li>支持 1~20 倍杠杆、做多/做空，手续费 0.02%（开平各收一次）。</li>
+          <li>保证金只剩 5% 时<b>强制平仓</b>，这一仓的钱就没了。</li>
+          <li>第一个把权益做到 <b>2000 万</b> 的人夺冠，赛区立刻冻结，排名定格。</li>
+        </ul>
+      </div>
     </div>
   </section>
 
