@@ -593,6 +593,15 @@ function p2(n) {
   return String(n).padStart(2, '0');
 }
 
+/** 手指操作（手机/平板）：十字光标抬手就收，读数要留着 */
+function coarsePointer() {
+  try {
+    return window.matchMedia('(pointer: coarse)').matches;
+  } catch {
+    return window.innerWidth < 760;
+  }
+}
+
 /** 时间轴标签：HH:MM */
 function hmLabel(sec) {
   const d = new Date(sec * 1000);
@@ -660,6 +669,8 @@ function ensureChart() {
       crosshairMarkerVisible: false
     });
   }
+  // 指到某根 K 线时在图上方显示这根的开高低收
+  bindHover(chart);
   // 右侧价格刻度：触摸下只有开着 vertTouchDrag 才拖得动（库的既有行为），
   // 但全局开它，手指落在图上竖滑就滚不动页面了。
   // 折中：按下点落在刻度条上时临时打开，抬手（rAF 后，别抢库自己的 touchend）再关回去
@@ -697,6 +708,48 @@ function ensureChart() {
   return chart;
 }
 
+/** 十字光标读数：指到哪根 K 线就显示哪根的开高低收，和主站一模一样 */
+function bindHover(c) {
+  if (!c || c.__hoverBound) return;
+  c.__hoverBound = true;
+  c.subscribeCrosshairMove((param) => {
+    const box = $('#hoverInfo');
+    if (!box) return;
+    const bars = state.bars;
+    const bar = param && param.time && param.point && param.seriesData
+      ? param.seriesData.get(candle)
+      : null;
+    if (!bar || !Array.isArray(bars) || !bars.length) {
+      // 手机上抬手后库会把十字光标收掉，读数留着，方便看完这根再继续滑；
+      // 桌面鼠标移出图就清空，和主站一致
+      if (!coarsePointer()) box.innerHTML = '';
+      return;
+    }
+    let idx = -1;
+    for (let i = bars.length - 1; i >= 0; i--) {
+      if (bars[i].time === param.time) { idx = i; break; }
+    }
+    const prevClose = idx > 0 ? bars[idx - 1].close : bar.open;
+    const chg = prevClose ? ((bar.close - prevClose) / prevClose) * 100 : 0;
+    const amp = prevClose ? ((bar.high - bar.low) / prevClose) * 100 : 0;
+    const cls = chg > 0 ? 'up' : chg < 0 ? 'down' : 'flat';
+    const d = new Date(param.time * 1000);
+    const sameDay = new Date().toDateString() === d.toDateString();
+    const when = sameDay
+      ? `${p2(d.getHours())}:${p2(d.getMinutes())}`
+      : `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+    // 汇率的日内波动比股票小两个数量级，涨跌幅/振幅给到 3 位小数才看得出差别
+    box.innerHTML = `
+      <span class="hi-time">${when}</span>
+      <span>开 <b>${price3(bar.open)}</b></span>
+      <span>高 <b class="up">${price3(bar.high)}</b></span>
+      <span>低 <b class="down">${price3(bar.low)}</b></span>
+      <span>收 <b>${price3(bar.close)}</b></span>
+      <span class="hi-chg ${cls}">${chg >= 0 ? '+' : ''}${chg.toFixed(3)}%</span>
+      <span class="hi-amp">振幅 ${amp.toFixed(3)}%</span>`;
+  });
+}
+
 /** 5 秒一个的报价点 → 指定周期的 OHLC 现在由后端算（/api/tour/candles），
  *  前端只负责画图和算均线 —— 条数和主站一致，见 TOUR_TFS */
 
@@ -715,6 +768,11 @@ function maLine(bars, n) {
 function drawChart(bars, reset = false) {
   const hint = $('#chartHint');
   const list = Array.isArray(bars) ? bars : [];
+  // 换周期 / 切 tab 时把读数清掉，别留着上一个周期的数字
+  if (reset) {
+    const box = $('#hoverInfo');
+    if (box) box.innerHTML = '';
+  }
   // 一根 K 线画面没意义，继续显示提示。
   // 注意得先把图清空：否则切到 5 分/15 分时会留着上一个周期的柱子，
   // 提示文字叠在旧 K 线上，看起来像卡住了。
