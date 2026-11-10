@@ -115,7 +115,7 @@
       <div class="card">
         <span class="label">规则</span>
         <ul class="rules">
-          <li>起手现金 30 万日元，标的只有 <b>LMFX（留美外汇）</b> 一只，股价就是模拟汇率本身，不掺任何内部因素。</li>
+          <li>起手现金 30 万日元，标的只有 <b>LMFX（留美外汇）</b> 一只，报价就是实时 AUD/JPY 汇率本身，不做任何加工。</li>
           <li>支持 1~100 倍杠杆、做多/做空，手续费 0.02%（开平各收一次）。</li>
           <li>保证金只剩 5% 时<b>强制平仓</b>，这一仓的钱就没了。</li>
           <li>第一个把权益做到 <b>2000 万</b> 的人夺冠，赛区立刻冻结，排名定格。</li>
@@ -139,7 +139,7 @@
         <span id="mktChg" class="chg">--</span>
       </div>
       <div class="quote-sub">
-        <span>模拟汇率 <b id="fxRate">--</b> AUD/JPY</span>
+        <span>报价源 <b id="fxSource">--</b> · AUD/JPY</span>
         <span id="frozenTag" class="tiny">行情实时</span>
       </div>
       <canvas id="chart" height="150"></canvas>

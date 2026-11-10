@@ -11,7 +11,7 @@ import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, logTrade } from './src/trading.js';
 import { processOrders, fillCapFor } from './src/orders.js';
 import { autoDcaTick } from './src/autoDca.js';
-import { tourTick } from './src/tour.js';
+import { tourTick, setTourRate } from './src/tour.js';
 import { marketPhase, phaseText } from './src/schedule.js';
 import { checkDelist } from './src/delist.js';
 import { fetchAudJpy } from './src/fx.js';
@@ -713,13 +713,14 @@ function loop() {
   lastTickAt = now();
 }
 
-// ---------------- 实时汇率（留美外汇的驱动）----------------
+// ---------------- 实时汇率（主市场 fx 票 + 锦标赛 LMFX 共用一次抓取）----------------
 async function refreshFx() {
   const d = getDb();
   if (!d.fx) d.fx = { rate: 0, base: 0, prevRate: 0, at: 0, source: '' };
   const r = await fetchAudJpy();
   if (!r) {
     d.fx.stale = true;
+    setTourRate(d, 0);            // 抓失败：赛区只标 stale，价格原地不动
     return;
   }
   d.fx.prevRate = d.fx.rate || r.rate;
@@ -729,19 +730,25 @@ async function refreshFx() {
   d.fx.stale = false;
   // 第一次抓到的汇率作为基准点，之后股价按相对它涨跌
   if (!d.fx.base) d.fx.base = r.rate;
+  // 锦标赛的 LMFX 直接报这个汇率，不做任何再计算
+  setTourRate(d, r.rate, r.at, r.source);
 }
 
 let fxTimer = null;
 let fxLastAt = 0;
 function startFxLoop() {
-  // 每 5 秒瞄一眼：到点没到点、开没开，都是现读个股设置
+  // 每 5 秒瞄一眼：到点没到点、开没开，都是现读个股设置。
+  // 主市场已经没有 fx 票了（LMFX 退市），这个循环现在主要喂锦标赛：
+  // 没有 fx 票时按锦标赛的 10 秒节奏抓，抓到的值同时写进 db.fx 和 db.tour.fx。
   const tick = () => {
     const d = getDb();
     const fxStock = Object.values(d.stocks).find((st) => st.trait?.id === 'fx');
-    if (!fxStock) return;
-    const t = fxStock.trait || {};
-    if (Number(t.fxEnabled ?? d.config.fxEnabled ?? 1) === 0) return;
-    const ms = Math.max(15000, Number(t.refreshMs ?? d.config.fxRefreshMs ?? 60000));
+    const t = fxStock ? (fxStock.trait || {}) : {};
+    if (fxStock && Number(t.fxEnabled ?? d.config.fxEnabled ?? 1) === 0) return;
+    const ms = Math.max(
+      15000,
+      Number(fxStock ? (t.refreshMs ?? d.config.fxRefreshMs ?? 60000) : 10000)
+    );
     if (Date.now() - fxLastAt < ms) return;
     fxLastAt = Date.now();
     refreshFx().catch((e) => console.error('[fx] 抓取失败:', e.message));

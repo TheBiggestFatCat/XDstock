@@ -27,8 +27,9 @@ function money2(v) {
   return '¥' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function price2(v) {
-  return (Number(v) || 0).toFixed(2);
+/** 报价 3 位小数，跟 AUD/JPY 的零售报价对齐（109.018） */
+function price3(v) {
+  return (Number(v) || 0).toFixed(3);
 }
 
 /** 杠杆上限以后端 maxLeverage 为准，前端不写死数字 */
@@ -159,18 +160,26 @@ function render() {
   }
 
   // 首页标的
-  $('#homePrice').textContent = price2(d.stock.price);
+  const px = Number(d.stock.price) || 0;
+  $('#homePrice').textContent = px > 0 ? price3(px) : '--';
   const chg = $('#homeChg');
-  chg.textContent = pct(d.stock.changePct, 2);
+  chg.textContent = px > 0 ? pct(d.stock.changePct, 2) : '';
   chg.className = 'tiny ' + chgClass(d.stock.changePct);
 
   // 行情
-  $('#mktPrice').textContent = price2(d.stock.price);
+  $('#mktPrice').textContent = px > 0 ? price3(px) : '--';
   const mchg = $('#mktChg');
-  mchg.textContent = pct(d.stock.changePct, 2);
+  mchg.textContent = px > 0 ? pct(d.stock.changePct, 2) : '';
   mchg.className = chgClass(d.stock.changePct);
-  $('#fxRate').textContent = Number(d.stock.fxRate).toFixed(2);
-  $('#frozenTag').textContent = status === 'ended' ? '行情已冻结' : status === 'running' ? '行情实时' : '等待开赛';
+  // 价格就是汇率，不再重复显示一遍数字；这里只标数据来自哪儿
+  const src = String(d.stock.fxSource || '');
+  const srcName = src === 'swissquote' ? 'Swissquote' : src === 'fxratesapi' ? 'fxratesapi' : '';
+  $('#fxSource').textContent = px > 0 ? (srcName || '已接上') : '连接中';
+  $('#frozenTag').textContent = status === 'ended'
+    ? '行情已冻结'
+    : status === 'running'
+      ? (d.stock.fxStale ? '汇率更新中断' : '行情实时')
+      : (px > 0 ? '等待开赛' : '连接汇率中');
   drawChart(d.stock.series);
 
   // 交易面板
@@ -230,7 +239,9 @@ function renderTrade(me, status) {
   const perUnit = price * (1 / lev + feeRate);
   const maxQty = perUnit > 0 ? Math.floor((cash * 0.995) / perUnit) : 0;
   $('#qtyHint').textContent = state.token
-    ? (maxQty > 0 ? `最多 ${maxQty.toLocaleString('en-US')} 份` : '现金不够开仓')
+    ? (price > 0
+      ? (maxQty > 0 ? `最多 ${maxQty.toLocaleString('en-US')} 份` : '现金不够开仓')
+      : '等待实时汇率')
     : '登录后可交易';
 
   // 滑块已选区的填充比例（自绘轨道用）
@@ -295,7 +306,7 @@ function renderPosition(me) {
     </div>
     <div class="pos-grid">
       <span>数量 <b>${p.qty.toLocaleString('en-US')} 份</b></span>
-      <span>均价 <b>${price2(p.entry)}</b></span>
+      <span>均价 <b>${price3(p.entry)}</b></span>
       <span>保证金 <b>${money(p.margin)}</b></span>
       <span>收益率 <b class="${pnlCls === 'up' ? 'chg up' : 'chg down'}">${pct(roe)}</b></span>
     </div>
@@ -322,7 +333,7 @@ function renderLog(me) {
         <span class="log-tag">${label[r.action] || r.action}</span>
         <span class="log-time">${hh}</span>
       </span>
-      <span class="mono">${side} ${Number(r.qty).toLocaleString('en-US')} @${price2(r.price)}</span>
+      <span class="mono">${side} ${Number(r.qty).toLocaleString('en-US')} @${price3(r.price)}</span>
       <span class="mono ${hasPnl ? (pnl >= 0 ? 'chg up' : 'chg down') : 'muted'}">
         ${hasPnl ? (pnl >= 0 ? '+' : '-') + money(Math.abs(pnl)) : '—'}
       </span>
@@ -400,8 +411,9 @@ function drawChart(series) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
 
-  // 还没开赛：画条虚线 + 提示，别留一块纯白
+  // 还没开赛 / 还没抓到汇率：画条虚线 + 提示，别留一块纯白
   if (!Array.isArray(series) || series.length < 2) {
+    const running = state.data && state.data.status === 'running';
     ctx.strokeStyle = 'rgba(15,42,38,.13)';
     ctx.setLineDash([6, 6]);
     ctx.lineWidth = 1;
@@ -413,15 +425,15 @@ function drawChart(series) {
     ctx.fillStyle = 'rgba(15,42,38,.40)';
     ctx.font = '13px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('开赛后这里显示 LMFX 的实时走势', w / 2, h / 2 - 16);
+    ctx.fillText(running ? '正在连接实时汇率…' : '开赛后这里显示 LMFX 的实时走势', w / 2, h / 2 - 16);
     return;
   }
 
   const pad = 6;
   let lo = Math.min(...series);
   let hi = Math.max(...series);
-  // 股价 1:1 跟随汇率后单轮波动只有 0.09%，序列短的时候别把 0.05% 画成崩盘
-  const MIN_SPAN = 0.6;
+  // 序列最前面的价位（近似水平）时，别把 0.01 的抖动放大成崩盘
+  const MIN_SPAN = 0.05;
   if (hi - lo < MIN_SPAN) {
     const mid = (hi + lo) / 2;
     lo = mid - MIN_SPAN / 2;
@@ -496,7 +508,7 @@ async function doOpen() {
       body: JSON.stringify({ action: 'open', side: state.side, qty, leverage: state.lev })
     });
     state.data = r.state;
-    toast(`成交：${state.side === 'long' ? '做多' : '做空'} ${qty.toLocaleString('en-US')} 份 @${price2(r.price)}`);
+    toast(`成交：${state.side === 'long' ? '做多' : '做空'} ${qty.toLocaleString('en-US')} 份 @${price3(r.price)}`);
     render();
   } catch (e) {
     toast(e.message, 'err');

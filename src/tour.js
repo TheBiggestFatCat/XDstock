@@ -4,9 +4,9 @@
 //   · 完全独立的一套账：自己的现金（日元）、自己的持仓、自己的价格序列，
 //     不碰 db.players / db.stocks，主市场一行都不受影响。
 //   · 只挂在主循环的末尾跑一步（server.js#tourTick），赢了就 frozen，价格与成交一起冻结。
-//   · 标的机制：股价就是汇率本身 —— 每轮直接取「初始价 × 汇率 / 基准汇率」，
-//     不做杠杆放大、不叠加溢价、不记玩家成交冲击，行情图和汇率曲线完全重合。
-//     汇率由引擎内模拟（不依赖外部 Swissquote 接口，本地/离线都能跑）。
+//   · 标的机制：股价就是实时汇率 —— 每轮直接取抓到的 AUD/JPY 原值，
+//     不归一化、不放大、不叠加溢价、不记成交冲击，报价和任何行情软件上的 AUD/JPY 完全一致。
+//     汇率由 server.js#tourFxLoop 定时抓取（src/fx.js），本模块只负责读最新值。
 //   · 这里不 import 任何模块，避免 store.js → tour.js → engine.js → store.js 的循环引用。
 
 /** 起手资金：30 万日元 */
@@ -16,25 +16,10 @@ export const TOUR_TARGET = 20000000;
 /** 手续费（开平仓都收，按成交额） */
 export const TOUR_FEE_RATE = 0.0002;
 export const TOUR_MAX_LEVERAGE = 100;
-/** 汇率每轮波动（股价 1:1 跟随，不做任何放大） */
-const FX_VOL = 0.0009;
-/** 汇率偶发跳空：概率 × 幅度 —— 一把翻身的来源，也是爆仓的来源 */
-const FX_JUMP_P = 0.004;
-const FX_JUMP_MIN = 0.012;
-const FX_JUMP_MAX = 0.03;
-/** 汇率往基准回归的强度，别跑成单边行情 */
-const FX_REVERT = 0.0006;
+/** 报价序列上限（每个 tick 一个点） */
 const SERIES_MAX = 900;
 const TRADE_LOG_MAX = 120;
 const PLAYER_LOG_MAX = 24;
-
-function gauss() {
-  let u = 0;
-  let v = 0;
-  while (u === 0) u = Math.random();
-  while (v === 0) v = Math.random();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-}
 
 function num(x, d = 0) {
   const v = Number(x);
@@ -43,6 +28,11 @@ function num(x, d = 0) {
 
 function r2(v) {
   return Math.round(v * 100) / 100;
+}
+
+/** 报价保留 3 位小数：AUD/JPY 的零售报价就是 109.018 这个精度 */
+function r3(v) {
+  return Math.round(v * 1000) / 1000;
 }
 
 function clamp(v, lo, hi) {
@@ -70,17 +60,16 @@ export function createTour(nowMs = Date.now()) {
     frozen: false,
     tick: 0,
     winner: null,
-    fx: { rate: 100, base: 100 },
+    fx: { rate: 0, at: 0, source: '', stale: true },
     stock: {
       code: 'LMFX',
       name: '留美外汇',
       icon: '/assets/stocks/LMFX.jpeg',
       industry: '金融',
       desc: '外汇自营、套息交易、高杠杆',
-      initialPrice: 100,
-      price: 100,
-      prev: 100,
-      series: [100]
+      price: 0,
+      prev: 0,
+      series: []
     },
     players: {},
     trades: [],
@@ -103,10 +92,14 @@ export function ensureTour(db) {
   for (const [k, v] of Object.entries(base.stock)) {
     if (t.stock[k] === undefined || t.stock[k] === null) t.stock[k] = v;
   }
-  if (!Array.isArray(t.stock.series) || !t.stock.series.length) t.stock.series = [t.stock.price];
-  if (!t.fx || typeof t.fx !== 'object') t.fx = base.fx;
-  if (!(num(t.fx.base) > 0)) t.fx.base = num(t.fx.rate, 100) || 100;
-  if (!(num(t.fx.rate) > 0)) t.fx.rate = t.fx.base;
+  delete t.stock.initialPrice;   // 不再用初始价，股价就是汇率原值
+  if (!Array.isArray(t.stock.series)) t.stock.series = [];
+  if (!t.fx || typeof t.fx !== 'object') t.fx = {};
+  for (const [k, v] of Object.entries(base.fx)) {
+    if (t.fx[k] === undefined || t.fx[k] === null) t.fx[k] = v;
+  }
+  delete t.fx.base;              // 老存档的归一化基准，一并清掉
+  if (!(num(t.fx.rate) > 0)) t.fx.rate = 0;
   if (!t.players || typeof t.players !== 'object') t.players = {};
   if (!Array.isArray(t.trades)) t.trades = [];
   return t;
@@ -132,7 +125,7 @@ function maybeStart(t) {
   }
 }
 
-/** 守卫：没开赛 / 已结束都拒绝下单 */
+/** 守卫：没开赛 / 已结束 / 汇率还没接上都拒绝下单 */
 function guard(t) {
   if (!t) return { ok: false, error: '锦标赛还没初始化' };
   if (t.frozen) return { ok: false, error: '锦标赛已结束，行情已冻结' };
@@ -148,6 +141,7 @@ function guard(t) {
       error: left > 0 ? `锦标赛 ${when} 开赛，还有约 ${min} 分钟` : '锦标赛即将开始，稍等一轮'
     };
   }
+  if (!(num(t.fx.rate) > 0)) return { ok: false, error: '汇率还没接上，稍后再试' };
   return null;
 }
 
@@ -195,31 +189,45 @@ function logTourTrade(t, g, row) {
 }
 
 /**
- * 价格走一步：汇率随机游走一步，股价 = 初始价 × 汇率 / 基准汇率。
- * 纯映射，不乘杠杆、不加溢价、不吃成交冲击 —— 第 N 轮的股价永远只由第 N 轮的汇率决定。
+ * 价格走一步：股价 = 抓到的 AUD/JPY 原值。
+ * 不归一化、不放大、不吃成交冲击 —— 抓不到新汇率就原地不动，绝不自己编一个数出来。
  */
 function stepPrice(t) {
-  const fx = t.fx;
-  let ret = gauss() * FX_VOL;
-  if (Math.random() < FX_JUMP_P) {
-    const mag = FX_JUMP_MIN + Math.random() * (FX_JUMP_MAX - FX_JUMP_MIN);
-    ret += (Math.random() < 0.5 ? -1 : 1) * mag;
-  }
-  fx.rate *= Math.exp(ret);
-  if (fx.base > 0 && fx.rate > 0) {
-    // 慢慢往基准拉回来，别跑成单边行情
-    fx.rate *= Math.exp(FX_REVERT * Math.log(fx.base / fx.rate));
-    fx.rate = clamp(fx.rate, fx.base * 0.3, fx.base * 3);
-  }
-
-  const ratio = fx.rate / Math.max(1e-9, fx.base);
-  const p = num(t.stock.initialPrice, 100) * ratio;
-  t.stock.prev = num(t.stock.price, p);
-  t.stock.price = Math.max(0.01, r2(p));
-  t.stock.series.push(t.stock.price);
+  const rate = num(t.fx.rate, 0);
+  if (!(rate > 0)) return;
+  const px = r3(rate);
+  // 汇率没变（抓取间隔内常见）：价格原地不动，也别往序列里插重复点
+  if (t.stock.series.length && px === num(t.stock.price, -1)) return;
+  t.stock.prev = num(t.stock.price, px);
+  t.stock.price = px;
+  t.stock.series.push(px);
   if (t.stock.series.length > SERIES_MAX) {
     t.stock.series.splice(0, t.stock.series.length - SERIES_MAX);
   }
+}
+
+/**
+ * 写入一次抓取结果（server.js#tourFxLoop 调用）。
+ * 抓失败传 rate <= 0：只标 stale，价格保持上一次的值。
+ * 还没开赛时同步把报价对齐，免得开赛第一轮从占位值跳一大截。
+ */
+export function setTourRate(db, rate, at = Date.now(), source = '') {
+  const t = ensureTour(db);
+  const v = num(rate, 0);
+  if (!(v > 0)) {
+    t.fx.stale = true;
+    return false;
+  }
+  t.fx.rate = v;
+  t.fx.at = num(at, Date.now());
+  t.fx.source = String(source || '');
+  t.fx.stale = false;
+  if (!t.startedAt && !t.frozen) {
+    t.stock.prev = r3(v);
+    t.stock.price = r3(v);
+    t.stock.series = [t.stock.price];
+  }
+  return true;
 }
 
 /** 爆仓线：保证金只剩 5% 时强平 */
@@ -474,10 +482,13 @@ export function tourState(db, player) {
       icon: t.stock.icon,
       industry: t.stock.industry,
       desc: t.stock.desc,
-      price: r2(t.stock.price),
-      prev: r2(t.stock.prev),
+      price: r3(t.stock.price),
+      prev: r3(t.stock.prev),
       changePct: first > 0 ? Math.round(((t.stock.price / first) - 1) * 10000) / 100 : 0,
-      fxRate: Math.round(num(t.fx.rate) * 100) / 100,
+      fxRate: r3(t.fx.rate),
+      fxAt: num(t.fx.at),
+      fxSource: t.fx.source || '',
+      fxStale: t.fx.stale !== false,
       series
     },
     me: me
@@ -497,7 +508,7 @@ export function tourState(db, player) {
             code: 'LMFX',
             side: me.positions.LMFX.side,
             qty: me.positions.LMFX.qty,
-            entry: r2(me.positions.LMFX.entry),
+            entry: r3(me.positions.LMFX.entry),
             margin: r2(me.positions.LMFX.margin),
             leverage: Math.round(num(me.positions.LMFX.leverage, 1) * 10) / 10,
             pnl: r2(

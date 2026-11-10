@@ -8,7 +8,7 @@
 import { createDb } from '../src/store.js';
 import {
   createTour, ensureTour, nextStartAt, tourTick, tourOpen, tourClose, tourJob,
-  tourState, tourEquity, tourStatus, joinTour,
+  tourState, tourEquity, tourStatus, joinTour, setTourRate,
   TOUR_START_CASH, TOUR_TARGET, TOUR_MAX_LEVERAGE
 } from '../src/tour.js';
 
@@ -30,6 +30,8 @@ function newDb() {
   };
   // 每个用例都从「已经开赛」开始，省得每次等 21:00
   db.tour.startAt = Date.now() - 1000;
+  // 锦标赛报价就是抓到的 AUD/JPY，测试里给一个固定值当「已经连上汇率」
+  setTourRate(db, 108.9, Date.now(), 'test');
   tourTick(db);
   // 参赛账号在第一次打开页面时就建好，这里提前建，方便用例直接改它的账
   joinTour(db.tour, pA);
@@ -38,12 +40,11 @@ function newDb() {
 }
 
 /**
- * 把价格摆到指定位置：股价由汇率算出来，改价格会被下一轮覆盖，
- * 所以改汇率（ratio^(1/8) 反解），再清掉溢价与资金压力
+ * 把报价摆到指定位置：股价就是汇率原值，所以直接改 fx.rate，
+ * 下一轮 stepPrice 会算出同一个价。
  */
 function setPrice(t, px) {
-  // 股价 = 初始价 × (汇率 / 基准汇率)，这里反解汇率，下一轮 stepPrice 会算出同一个价
-  t.fx.rate = t.fx.base * (px / t.stock.initialPrice);
+  t.fx.rate = px;
   t.stock.price = px;
 }
 
@@ -57,11 +58,61 @@ const pB = { id: 'b', nickname: '阿乙' };
   check('夺冠线 2000 万日元', TOUR_TARGET === 20000000, String(TOUR_TARGET));
   check('初始状态 = 未开赛', tourStatus(t) === 'pending', tourStatus(t));
   check('标的只有 LMFX', t.stock.code === 'LMFX' && t.stock.name === '留美外汇', t.stock.code);
-  check('初始价 100', t.stock.price === 100, String(t.stock.price));
+  check('未连上汇率时没有报价', t.stock.price === 0 && t.fx.rate === 0,
+    `${t.stock.price} / ${t.fx.rate}`);
 
   const s = new Date(t.startAt);
   check('开赛时间在 21:00 整', s.getHours() === 21 && s.getMinutes() === 0, s.toLocaleString());
   check('开赛时间晚于当前', t.startAt > Date.now(), new Date(t.startAt).toISOString());
+}
+
+// ---------------- 1.5 汇率接入 ----------------
+{
+  const db = createDb();
+  const t = db.tour;
+  check('新赛区还没汇率', t.fx.rate === 0 && t.fx.stale === true, JSON.stringify(t.fx));
+
+  // 还没开赛：抓到汇率就把报价对齐，别等第一轮从占位值跳一大截
+  setTourRate(db, 108.93, Date.now(), 'swissquote');
+  check('抓到汇率后报价对齐', t.stock.price === 108.93 && t.stock.prev === 108.93, String(t.stock.price));
+  check('series 重置成一个点', t.stock.series.length === 1 && t.stock.series[0] === 108.93,
+    JSON.stringify(t.stock.series));
+  check('来源/时间记上了', t.fx.source === 'swissquote' && t.fx.at > 0 && t.fx.stale === false,
+    JSON.stringify(t.fx));
+  check('不再有 base 和 initialPrice', t.fx.base === undefined && t.stock.initialPrice === undefined,
+    `${t.fx.base} / ${t.stock.initialPrice}`);
+
+  // 抓失败：只标 stale，价格原地不动
+  const before = t.stock.price;
+  check('抓失败返回 false', setTourRate(db, 0) === false);
+  check('抓失败价格不动', t.stock.price === before && t.fx.rate === 108.93, String(t.stock.price));
+  check('抓失败标 stale', t.fx.stale === true);
+}
+
+{
+  // 开赛之后：股价每轮严格等于汇率原值
+  const db = newDb();
+  const t = db.tour;
+  setTourRate(db, 111.11);
+  tourTick(db);
+  check('开赛后台股价 = 汇率', t.stock.price === 111.11, String(t.stock.price));
+  check('prev 跟上一次同步', t.stock.prev === 108.9, String(t.stock.prev));
+  check('快照里 price 和 fxRate 一致',
+    tourState(db).stock.price === tourState(db).stock.fxRate,
+    `${tourState(db).stock.price} / ${tourState(db).stock.fxRate}`);
+}
+
+{
+  // 开赛了但一次都没抓到汇率 → 不能下单（否则会按 0 或占位价成交）
+  const db = createDb();
+  db.players = { a: { id: 'a', nickname: '阿甲', cash: 0, positions: {}, orders: [] } };
+  const t = db.tour;
+  t.startAt = Date.now() - 1000;
+  joinTour(t, pA);
+  const r = tourOpen(db, pA, { side: 'long', qty: 1, leverage: 1 });
+  check('汇率没接上不能下单', r.ok === false && /汇率/.test(r.error), r.error);
+  const j = tourJob(db, pA);
+  check('汇率没接上也不能打工', j.ok === false && /汇率/.test(j.error), j.error);
 }
 
 {
@@ -100,21 +151,30 @@ const pB = { id: 'b', nickname: '阿乙' };
 {
   const db = createDb();
   db.tour.startAt = Date.now() - 1;
+  setTourRate(db, 108.5);                 // 开赛前先把汇率接上
   const before = db.tour.stock.price;
   tourTick(db);
   check('到点自动开赛', db.tour.startedAt > 0 && tourStatus(db.tour) === 'running');
   check('tick 从 1 开始', db.tour.tick === 1, String(db.tour.tick));
-  check('价格是有效数字', Number.isFinite(db.tour.stock.price) && db.tour.stock.price > 0,
+  check('开赛首轮沿用当前汇率', db.tour.stock.price === 108.5 && before === 108.5,
     `${before} -> ${db.tour.stock.price}`);
-  check('价格序列 +1 点', db.tour.stock.series.length === 2, String(db.tour.stock.series.length));
+  check('汇率没变不插重复点', db.tour.stock.series.length === 1, String(db.tour.stock.series.length));
 
-  for (let i = 0; i < 5; i++) tourTick(db);
+  for (let i = 1; i <= 5; i++) {
+    setTourRate(db, 108.5 + i * 0.1);     // 汇率每轮动一下
+    tourTick(db);
+  }
   check('连续推进 tick 累加', db.tour.tick === 6, String(db.tour.tick));
+  check('汇率变了价格就跟着走', new Set(db.tour.stock.series).size === 6,
+    String(new Set(db.tour.stock.series).size));
+  check('价格严格等于最后一次汇率', near(db.tour.stock.price, 109, 1e-9), String(db.tour.stock.price));
 
-  for (let i = 0; i < 40; i++) tourTick(db);
-  check('价格会真的走（40 轮里出现多个价位）',
-    new Set(db.tour.stock.series).size > 1, String(new Set(db.tour.stock.series).size));
-  check('价格始终为正', db.tour.stock.price > 0, String(db.tour.stock.price));
+  // 汇率抓不到 → 价格原地不动，也不该插新点
+  const frozenPx = db.tour.stock.price;
+  for (let i = 0; i < 3; i++) tourTick(db);
+  check('汇率没更新时价格不动', db.tour.stock.price === frozenPx, String(db.tour.stock.price));
+  check('汇率没更新时序列不膨胀', db.tour.stock.series.length === 6,
+    String(db.tour.stock.series.length));
 }
 
 // ---------------- 4. 开仓 / 平仓 ----------------
