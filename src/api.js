@@ -16,7 +16,7 @@ import { getBuild } from './build.js';
 import { marketPhase, phaseText, normalizeSchedule, ensureSchedules, scheduleWindow, cyclePhase, fmtMinute, parseMinute, MINUTE_MS } from './schedule.js';
 import { playerEquity, positionPnl } from './trading.js';
 import { levelUpPlayer, withdrawFromBank, bankStatus } from './bank.js';
-import { tourState, tourOpen, tourClose, tourJob, tourCandles, TOUR_TFS } from './tour.js';
+import { tourState, tourOpen, tourClose, tourJob, tourCandles, tourSetClosed, tourStatus, ensureTour, TOUR_TFS } from './tour.js';
 import { placeLimitOrder, cancelOrder, orderLimitBlocked, consumeOrderSlot, fillCapFor } from './orders.js';
 import {
   THEMES as ACHV_THEMES, THEME_EMOJI, THEME_ACHIEVEMENTS, achvPayload, ensureAchvState,
@@ -815,7 +815,22 @@ export async function handleApi(ctx) {
         equity: playerEquity(db, p),
         cash: p.cash
       })),
-      marketOpen: db.config.marketOpen !== false
+      marketOpen: db.config.marketOpen !== false,
+      // 锦标赛：管理面板上的「休市 / 恢复」按钮读这块
+      tour: (() => {
+        const t = ensureTour(db);
+        return {
+          status: tourStatus(t),
+          closed: !!t.closed,
+          closedAt: Number(t.closedAt) || 0,
+          startAt: Number(t.startAt) || 0,
+          startedAt: Number(t.startedAt) || 0,
+          endedAt: Number(t.endedAt) || 0,
+          price: Number(t.stock.price) || 0,
+          players: Object.keys(t.players || {}).length,
+          winner: t.winner || null
+        };
+      })()
     });
   }
 
@@ -1188,6 +1203,19 @@ export async function handleApi(ctx) {
       marketOpen: db.config.marketOpen,
       phase: marketPhase(db),
       phaseText: phaseText(marketPhase(db))
+    });
+  }
+
+  if (pathname === '/api/admin/tour' && method === 'POST') {
+    // 锦标赛休市：和上面的 /api/admin/market 一个手感，只是作用在赛区
+    const r = tourSetClosed(db, body.closed !== false);
+    if (!r.ok) return json(res, 400, r);
+    saveDb();
+    const t = ensureTour(db);
+    return json(res, 200, {
+      ...r,
+      price: Number(t.stock.price) || 0,
+      status: tourStatus(t)
     });
   }
 

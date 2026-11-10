@@ -6223,6 +6223,38 @@ async function loadAdmin() {
     };
   }
 
+  // 锦标赛控制：独立赛区，休市只管赛区（价格停走、成交暂停），不影响主市场
+  const tt = d.tour || null;
+  const tState = $('#tourAdminState');
+  if (tState && tt) {
+    const ended = tt.status === 'ended';
+    const closed = tt.status === 'closed';
+    tState.textContent = ended
+      ? '🏁 已结束'
+      : closed
+        ? '🔴 休市中'
+        : tt.startedAt ? '🟢 比赛进行中' : '🟡 筹备中';
+    tState.className = 'mc-state' + (ended || closed ? ' closed' : tt.startedAt ? ' open' : '');
+  }
+  const ttb = $('#tourToggleBtn');
+  if (ttb && tt) {
+    const closed = !!tt.closed;
+    const ended = tt.status === 'ended';
+    ttb.textContent = ended ? '已结束' : closed ? '恢复比赛' : '休市';
+    ttb.className = 'btn ' + (closed || ended ? 'btn-primary' : 'btn-danger');
+    ttb.disabled = ended;
+    ttb.onclick = async () => {
+      if (ended) return;
+      try {
+        await adminApi('/api/admin/tour', { closed: !closed });
+        toast(!closed ? '锦标赛已开市，恢复交易' : '锦标赛已休市，行情冻结', 'ok');
+        await loadAdmin();
+      } catch (e) {
+        toast(e.message, 'err');
+      }
+    };
+  }
+
   // 新闻标的
   $('#newsStocks').innerHTML = d.stocks.map((s) =>
     `<button class="chip-toggle" data-code="${s.code}">${s.name}</button>`).join('') +

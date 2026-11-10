@@ -9,7 +9,7 @@ import { createDb } from '../src/store.js';
 import {
   createTour, ensureTour, nextStartAt, tourTick, tourOpen, tourClose, tourJob,
   tourState, tourEquity, tourStatus, joinTour, setTourRate,
-  setTourHist, tourCandles, TOUR_TFS,
+  setTourHist, tourCandles, tourSetClosed, TOUR_TFS,
   TOUR_START_CASH, TOUR_TARGET, TOUR_MAX_LEVERAGE
 } from '../src/tour.js';
 
@@ -444,6 +444,51 @@ const pB = { id: 'b', nickname: '阿乙' };
   check('序列和时间戳同步裁剪',
     db2.tour.stock.seriesAt.length === db2.tour.stock.series.length,
     `${db2.tour.stock.seriesAt.length} / ${db2.tour.stock.series.length}`);
+}
+
+// ---------------- 休市（管理面板）/ 涨跌幅口径 ----------------
+{
+  const db = newDb();
+  const t = db.tour;
+  check('默认不是休市状态', t.closed === false && tourStatus(t) === 'running', tourStatus(t));
+
+  // 休市后价格不动、轮次不涨、下单被拒
+  const before = t.stock.price;
+  const tickBefore = t.tick;
+  const r1 = tourSetClosed(db, true);
+  check('休市设置成功', r1.ok && r1.closed === true);
+  check('休市后的状态 = closed', tourStatus(t) === 'closed', tourStatus(t));
+  t.fx.rate = before + 0.5;            // 汇率还在变，但赛区价格应该冻住
+  tourTick(db);
+  tourTick(db);
+  check('休市期间价格冻住', near(t.stock.price, before, 1e-9), String(t.stock.price));
+  check('休市期间轮次不涨', t.tick === tickBefore, `${t.tick} / ${tickBefore}`);
+  check('休市期间序列仍在落点（图上走平线）', t.stock.series.length > 0);
+  check('休市期间不能开仓',
+    tourOpen(db, pA, { side: 'long', qty: 10, leverage: 5 }).error === '锦标赛休市中，暂停交易');
+  check('休市期间不能打工', tourJob(db, pA).ok === false);
+  check('休市快照带 closed 标记', tourState(db, pA).closed === true);
+
+  // 恢复：价格回到实时汇率，可以继续交易
+  const r2 = tourSetClosed(db, false);
+  check('恢复成功', r2.ok && r2.closed === false);
+  check('恢复后状态回到 running', tourStatus(t) === 'running', tourStatus(t));
+  tourTick(db);
+  check('恢复后价格跟上汇率', near(t.stock.price, before + 0.5, 1e-6), String(t.stock.price));
+  check('恢复后可以开仓', tourOpen(db, pA, { side: 'long', qty: 10, leverage: 5 }).ok === true);
+
+  // 涨跌幅 = 所选周期最后一根 K 线相对前一根的涨跌
+  const db3 = createDb();
+  db3.tour.startAt = Date.now() - 1000;
+  const bars = [];
+  for (let i = 0; i < 5; i++) bars.push({ time: 1000 + i * 60, open: 100, high: 101, low: 99, close: 100 + i });
+  setTourHist(db3, '1m', bars);
+  const c = tourCandles(db3, '1m');
+  // 最后一根 close=104，前一根 close=103 → +0.9709%
+  check('K 线接口带 changePct', near(c.changePct, (104 / 103 - 1) * 100, 1e-3), String(c.changePct));
+  check('快照 changePct 用 1 分钟最后一根',
+    near(tourState(db3, null).stock.changePct, c.changePct, 1e-3),
+    `${tourState(db3, null).stock.changePct} / ${c.changePct}`);
 }
 
 console.log(out.join('\n'));

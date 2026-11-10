@@ -16,6 +16,7 @@ const state = {
   tf: 1,               // K 线周期（分钟）
   bars: [],            // 当前周期的 K 线（后端 /api/tour/candles 给的 OHLC）
   barsTf: '',          // state.bars 属于哪个周期，切周期时据此判定要不要先清空
+  barsChg: 0,          // 后端算的该周期涨跌幅（K 线还没回来时的兜底）
   barsAt: 0,           // 上次拉到 K 线的时间（毫秒）
   ma: { 5: true, 10: true, 30: false },
   qtyManual: false,
@@ -64,11 +65,20 @@ function pct(v, digit = 1) {
   return (n > 0 ? '+' : '') + n.toFixed(digit) + '%';
 }
 
-/** 涨跌配色：0 用灰色，避免「0.00% 却是红的」 */
+/** 涨跌配色：0 用灰色，避免「0.000% 却是红的」（3 位小数，阈值同步收到 0.0005） */
 function chgClass(v) {
   const n = Number(v) || 0;
-  if (Math.abs(n) < 0.005) return 'chg muted';
+  if (Math.abs(n) < 0.0005) return 'chg muted';
   return n > 0 ? 'chg up' : 'chg down';
+}
+
+/** 当前周期最后一根 K 线的涨跌幅：和图上那根、悬停读数完全同一个口径 */
+function lastBarChg(bars) {
+  if (!Array.isArray(bars) || bars.length < 2) return null;
+  const prev = Number(bars[bars.length - 2].close) || 0;
+  const last = Number(bars[bars.length - 1].close) || 0;
+  if (!(prev > 0)) return null;
+  return ((last - prev) / prev) * 100;
 }
 
 /** 主站那套 up / down / flat 三态（.big-price、表格里用） */
@@ -144,6 +154,7 @@ async function loadCandles(reset = false) {
     state.bars = Array.isArray(r.candles) ? r.candles : [];
     state.barsTf = tf;
     state.barsAt = Date.now();
+    state.barsChg = Number(r.changePct) || 0;
     drawChart(state.bars, reset);
   } catch (e) {
     console.error('[tour] K 线拉取失败', e);
@@ -173,16 +184,21 @@ function render() {
 
   // 顶栏
   const chip = $('#topStatus');
+  // 休市中沿用「筹备中」那颗琥珀色 chip（灰底也行，只是状态一眼能分开）
   chip.className = 'chip ' + (status === 'ended' ? 'chip-ended' : status === 'running' ? 'chip-live' : 'chip-pending');
-  chip.textContent = status === 'ended' ? '已结束' : status === 'running' ? '进行中' : '筹备中';
+  chip.textContent = status === 'ended' ? '已结束'
+    : status === 'running' ? '进行中'
+      : status === 'closed' ? '休市中' : '筹备中';
   $('#topCount').textContent = `${d.players} 人参赛`;
 
   // 状态卡
   $('#statusText').textContent = status === 'ended'
     ? '冠军已产生，行情冻结'
-    : status === 'running'
-      ? '比赛进行中'
-      : `${fmtStart(d.startAt)} 开赛`;
+    : status === 'closed'
+      ? '休市中，暂停交易'
+      : status === 'running'
+        ? '比赛进行中'
+        : `${fmtStart(d.startAt)} 开赛`;
   renderClock();
 
   // 进度
@@ -202,35 +218,46 @@ function render() {
   if (!me) {
     $('#jobNote').textContent = '登录后可以打工';
   } else if (status !== 'running') {
-    $('#jobNote').textContent = status === 'ended' ? '赛区已冻结' : '开赛后才能打工';
+    $('#jobNote').textContent = status === 'ended'
+      ? '赛区已冻结'
+      : status === 'closed' ? '休市中，暂停打工' : '开赛后才能打工';
   } else if (me.cash >= d.startCash) {
     $('#jobNote').textContent = `现金 ${money(me.cash)}，已经够 30 万，不用打工`;
   } else {
     $('#jobNote').textContent = `现金只剩 ${money(me.cash)}，打一次工补齐到 ${money(d.startCash)}（第 ${me.jobs + 1} 次）`;
   }
 
+  // 涨跌幅：跟「玩家所选周期最后一根 K 线」完全一致（悬停最后一根看到的也是这个数）；
+  // K 线还没拉回来时退回后端按 1 分钟算的值
+  const chgV = lastBarChg(state.bars)
+    ?? (state.barsTf === tfKey() && Number.isFinite(Number(state.barsChg))
+      ? Number(state.barsChg)
+      : Number(d.stock.changePct) || 0);
+
   // 首页标的
   const px = Number(d.stock.price) || 0;
   $('#homePrice').textContent = px > 0 ? price3(px) : '--';
   const chg = $('#homeChg');
-  chg.textContent = px > 0 ? pct(d.stock.changePct, 2) : '';
-  chg.className = 'tiny ' + chgClass(d.stock.changePct);
+  chg.textContent = px > 0 ? pct(chgV, 3) : '';
+  chg.className = 'tiny ' + chgClass(chgV);
 
   // 行情头
   $('#chartPrice').textContent = px > 0 ? price3(px) : '—';
-  $('#chartPrice').className = 'big-price ' + cls(d.stock.changePct);
+  $('#chartPrice').className = 'big-price ' + cls(chgV);
   const mchg = $('#chartChange');
-  mchg.textContent = px > 0 ? pct(d.stock.changePct, 2) : '—';
-  mchg.className = 'big-change ' + cls(d.stock.changePct);
+  mchg.textContent = px > 0 ? pct(chgV, 3) : '—';
+  mchg.className = 'big-change ' + cls(chgV);
   // 价格就是汇率，不再重复显示一遍数字；这里只标数据来自哪儿
   const src = String(d.stock.fxSource || '');
   const srcName = src === 'swissquote' ? 'Swissquote' : src === 'fxratesapi' ? 'fxratesapi' : '';
   $('#fxSource').textContent = px > 0 ? (srcName || '已接上') : '连接中';
   $('#frozenTag').textContent = status === 'ended'
     ? '行情已冻结'
-    : status === 'running'
-      ? (d.stock.fxStale ? '汇率更新中断' : '行情实时')
-      : (px > 0 ? '赛前走势' : '连接汇率中');
+    : status === 'closed'
+      ? '休市中'
+      : status === 'running'
+        ? (d.stock.fxStale ? '汇率更新中断' : '行情实时')
+        : (px > 0 ? '赛前走势' : '连接汇率中');
   // K 线走独立接口，这里只把最新价补到最后一根上
   patchLastBar(px);
   drawChart(state.bars);
@@ -273,6 +300,10 @@ function renderClock() {
   } else if (d.status === 'running') {
     clock.textContent = `第 ${d.tick} 轮`;
     hint.textContent = `行情进行中 · 每 ${Math.round((d.tickMs || 5000) / 1000)} 秒一轮`;
+  } else if (d.status === 'closed') {
+    // 休市不是结束：轮次不涨、价格不动，管理员恢复后从这一轮接着跑
+    clock.textContent = `第 ${d.tick} 轮`;
+    hint.textContent = '休市中 · 行情与交易已暂停';
   } else {
     clock.textContent = d.winner ? d.winner.nickname : '已结束';
     hint.textContent = d.winner
@@ -380,6 +411,7 @@ function renderTrade(me, status) {
   if (!state.token) note.push('先登录才能下单');
   if (status === 'pending') note.push('开赛前只能看，不能下单');
   if (status === 'ended') note.push('赛区已冻结，无法交易');
+  if (status === 'closed') note.push('休市中，暂停交易');
   if (me && pos && !isClose) {
     note.push(pos.side === state.side
       ? '已有同向持仓，再开是加仓'
@@ -427,7 +459,9 @@ function renderPositionsTable(me, status) {
 
   $('#posSub').textContent = status === 'ended'
     ? '赛区已冻结'
-    : pos ? `持仓中 · ${pos.leverage}×` : '空仓';
+    : status === 'closed'
+      ? '休市中'
+      : pos ? `持仓中 · ${pos.leverage}×` : '空仓';
 
   const cashRow = `<tr class="cash-row" data-cash><td colspan="9">💵 现金 <b>${money(cash)}</b><span class="cash-sub">可随时用于开仓</span></td></tr>`;
 
@@ -653,10 +687,10 @@ function ensureChart() {
   });
   candle = chart.addSeries(LightweightCharts.CandlestickSeries, {
     upColor: '#f04b4b',
-    downColor: '#12b886',
+    downColor: '#0d9caa',
     borderVisible: false,
     wickUpColor: '#f04b4b',
-    wickDownColor: '#12b886',
+    wickDownColor: '#0d9caa',
     priceFormat: { type: 'price', precision: 3, minMove: 0.001 }
   });
   // 均线：主站那三根，颜色照抄
@@ -979,6 +1013,7 @@ function bind() {
     // 先把上一个周期的柱子清掉，别让新周期的提示叠在旧图上
     state.bars = [];
     state.barsTf = '';
+    state.barsChg = 0;
     drawChart(state.bars, true);
     loadCandles(true);
   });

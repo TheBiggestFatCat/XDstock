@@ -71,6 +71,10 @@ export function createTour(nowMs = Date.now()) {
     startedAt: 0,
     endedAt: 0,
     frozen: false,
+    // 管理员休市（主站管理面板里那个开关）：暂停行情与交易，恢复后接着打。
+    // 和 frozen 的区别：frozen 是有人夺冠后的终局，不可恢复
+    closed: false,
+    closedAt: 0,
     tick: 0,
     winner: null,
     fx: { rate: 0, at: 0, source: '', stale: true },
@@ -139,6 +143,7 @@ export function ensureTour(db) {
 export function tourStatus(t) {
   if (!t) return 'pending';
   if (t.frozen) return 'ended';
+  if (t.closed) return 'closed';   // 管理员休市：暂停，不是结束
   return t.startedAt ? 'running' : 'pending';
 }
 
@@ -148,7 +153,7 @@ export function tourStatus(t) {
  * （只读环境变量，线上不设就完全没影响）。
  */
 function maybeStart(t) {
-  if (!t || t.frozen || t.startedAt) return;
+  if (!t || t.frozen || t.closed || t.startedAt) return;
   const nowMs = Date.now();
   if (nowMs >= num(t.startAt) || process.env.XD_TOUR_OPEN === '1') {
     t.startedAt = nowMs;
@@ -160,6 +165,8 @@ function maybeStart(t) {
 function guard(t) {
   if (!t) return { ok: false, error: '锦标赛还没初始化' };
   if (t.frozen) return { ok: false, error: '锦标赛已结束，行情已冻结' };
+  // 和主站休市一个手感：下单直接被拒，价格不动（管理员恢复后自动放行）
+  if (t.closed) return { ok: false, error: '锦标赛休市中，暂停交易' };
   if (!t.startedAt) {
     const left = Math.max(0, num(t.startAt) - Date.now());
     const min = Math.ceil(left / 60000);
@@ -219,18 +226,12 @@ function logTourTrade(t, g, row) {
   if (t.trades.length > TRADE_LOG_MAX) t.trades.splice(0, t.trades.length - TRADE_LOG_MAX);
 }
 
-/**
- * 价格走一步：股价 = 抓到的 AUD/JPY 原值。
- * 不归一化、不放大、不吃成交冲击 —— 抓不到新汇率就原地不动，绝不自己编一个数出来。
- */
-function stepPrice(t) {
-  const rate = num(t.fx.rate, 0);
-  if (!(rate > 0)) return;
-  // 每轮都落一个点：汇率 10 秒才更新一次，价格没变时画平线，时间轴才和真实分时图一致
-  const px = r3(rate);
-  t.stock.prev = num(t.stock.price, px);
-  t.stock.price = px;
-  t.stock.series.push(px);
+/** 往序列里落一个报价点：同一个价也要落，时间轴才连续（汇率 10 秒才更新一次） */
+function pushPrice(t, px) {
+  const v = r3(px);
+  t.stock.prev = num(t.stock.price, v);
+  t.stock.price = v;
+  t.stock.series.push(v);
   if (!Array.isArray(t.stock.seriesAt)) t.stock.seriesAt = [];
   t.stock.seriesAt.push(Date.now());
   if (t.stock.series.length > SERIES_MAX) {
@@ -238,6 +239,16 @@ function stepPrice(t) {
     t.stock.series.splice(0, cut);
     t.stock.seriesAt.splice(0, cut);
   }
+}
+
+/**
+ * 价格走一步：股价 = 抓到的 AUD/JPY 原值。
+ * 不归一化、不放大、不吃成交冲击 —— 抓不到新汇率就原地不动，绝不自己编一个数出来。
+ */
+function stepPrice(t) {
+  const rate = num(t.fx.rate, 0);
+  if (!(rate > 0)) return;
+  pushPrice(t, rate);
 }
 
 /**
@@ -327,11 +338,19 @@ export function tourCandles(db, tf = '1m') {
   const live = barsFromSeries(t, cfg.sec);
   const firstLive = live.length ? live[0].time : Infinity;
   const hist = (t.stock.hist[tf] || []).filter((b) => num(b.time, 0) < firstLive);
+  const candles = hist.concat(live).slice(-cfg.max);
+  // 这根周期的涨跌幅：最后一根相对前一根收盘，和图上最后一根柱子的涨跌幅同一个口径
+  const n = candles.length;
+  const prevClose = n >= 2 ? num(candles[n - 2].close, 0) : 0;
+  const changePct = prevClose > 0
+    ? Math.round(((num(candles[n - 1].close) / prevClose) - 1) * 1000000) / 10000
+    : 0;
   return {
     tf,
     tickMs: num(db.config?.tickMs, 5000),
     histAt: num(t.stock.histAt),
-    candles: hist.concat(live).slice(-cfg.max)
+    changePct,
+    candles
   };
 }
 
@@ -381,6 +400,12 @@ function checkWinner(t) {
 export function tourTick(db) {
   const t = ensureTour(db);
   if (t.frozen) return;
+  // 管理员休市：价格冻住，只把同一个价继续落到序列里（图上是一条平线，不留时间断档）；
+  // 不结算、不判胜、不受单 —— 和主站「休市冻结行情」一个手感，恢复后接着打
+  if (t.closed) {
+    if (num(t.stock.price) > 0) pushPrice(t, t.stock.price);
+    return;
+  }
   maybeStart(t);
   // 还没开赛：走势图照样跟着实时汇率走，玩家一进页面就能看到真实行情在动；
   // 但不加 tick、不结算、不判胜，交易仍被 guard() 锁着（要等 startAt 到点）
@@ -536,6 +561,22 @@ export function tourJob(db, player) {
   return { ok: true, gained: r2(TOUR_START_CASH - before), cash: g.cash, jobs: g.jobs };
 }
 
+/**
+ * 管理员休市 / 恢复（主站管理面板「锦标赛」那块调的）。
+ * 休市期间：价格冻住（图上走平线）、不结算、不判胜、所有下单被 guard 拒掉。
+ * 恢复后价格直接回到当时的实时汇率（和主站开市一样，中间会留一个跳空）。
+ */
+export function tourSetClosed(db, closed) {
+  const t = ensureTour(db);
+  if (t.frozen) return { ok: false, error: '锦标赛已结束，不用再休市' };
+  const want = !!closed;
+  const was = !!t.closed;
+  if (want === was) return { ok: true, closed: want, unchanged: true, status: tourStatus(t) };
+  t.closed = want;
+  t.closedAt = want ? Date.now() : 0;
+  return { ok: true, closed: want, unchanged: false, status: tourStatus(t) };
+}
+
 function rankRows(db, t) {
   // 只算还在的账号：管理员删号后赛区里会留一条孤儿记录，别让它挂在榜上
   const rows = Object.values(t.players).filter((g) => db.players && db.players[g.id]).map((g) => {
@@ -562,12 +603,9 @@ export function tourState(db, player) {
   const status = tourStatus(t);
   const me = player ? joinTour(t, player) : null;
   const rows = rankRows(db, t);
-  // 涨跌幅基准：1 分钟历史包最老一根的开盘价（5 小时前，和图上第一根柱子对齐）。
-  // 拿不到历史包时退回实时序列的第一个点，再不行就用现价（显示 0.00%）
-  const h1 = t.stock.hist['1m'];
-  const first = h1 && h1.length
-    ? num(h1[0].open, t.stock.price)
-    : (t.stock.series.length ? num(t.stock.series[0]) : t.stock.price);
+  // 涨跌幅口径 = 1 分钟图最后一根柱子相对前一根的涨跌（和图上最后一根一致）。
+  // 前端切到 5 分 / 15 分时，用 /api/tour/candles 里同名字段覆盖，永远和所选周期对齐
+  const chg = tourCandles(db, '1m').changePct;
 
   let myRank = null;
   if (me) {
@@ -578,6 +616,8 @@ export function tourState(db, player) {
   return {
     ok: true,
     status,
+    closed: !!t.closed,
+    closedAt: num(t.closedAt),
     startAt: num(t.startAt),
     startedAt: num(t.startedAt),
     endedAt: num(t.endedAt),
@@ -598,7 +638,7 @@ export function tourState(db, player) {
       desc: t.stock.desc,
       price: r3(t.stock.price),
       prev: r3(t.stock.prev),
-      changePct: first > 0 ? Math.round(((t.stock.price / first) - 1) * 10000) / 100 : 0,
+      changePct: chg,
       fxRate: r3(t.fx.rate),
       fxAt: num(t.fx.at),
       fxSource: t.fx.source || '',
