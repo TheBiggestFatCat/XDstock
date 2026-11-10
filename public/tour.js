@@ -9,8 +9,12 @@ const state = {
   token: localStorage.getItem(TOKEN_KEY) || '',
   data: null,
   tab: 'home',
+  mode: 'open',        // 开仓 / 平仓
   side: 'long',
   lev: 20,
+  ttab: 'order',       // 下单 / 成交记录
+  tf: 1,               // K 线周期（分钟）
+  ma: { 5: true, 10: true, 30: false },
   qtyManual: false,
   busy: false,
   timer: null
@@ -62,6 +66,13 @@ function chgClass(v) {
   const n = Number(v) || 0;
   if (Math.abs(n) < 0.005) return 'chg muted';
   return n > 0 ? 'chg up' : 'chg down';
+}
+
+/** 主站那套 up / down / flat 三态（.big-price、表格里用） */
+function cls(v) {
+  const n = Number(v) || 0;
+  if (Math.abs(n) < 1e-9) return 'flat';
+  return n > 0 ? 'up' : 'down';
 }
 
 let toastTimer = null;
@@ -166,11 +177,12 @@ function render() {
   chg.textContent = px > 0 ? pct(d.stock.changePct, 2) : '';
   chg.className = 'tiny ' + chgClass(d.stock.changePct);
 
-  // 行情
-  $('#mktPrice').textContent = px > 0 ? price3(px) : '--';
-  const mchg = $('#mktChg');
-  mchg.textContent = px > 0 ? pct(d.stock.changePct, 2) : '';
-  mchg.className = chgClass(d.stock.changePct);
+  // 行情头
+  $('#chartPrice').textContent = px > 0 ? price3(px) : '—';
+  $('#chartPrice').className = 'big-price ' + cls(d.stock.changePct);
+  const mchg = $('#chartChange');
+  mchg.textContent = px > 0 ? pct(d.stock.changePct, 2) : '—';
+  mchg.className = 'big-change ' + cls(d.stock.changePct);
   // 价格就是汇率，不再重复显示一遍数字；这里只标数据来自哪儿
   const src = String(d.stock.fxSource || '');
   const srcName = src === 'swissquote' ? 'Swissquote' : src === 'fxratesapi' ? 'fxratesapi' : '';
@@ -184,6 +196,7 @@ function render() {
 
   // 交易面板
   renderTrade(me, status);
+  renderTradeLog(me);
 
   // 我的
   $('#meCash').textContent = me ? money(me.cash) : '--';
@@ -200,6 +213,7 @@ function render() {
   }
 
   renderPosition(me);
+  renderPositionsTable(me, status);
   renderLog(me);
   renderRank(d);
   renderHomeRank(d);
@@ -226,6 +240,16 @@ function renderClock() {
   }
 }
 
+/** 杠杆越低越绿、越高越红：滑条和数字同色，一眼看出自己开了多大 */
+function levColor(lev, levMax) {
+  const t = levMax > 1 ? (lev - 1) / (levMax - 1) : 0;
+  if (t < 0.25) return '#16a34a';
+  if (t < 0.5) return '#84cc16';
+  if (t < 0.7) return '#eab308';
+  if (t < 0.9) return '#f97316';
+  return '#dc2626';
+}
+
 function renderTrade(me, status) {
   const d = state.data;
   const price = Number(d.stock.price) || 0;
@@ -233,64 +257,170 @@ function renderTrade(me, status) {
   const levMax = maxLev();
   if (state.lev > levMax) state.lev = levMax;   // 后端调低上限时别让滑条越界
   const lev = state.lev;
+  const pos = me ? me.position : null;
+
+  // 开仓 / 平仓
+  const isClose = state.mode === 'close';
+  $$('#modeSwitch .mode-btn').forEach((b) => b.classList.toggle('active', b.dataset.mode === state.mode));
+  $('#openFields').classList.toggle('hidden', isClose);
+  $('#closeInfo').classList.toggle('hidden', !isClose);
+
+  // 做多 / 做空
+  $$('#sideSwitch .side-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.side === state.side);
+  });
+
+  // 杠杆：标签、滑条填充、档位色
+  const levEl = $('#orderLev');
+  if (levEl) {
+    if (Number(levEl.max) !== levMax) levEl.max = String(levMax);
+    if (Number(levEl.value) !== lev) levEl.value = String(lev);
+    levEl.style.setProperty('--lev-color', levColor(lev, levMax));
+  }
+  const levLabel = $('#levLabel');
+  levLabel.textContent = lev + 'x';
+  levLabel.style.color = levColor(lev, levMax);
+  $('#levHint').textContent = `（1~${levMax} 倍）`;
 
   // 可开数量：只有保证金占款，零手续费
   const perUnit = price / lev;
   const maxQty = perUnit > 0 ? Math.floor(cash / perUnit) : 0;
-  $('#qtyHint').textContent = state.token
-    ? (price > 0
-      ? (maxQty > 0 ? `最多 ${maxQty.toLocaleString('en-US')} 份` : '现金不够开仓')
-      : '等待实时汇率')
-    : '登录后可交易';
-
-  // 滑块已选区的填充比例（自绘轨道用）
-  const levEl = $('#lev');
-  if (levEl) {
-    if (Number(levEl.max) !== levMax) levEl.max = String(levMax);
-    levEl.style.setProperty('--p', (((lev - 1) / Math.max(1, levMax - 1)) * 100).toFixed(1) + '%');
-  }
-
-  const qtyEl = $('#qty');
+  const qtyEl = $('#orderQty');
   // 默认给 1/4 仓，别一进来就是满仓满杠杆
   if (!state.qtyManual) qtyEl.value = maxQty > 0 ? Math.floor(maxQty * 0.25) : 0;
+  const typed = Math.floor(Number(qtyEl.value) || 0);
+  const qty = maxQty > 0 ? Math.min(typed, maxQty) : typed;
 
-  let qty = Math.floor(Number(qtyEl.value) || 0);
-  if (qty > maxQty && maxQty > 0) qty = maxQty;
   const notional = qty * price;
   const margin = lev > 0 ? notional / lev : 0;
-  $('#calcNotional').textContent = money2(notional);
-  $('#calcMargin').textContent = money2(margin);
-  $('#calcCash').textContent = money2(cash);
+  $('#costNotional').textContent = money2(notional);
+  $('#costMargin').textContent = money2(margin);
 
   // 保证金亏到 5% 就强平：价格逆向走 0.95 / 杠杆。1000 倍下只有 0.095%，必须让玩家看见
   const liqMove = 0.95 / Math.max(1, lev);
   const liqPx = state.side === 'long' ? price * (1 - liqMove) : price * (1 + liqMove);
-  $('#calcLiq').textContent = price > 0 ? price3(liqPx) : '--';
+  $('#costLiq').textContent = price > 0 ? price3(liqPx) : '—';
 
-  $$('#levPresets button').forEach((b) => {
-    b.classList.toggle('on', Number(b.dataset.lev) === lev);
-  });
+  // 平仓区：这一仓现在到底值多少
+  if (pos) {
+    const roe = pos.margin > 0 ? (pos.pnl / pos.margin) * 100 : 0;
+    $('#closeSide').textContent = `${pos.side === 'long' ? '多单' : '空单'} · ${pos.leverage}×`;
+    $('#closeSide').className = pos.side === 'long' ? 'up' : 'down';
+    $('#closeQty').textContent = `${pos.qty.toLocaleString('en-US')} 份`;
+    $('#closeEntry').textContent = price3(pos.entry);
+    const pnlEl = $('#closePnl');
+    pnlEl.textContent = `${pos.pnl >= 0 ? '+' : '-'}${money(Math.abs(pos.pnl))}（${pct(roe)}）`;
+    pnlEl.className = pos.pnl >= 0 ? 'up' : 'down';
+  } else {
+    $('#closeSide').textContent = '—';
+    $('#closeSide').className = '';
+    $('#closeQty').textContent = '—';
+    $('#closeEntry').textContent = '—';
+    const pnlEl = $('#closePnl');
+    pnlEl.textContent = '—';
+    pnlEl.className = '';
+  }
 
-  const openBtn = $('#openBtn');
-  const canOpen = !!me && status === 'running' && qty > 0 && margin <= cash + 1e-6;
-  openBtn.disabled = !canOpen || state.busy;
-  openBtn.textContent = state.side === 'long'
-    ? `开多 · ${lev}×`
-    : `开空 · ${lev}×`;
+  // 下单按钮
+  const btn = $('#orderBtn');
+  const canTrade = !!me && status === 'running' && !state.busy;
+  if (isClose) {
+    btn.textContent = pos
+      ? (pos.side === 'long' ? '市价平多' : '市价平空')
+      : '没有持仓可平';
+    btn.disabled = !canTrade || !pos;
+  } else {
+    btn.textContent = state.side === 'long' ? '市价开多' : '市价开空';
+    btn.disabled = !canTrade || !(qty > 0) || margin > cash + 1e-6;
+  }
 
-  const closeBtn = $('#closeBtn');
-  closeBtn.disabled = !me || !me.position || status !== 'running' || state.busy;
-
+  // 说明文字
   const note = [];
+  if (!state.token) note.push('先登录才能下单');
   if (status === 'pending') note.push('开赛前只能看，不能下单');
   if (status === 'ended') note.push('赛区已冻结，无法交易');
-  if (me && me.position) {
-    note.push(me.position.side === state.side
+  if (me && pos && !isClose) {
+    note.push(pos.side === state.side
       ? '已有同向持仓，再开是加仓'
       : '手上有反向持仓，先平掉才能反手');
   }
   if (me && me.liquidations > 0) note.push(`已爆仓 ${me.liquidations} 次`);
-  $('#tradeNote').textContent = note.join(' · ');
+  if (!isClose && price > 0 && maxQty <= 0 && me) note.push('现金不够开一仓，去打工');
+  $('#orderHint').textContent = note.join(' · ');
+}
+
+/** 成交记录（下单栏第二页） */
+function renderTradeLog(me) {
+  const box = $('#stockTradeList');
+  if (!me || !me.log || !me.log.length) {
+    box.innerHTML = '<p class="st-hint">还没有成交，去下单试试</p>';
+    return;
+  }
+  const label = { open: '开仓', close: '平仓', liquidate: '强平' };
+  box.innerHTML = me.log.map((r) => {
+    const isLiq = r.action === 'liquidate';
+    const sideCls = isLiq ? 'liq' : (r.action === 'open'
+      ? (r.side === 'short' ? 'sell' : 'buy')
+      : (r.side === 'short' ? 'buy' : 'sell'));
+    const pnl = Number(r.pnl);
+    const hasPnl = r.action !== 'open' && Number.isFinite(pnl);
+    const at = new Date(Number(r.at) || 0);
+    return `<div class="st-row">
+      <span class="st-side ${sideCls}">${label[r.action] || r.action}</span>
+      <span class="st-main">${r.side === 'short' ? '空' : '多'} ${Number(r.qty).toLocaleString('en-US')} 份 @${price3(r.price)}</span>
+      <span class="st-time">${pad2(at.getHours())}:${pad2(at.getMinutes())}</span>
+      <span class="st-pnl ${hasPnl ? (pnl >= 0 ? 'up' : 'down') : 'flat'}">
+        ${hasPnl ? (pnl >= 0 ? '+' : '-') + money(Math.abs(pnl)) : '—'}
+      </span>
+    </div>`;
+  }).join('');
+}
+
+/** 行情页下方的持仓表（主站同款表格） */
+function renderPositionsTable(me, status) {
+  const wrap = $('#positionsTable');
+  if (!wrap) return;
+  const pos = me ? me.position : null;
+  const cash = me ? Number(me.cash) || 0 : 0;
+  const price = Number(state.data?.stock?.price) || 0;
+
+  $('#posSub').textContent = status === 'ended'
+    ? '赛区已冻结'
+    : pos ? `持仓中 · ${pos.leverage}×` : '空仓';
+
+  const cashRow = `<tr class="cash-row" data-cash><td colspan="9">💵 现金 <b>${money(cash)}</b><span class="cash-sub">可随时用于开仓</span></td></tr>`;
+
+  if (!pos) {
+    wrap.innerHTML = `<table><tbody>
+      <tr class="empty-row"><td>还没有持仓，去上面开一仓</td></tr>
+      ${cashRow}
+    </tbody></table>`;
+    return;
+  }
+
+  const lev = pos.leverage || 1;
+  const liq = pos.side === 'long' ? pos.entry * (1 - 0.95 / lev) : pos.entry * (1 + 0.95 / lev);
+  const roe = pos.margin > 0 ? (pos.pnl / pos.margin) * 100 : 0;
+  wrap.innerHTML = `<table>
+    <thead><tr>
+      <th>标的</th><th>方向</th><th>数量</th><th>杠杆</th><th>成本</th>
+      <th>现价</th><th>浮动盈亏</th><th>保证金</th><th>爆仓价</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td><img class="stock-icon-sm" src="/assets/stocks/LMFX.jpeg" alt="" />留美外汇 <span class="code">LMFX</span></td>
+        <td><span class="pill ${pos.side}">${pos.side === 'long' ? '多' : '空'}</span></td>
+        <td>${pos.qty.toLocaleString('en-US')}</td>
+        <td>${lev.toFixed(1)}x</td>
+        <td>${price3(pos.entry)}</td>
+        <td>${price > 0 ? price3(price) : '—'}</td>
+        <td><span class="${cls(pos.pnl)}">${pos.pnl >= 0 ? '+' : '-'}${money(Math.abs(pos.pnl))} <small>(${pct(roe)})</small></span></td>
+        <td>${money(pos.margin)}</td>
+        <td class="down">${price3(liq)}</td>
+      </tr>
+      ${cashRow}
+    </tbody>
+  </table>`;
 }
 
 function renderPosition(me) {
@@ -356,13 +486,13 @@ function renderRank(d) {
   }
   const meId = d.me ? d.me.id : '';
   box.innerHTML = d.ranks.map((r) => {
-    const cls = ['rank-row'];
-    if (r.id === meId) cls.push('me');
-    if (r.rank === 1) cls.push('top1');
-    if (r.rank === 2) cls.push('top2');
-    if (r.rank === 3) cls.push('top3');
+    const clsName = ['rank-row'];
+    if (r.id === meId) clsName.push('me');
+    if (r.rank === 1) clsName.push('top1');
+    if (r.rank === 2) clsName.push('top2');
+    if (r.rank === 3) clsName.push('top3');
     const isWinner = d.winner && d.winner.id === r.id;
-    return `<div class="${cls.join(' ')}">
+    return `<div class="${clsName.join(' ')}">
       <span class="rank-no">${r.rank}</span>
       <span class="rank-name">
         <b>${escapeHtml(r.nickname)}${isWinner ? ' · 冠军' : ''}</b>
@@ -404,11 +534,17 @@ function escapeHtml(s) {
 }
 
 // ---------- 走势图（与主站同一套 lightweight-charts 样式）----------
-// 一根 K 线 = 12 个 tick ≈ 1 分钟，和主站 1m 周期同口径
+// 一根 K 线 = 12 个 tick ≈ 1 分钟，和主站 1m 周期同口径；5分/15分由它再合并
 const KLINE_POINTS = 12;
+const MA_DEFS = [
+  { n: 5, color: '#f59e0b' },
+  { n: 10, color: '#3b82f6' },
+  { n: 30, color: '#a855f7' }
+];
 
 let chart = null;
 let candle = null;
+const maSeries = {};
 
 function p2(n) {
   return String(n).padStart(2, '0');
@@ -451,7 +587,7 @@ function ensureChart() {
       horzLine: { color: 'rgba(20,184,166,.4)', labelBackgroundColor: '#14b8a6' }
     },
     handleScale: { axisPressedMouseMove: true },
-    // 手机上图表只有 150px 高，手指几乎避不开：别让它抢走页面的滑动
+    // 手机上图表只有一屏高的一部分，手指几乎避不开：别让它抢走页面的滑动
     handleScroll: {
       mouseWheel: true,
       pressedMouseMove: true,
@@ -468,13 +604,23 @@ function ensureChart() {
     wickDownColor: '#12b886',
     priceFormat: { type: 'price', precision: 3, minMove: 0.001 }
   });
+  // 均线：主站那三根，颜色照抄
+  for (const m of MA_DEFS) {
+    maSeries[m.n] = chart.addSeries(LightweightCharts.LineSeries, {
+      color: m.color,
+      lineWidth: 1.5,
+      priceLineVisible: false,
+      lastValueVisible: false,
+      crosshairMarkerVisible: false
+    });
+  }
   return chart;
 }
 
-/** 5 秒一个的报价点 → 1 分钟 OHLC */
-function toCandles(series, seriesAt, tickMs) {
+/** 5 秒一个的报价点 → 指定周期的 OHLC */
+function toCandles(series, seriesAt, tickMs, mult = 1) {
   if (!Array.isArray(series) || !series.length || !Array.isArray(seriesAt)) return [];
-  const tf = Math.max(10, Math.round((Number(tickMs) || 5000) / 1000) * KLINE_POINTS);
+  const tf = Math.max(10, Math.round((Number(tickMs) || 5000) / 1000) * KLINE_POINTS * Math.max(1, mult));
   const byTime = new Map();
   const out = [];
   for (let i = 0; i < series.length; i++) {
@@ -496,11 +642,29 @@ function toCandles(series, seriesAt, tickMs) {
   return out;
 }
 
-function drawChart(series, seriesAt) {
+/** 均线点：不足周期就不出点，别从第 1 根就开始画 */
+function maLine(bars, n) {
+  const out = [];
+  let sum = 0;
+  for (let i = 0; i < bars.length; i++) {
+    sum += bars[i].close;
+    if (i >= n) sum -= bars[i - n].close;
+    if (i >= n - 1) out.push({ time: bars[i].time, value: sum / n });
+  }
+  return out;
+}
+
+function drawChart(series, seriesAt, reset = false) {
   const hint = $('#chartHint');
-  const bars = toCandles(series, seriesAt, state.data?.tickMs);
-  // 一根 K 线画面没意义（还在攒第一分钟），继续显示提示
+  const bars = toCandles(series, seriesAt, state.data?.tickMs, state.tf);
+  // 一根 K 线画面没意义（还在攒第一根），继续显示提示。
+  // 注意得先把图清空：否则切到 5 分/15 分时会留着上一个周期的柱子，
+  // 提示文字叠在旧 K 线上，看起来像卡住了。
   if (bars.length < 2) {
+    if (candle) {
+      candle.setData([]);
+      for (const m of MA_DEFS) maSeries[m.n]?.setData([]);
+    }
     if (hint) {
       hint.classList.remove('hidden');
       hint.textContent = Array.isArray(series) && series.length
@@ -513,12 +677,18 @@ function drawChart(series, seriesAt) {
   const c = ensureChart();
   if (!c || !candle) return;
   candle.setData(bars);
+  for (const m of MA_DEFS) {
+    const s = maSeries[m.n];
+    if (s) s.setData(state.ma[m.n] ? maLine(bars, m.n) : []);
+  }
   // 数据还没铺满一屏时手动定视野（默认从「最新一根往前 80 根」开始，左边空一大块）；
   // 左右各留一点空，最后一根不贴边，价格轴上的现价标签和时间轴刻度才不被裁
   const el = $('#chart');
   const visible = Math.max(1, (el?.clientWidth || 0) - 60);
   if (bars.length * 6 < visible) {
     c.timeScale().setVisibleLogicalRange({ from: -0.5, to: bars.length + 1.5 });
+  } else if (reset) {
+    c.timeScale().fitContent();
   }
 }
 
@@ -526,8 +696,8 @@ function drawChart(series, seriesAt) {
 function switchTab(name) {
   state.tab = name;
   $$('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
-  $$('.panel').forEach((p) => p.classList.toggle('active', p.id === 'panel-' + name));
-  if (name === 'market') requestAnimationFrame(() => drawChart(state.data?.stock?.series, state.data?.stock?.seriesAt));
+  $$('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === 'panel-' + name));
+  if (name === 'market') requestAnimationFrame(() => drawChart(state.data?.stock?.series, state.data?.stock?.seriesAt, true));
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -538,45 +708,40 @@ async function refresh() {
   return d;
 }
 
-async function doOpen() {
-  if (state.busy) return;
-  const qty = Math.floor(Number($('#qty').value) || 0);
-  if (!(qty > 0)) { toast('先填数量', 'err'); return; }
-  state.busy = true;
+function setMode(mode) {
+  state.mode = mode;
   render();
-  try {
-    const r = await api('/api/tour/order', {
-      method: 'POST',
-      body: JSON.stringify({ action: 'open', side: state.side, qty, leverage: state.lev })
-    });
-    state.data = r.state;
-    toast(`成交：${state.side === 'long' ? '做多' : '做空'} ${qty.toLocaleString('en-US')} 份 @${price3(r.price)}`);
-    render();
-  } catch (e) {
-    toast(e.message, 'err');
-  } finally {
-    state.busy = false;
-    render();
-  }
 }
 
-async function doClose() {
+async function doOrder() {
   if (state.busy) return;
-  const me = state.data?.me;
-  if (!me || !me.position) return;
+  const msg = $('#orderMsg');
+  msg.textContent = '';
   state.busy = true;
   render();
   try {
-    const r = await api('/api/tour/order', {
-      method: 'POST',
-      body: JSON.stringify({ action: 'close' })
-    });
-    state.data = r.state;
-    const pnl = Number(r.pnl) || 0;
-    toast(`平仓 ${pnl >= 0 ? '盈利' : '亏损'} ${money(Math.abs(pnl))}`, pnl >= 0 ? 'ok' : 'err');
+    if (state.mode === 'close') {
+      const r = await api('/api/tour/order', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'close' })
+      });
+      state.data = r.state;
+      const pnl = Number(r.pnl) || 0;
+      toast(`平仓 ${pnl >= 0 ? '盈利' : '亏损'} ${money(Math.abs(pnl))}`, pnl >= 0 ? 'ok' : 'err');
+    } else {
+      const qty = Math.floor(Number($('#orderQty').value) || 0);
+      if (!(qty > 0)) { throw new Error('先填数量'); }
+      const r = await api('/api/tour/order', {
+        method: 'POST',
+        body: JSON.stringify({ action: 'open', side: state.side, qty, leverage: state.lev })
+      });
+      state.data = r.state;
+      toast(`成交：${state.side === 'long' ? '做多' : '做空'} ${qty.toLocaleString('en-US')} 份 @${price3(r.price)}`);
+    }
+    state.qtyManual = false;
     render();
   } catch (e) {
-    toast(e.message, 'err');
+    msg.textContent = e.message;
   } finally {
     state.busy = false;
     render();
@@ -615,40 +780,53 @@ function bind() {
     if (g) switchTab(g.dataset.goto);
   });
 
-  $('#sideSeg').addEventListener('click', (e) => {
-    const b = e.target.closest('.seg-btn');
+  // 下单 / 成交记录
+  $('#tradeTabs').addEventListener('click', (e) => {
+    const b = e.target.closest('.trade-tab');
     if (!b) return;
+    state.ttab = b.dataset.ttab;
+    $$('#tradeTabs .trade-tab').forEach((x) => x.classList.toggle('active', x === b));
+    $('#orderPane').classList.toggle('hidden', state.ttab !== 'order');
+    $('#logPane').classList.toggle('hidden', state.ttab !== 'log');
+  });
+
+  // 开仓 / 平仓
+  $('#modeSwitch').addEventListener('click', (e) => {
+    const b = e.target.closest('.mode-btn');
+    if (b) setMode(b.dataset.mode);
+  });
+
+  // 做多 / 做空（平仓模式下方向由持仓决定，点了不生效）
+  $('#sideSwitch').addEventListener('click', (e) => {
+    const b = e.target.closest('.side-btn');
+    if (!b) return;
+    if (state.mode === 'close') return;
     state.side = b.dataset.side;
-    $$('.seg-btn').forEach((x) => x.classList.toggle('active', x === b));
     state.qtyManual = false;
     render();
   });
 
-  $('#lev').addEventListener('input', (e) => {
+  $('#orderLev').addEventListener('input', (e) => {
     state.lev = Math.max(1, Math.min(maxLev(), Number(e.target.value) || 1));
-    $('#levVal').textContent = state.lev;
     state.qtyManual = false;
     render();
   });
 
   // 1~1000 的滑条太难精确拖到中间档，给几个常用值
-  $('#levPresets').addEventListener('click', (e) => {
+  $('#levQuick').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-lev]');
     if (!b) return;
     state.lev = Math.max(1, Math.min(maxLev(), Number(b.dataset.lev) || 1));
-    const levEl = $('#lev');
-    if (levEl) levEl.value = String(state.lev);
-    $('#levVal').textContent = state.lev;
     state.qtyManual = false;
     render();
   });
 
-  $('#qty').addEventListener('input', () => {
+  $('#orderQty').addEventListener('input', () => {
     state.qtyManual = true;
     render();
   });
 
-  $('#frac').addEventListener('click', (e) => {
+  $('#quickQty').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-frac]');
     if (!b) return;
     const d = state.data;
@@ -657,14 +835,30 @@ function bind() {
     const perUnit = price / state.lev;
     const max = perUnit > 0 ? Math.floor(d.me.cash / perUnit) : 0;
     const frac = Number(b.dataset.frac) || 1;
-    $('#qty').value = Math.max(0, Math.floor(max * frac));
+    $('#orderQty').value = String(Math.max(0, Math.floor(max * frac)));
     state.qtyManual = true;
     render();
   });
 
-  $('#openBtn').addEventListener('click', doOpen);
-  $('#closeBtn').addEventListener('click', doClose);
+  $('#orderBtn').addEventListener('click', doOrder);
   $('#jobBtn').addEventListener('click', doJob);
+
+  // K 线周期
+  $('#tfGroup').addEventListener('click', (e) => {
+    const b = e.target.closest('.tf');
+    if (!b) return;
+    state.tf = Math.max(1, Number(b.dataset.tf) || 1);
+    $$('#tfGroup .tf').forEach((x) => x.classList.toggle('active', x === b));
+    drawChart(state.data?.stock?.series, state.data?.stock?.seriesAt, true);
+  });
+
+  // 均线开关
+  $('#maGroup').addEventListener('change', (e) => {
+    const inp = e.target.closest('input[data-ma]');
+    if (!inp) return;
+    state.ma[Number(inp.dataset.ma)] = inp.checked;
+    drawChart(state.data?.stock?.series, state.data?.stock?.seriesAt);
+  });
 
   window.addEventListener('resize', () => {
     syncTopHeight();
@@ -675,12 +869,6 @@ function bind() {
 async function boot() {
   bind();
   syncTopHeight();
-  const levEl = $('#lev');
-  if (levEl) {
-    levEl.max = String(maxLev());
-    levEl.value = String(state.lev);
-  }
-  $('#levVal').textContent = state.lev;
 
   if (!state.token) {
     $('#gate').classList.add('show');
