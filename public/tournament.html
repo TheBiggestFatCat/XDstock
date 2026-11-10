@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>锦标赛 · 留美外汇</title>
+<link rel="icon" href="/assets/stocks/LMFX.jpeg" />
+<link rel="stylesheet" href="/tour.css" />
+</head>
+<body>
+
+<header class="top">
+  <div class="top-left">
+    <a class="back" href="/" title="返回主站">返回</a>
+    <div class="title">
+      <b>锦标赛</b>
+      <span id="topStatus" class="chip chip-pending">筹备中</span>
+    </div>
+  </div>
+  <div class="top-right">
+    <span id="topCount" class="top-count">-- 人参赛</span>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab active" data-tab="home">首页</button>
+  <button class="tab" data-tab="market">行情</button>
+  <button class="tab" data-tab="me">我的</button>
+  <button class="tab" data-tab="rank">排行榜</button>
+</nav>
+
+<main id="main">
+
+  <!-- 首页 -->
+  <section class="panel active" id="panel-home">
+    <div class="story">
+      <div class="story-tag">剧情</div>
+      <h1>把妈妈的 2000 万，赚回来</h1>
+      <p>
+        妈妈把家里攒了半辈子的 <b class="hl">2000 万日元</b> 全押在了外汇上，一夜之间清零。
+        她还在厨房里算这个月的账，什么都不知道。
+      </p>
+      <p>
+        桌上只剩 <b>30 万日元</b>。你打开了她那台老电脑，登进了同一个账户——
+        这一次，换你来。
+      </p>
+      <p class="story-goal">目标：账户权益做到 <b>2000 万日元</b>，第一个做到的人赢下一切。</p>
+    </div>
+
+    <div class="card status-card">
+      <div class="status-head">
+        <span class="label">赛区状态</span>
+        <span id="statusText" class="status-text">--</span>
+      </div>
+      <div class="clock" id="clock">--:--:--</div>
+      <div class="clock-hint" id="clockHint">距开赛</div>
+    </div>
+
+    <div class="card">
+      <div class="row between">
+        <span class="label">夺冠进度</span>
+        <span class="mono" id="progressNum">--</span>
+      </div>
+      <div class="bar"><i id="progressBar" style="width:0%"></i></div>
+      <div class="row between small muted">
+        <span id="progressLeft">--</span>
+        <span id="progressPct">0%</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row between">
+        <span class="label">打工</span>
+        <span class="small muted">无次数限制</span>
+      </div>
+      <p class="hint">
+        现金不足 30 万日元时，可以打一次工，一次性把现金补齐到 <b>30 万</b>。
+        亏光了也能重来——但对手不会等你。
+      </p>
+      <button class="btn btn-job" id="jobBtn" disabled>去打工（补齐到 30 万）</button>
+      <p class="tiny muted" id="jobNote"></p>
+    </div>
+
+    <div class="card">
+      <div class="row between">
+        <span class="label">唯一标的</span>
+        <a class="link" data-goto="market">去看行情</a>
+      </div>
+      <div class="mini-stock">
+        <img class="icon" src="/assets/stocks/LMFX.jpeg" alt="" />
+        <div class="mini-main">
+          <b>留美外汇 <span class="code">LMFX</span></b>
+          <span class="tiny muted">外汇自营 · 套息交易 · 高杠杆</span>
+        </div>
+        <div class="mini-price">
+          <b id="homePrice">--</b>
+          <span id="homeChg" class="tiny">--</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="label">规则</span>
+      <ul class="rules">
+        <li>起手现金 30 万日元，标的只有 <b>LMFX（留美外汇）</b> 一只。</li>
+        <li>支持 1~20 倍杠杆、做多/做空，手续费 0.02%（开平各收一次）。</li>
+        <li>保证金只剩 5% 时<b>强制平仓</b>，这一仓的钱就没了。</li>
+        <li>第一个把权益做到 <b>2000 万</b> 的人夺冠，赛区立刻冻结，排名定格。</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 行情 -->
+  <section class="panel" id="panel-market">
+    <div class="quote">
+      <div class="quote-head">
+        <img class="icon lg" src="/assets/stocks/LMFX.jpeg" alt="" />
+        <div class="quote-name">
+          <b>留美外汇</b>
+          <span class="tiny muted">LMFX · 金融 · 锦标赛唯一标的</span>
+        </div>
+      </div>
+      <div class="quote-price">
+        <b id="mktPrice">--</b>
+        <span id="mktChg" class="chg">--</span>
+      </div>
+      <div class="quote-sub">
+        <span>模拟汇率 <b id="fxRate">--</b> AUD/JPY</span>
+        <span id="frozenTag" class="tiny">行情实时</span>
+      </div>
+      <canvas id="chart" height="150"></canvas>
+    </div>
+
+    <div class="card trade">
+      <div class="row between">
+        <span class="label">方向</span>
+        <span class="tiny muted">市价成交 · 手续费 0.02%</span>
+      </div>
+      <div class="seg" id="sideSeg">
+        <button class="seg-btn active up" data-side="long">做多</button>
+        <button class="seg-btn down" data-side="short">做空</button>
+      </div>
+
+      <div class="row between mt">
+        <span class="label">杠杆</span>
+        <span class="mono"><b id="levVal">5</b>×</span>
+      </div>
+      <input type="range" id="lev" min="1" max="20" step="1" value="5" class="range" />
+
+      <div class="row between mt">
+        <span class="label">数量</span>
+        <span class="tiny muted" id="qtyHint">可开 0</span>
+      </div>
+      <div class="qty-row">
+        <input type="number" id="qty" min="1" step="1" value="0" inputmode="numeric" />
+        <div class="frac" id="frac">
+          <button data-frac="0.25">25%</button>
+          <button data-frac="0.5">50%</button>
+          <button data-frac="1">全仓</button>
+        </div>
+      </div>
+
+      <div class="calc">
+        <div class="row between"><span>名义价值</span><b class="mono" id="calcNotional">¥0</b></div>
+        <div class="row between"><span>占用保证金</span><b class="mono" id="calcMargin">¥0</b></div>
+        <div class="row between"><span>手续费</span><b class="mono" id="calcFee">¥0</b></div>
+        <div class="row between"><span>可用现金</span><b class="mono" id="calcCash">¥0</b></div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-open" id="openBtn">开仓</button>
+        <button class="btn btn-close" id="closeBtn" disabled>平仓</button>
+      </div>
+      <p class="tiny muted" id="tradeNote"></p>
+    </div>
+  </section>
+
+  <!-- 我的 -->
+  <section class="panel" id="panel-me">
+    <div class="stats">
+      <div class="stat"><span>现金</span><b id="meCash">--</b></div>
+      <div class="stat"><span>权益</span><b id="meEquity">--</b></div>
+      <div class="stat"><span>收益率</span><b id="meRet">--</b></div>
+      <div class="stat"><span>排名</span><b id="meRank">--</b></div>
+    </div>
+
+    <div class="card">
+      <div class="row between"><span class="label">当前持仓</span><span class="tiny muted">LMFX</span></div>
+      <div id="posBox" class="pos-empty">还没有持仓</div>
+    </div>
+
+    <div class="card">
+      <span class="label">战绩</span>
+      <div class="records">
+        <div><b id="recOpens">0</b><span>开仓</span></div>
+        <div><b id="recCloses">0</b><span>平仓</span></div>
+        <div><b id="recLiq">0</b><span>爆仓</span></div>
+        <div><b id="recJobs">0</b><span>打工</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <span class="label">最近成交</span>
+      <div id="logBox" class="log"><p class="tiny muted">暂无成交</p></div>
+    </div>
+  </section>
+
+  <!-- 排行榜 -->
+  <section class="panel" id="panel-rank">
+    <div class="card">
+      <div class="row between">
+        <span class="label">赛区排名</span>
+        <span class="tiny muted" id="rankCount">0 人</span>
+      </div>
+      <div id="rankBox" class="rank"><p class="tiny muted">还没有人参赛</p></div>
+    </div>
+  </section>
+
+</main>
+
+<div class="toast" id="toast"></div>
+<div class="gate" id="gate">
+  <div class="gate-box">
+    <b>还没登录</b>
+    <p>锦标赛用主站账号参赛，先回主站登录，再回来。</p>
+    <a class="btn btn-open" href="/">去主站登录</a>
+  </div>
+</div>
+
+<script type="module" src="/tour.js"></script>
+</body>
+</html>

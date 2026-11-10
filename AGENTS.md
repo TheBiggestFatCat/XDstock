@@ -38,6 +38,7 @@ node tests/report-trend-expectation.mjs  # 市场预期=最近5期走势拟合�
 node tests/skill-text.mjs            # 主题技能文案跟着配置走（改技能/文案必跑，47 条）
 node tests/admin-panel.mjs           # 参数面板一致性：幽灵键/重复键/漏白名单（改设置面板必跑，18 条）
 node tests/admin-cash.mjs            # 管理端「打钱」打到现金（改打钱/资金接口必跑，28 条）
+node tests/tour.mjs                  # 锦标赛：开赛/价格/成交/爆仓/打工/夺冠冻结（改 src/tour.js 必跑，80 条）
 node tests/market-schedule.mjs       # 定时休市 / 循环作息（改开市规则必跑，48 条断言）
 node tests/index-volume.mjs          # 指数成交量按权重拆到个股（改成交量/指数必跑，23 条断言）
 node tests/index-trades.mjs          # 指数的虚假成交 + 按权重推动成分股（改指数成交必跑，25 条断言）

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { DEFAULT_CONFIG } from './config.js';
 import { STOCK_SEED, STOCK_CODES, INDEX_BASE, INDEX_STOCK, SMALL_INDEX_STOCK } from './stocks.js';
 import { ensureGold } from './gold.js';
+import { createTour, ensureTour } from './tour.js';
 import { backDerive, fairFromReport } from './fundamentals.js';
 import {
   seedBars15, seedBars5, seedVolFromConfig,
@@ -102,7 +103,9 @@ export function createDb() {
     newsPool: [],
     localNewsPool: [],
     tradesThisTick: 0,
-    newsPool: []
+    newsPool: [],
+    // 锦标赛（独立赛区，见 src/tour.js）
+    tour: createTour()
   };
 }
 
@@ -572,6 +575,8 @@ export function migrate(d) {
     // 基准也一起对齐，避免回填之前那段用旧基准算出来对不上
     merged.startedAt = nowMs - merged.tick * tms;
   }
+  // 锦标赛赛区：老存档没有就补一份（开赛时间 = 下一个 21:00）
+  ensureTour(merged);
   return merged;
 }
 

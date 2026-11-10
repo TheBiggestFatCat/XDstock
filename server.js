@@ -11,6 +11,7 @@ import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, logTrade } from './src/trading.js';
 import { processOrders, fillCapFor } from './src/orders.js';
 import { autoDcaTick } from './src/autoDca.js';
+import { tourTick } from './src/tour.js';
 import { marketPhase, phaseText } from './src/schedule.js';
 import { checkDelist } from './src/delist.js';
 import { fetchAudJpy } from './src/fx.js';
@@ -192,6 +193,8 @@ const server = http.createServer(async (req, res) => {
 
   // 静态资源
   let rel = pathname === '/' ? '/index.html' : pathname;
+  // 锦标赛独立路由：/tournament（含 /tour 别名、带不带结尾斜杠都行）
+  if (rel === '/tournament' || rel === '/tournament/' || rel === '/tour') rel = '/tournament.html';
   const full = path.join(PUBLIC_DIR, path.normalize(rel).replace(/^(\.\.[/\\])+/, ''));
   if (!full.startsWith(PUBLIC_DIR)) {
     res.writeHead(403);
@@ -620,6 +623,14 @@ function loop() {
     if (!silentNight) {
       pushAlert(victim.id, { type: 'steal', ok: true, mine: false, from: p.nickname, amount });
     }
+  }
+
+  // 锦标赛：独立赛区，一轮走一步（没开赛/已夺冠会自己跳过）。放在广播之前，
+  // 这样玩家下一帧拿到的就是本轮的最新价
+  try {
+    tourTick(d);
+  } catch (e) {
+    console.error('[tour] 推进出错:', e.message);
   }
 
   // 通知到个人
