@@ -179,7 +179,7 @@ function render() {
     ? '行情已冻结'
     : status === 'running'
       ? (d.stock.fxStale ? '汇率更新中断' : '行情实时')
-      : (px > 0 ? '等待开赛' : '连接汇率中');
+      : (px > 0 ? '赛前走势' : '连接汇率中');
   drawChart(d.stock.series);
 
   // 交易面板
@@ -417,14 +417,12 @@ function drawChart(series) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
 
-  // 还没开赛 / 还没抓到汇率：画条虚线 + 提示，别留一块纯白
+  // 还没拿到报价：画条虚线 + 提示，别留一块纯白
+  // （赛前也会走图，所以这里只剩「等第一个报价」这一种情况）
   if (!Array.isArray(series) || series.length < 2) {
     const d = state.data;
-    const running = d && d.status === 'running';
     const hasPx = d && Number(d.stock.price) > 0;
-    const text = running
-      ? (hasPx ? '等待下一个报价…' : '正在连接实时汇率…')
-      : '开赛后这里显示 LMFX 的实时走势';
+    const text = hasPx ? '等待下一个报价…' : '正在连接实时汇率…';
     ctx.strokeStyle = 'rgba(15,42,38,.13)';
     ctx.setLineDash([6, 6]);
     ctx.lineWidth = 1;

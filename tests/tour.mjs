@@ -147,6 +147,25 @@ const pB = { id: 'b', nickname: '阿乙' };
   check('开赛前也能开户（排行里能看到）', st.players === 1, String(st.players));
 }
 
+// ---------------- 2.5 赛前走势照走，交易仍然锁着 ----------------
+{
+  const db = createDb();
+  setTourRate(db, 110.1);
+  for (let i = 0; i < 4; i++) {
+    setTourRate(db, 110.1 + (i + 1) * 0.01);   // 汇率每轮动一下
+    tourTick(db);
+  }
+  check('赛前走势图照走（series 会积累）', db.tour.stock.series.length === 5,
+    String(db.tour.stock.series.length));
+  check('赛前 setTourRate 不再重置序列', db.tour.stock.series[0] === 110.1,
+    String(db.tour.stock.series[0]));
+  check('赛前价格跟着实时汇率', near(db.tour.stock.price, 110.14, 1e-9), String(db.tour.stock.price));
+  check('赛前 tick 不推进', db.tour.tick === 0, String(db.tour.tick));
+  check('赛前仍不能交易', tourOpen(db, pA, { side: 'long', qty: 10, leverage: 5 }).ok === false);
+  check('赛前快照带着走势序列', tourState(db, pA).stock.series.length === 5,
+    String(tourState(db, pA).stock.series.length));
+}
+
 // ---------------- 3. 开赛推进 ----------------
 {
   const db = createDb();

@@ -208,7 +208,8 @@ function stepPrice(t) {
 /**
  * 写入一次抓取结果（server.js#tourFxLoop 调用）。
  * 抓失败传 rate <= 0：只标 stale，价格保持上一次的值。
- * 还没开赛时同步把报价对齐，免得开赛第一轮从占位值跳一大截。
+ * 还没开赛时把第一个报价对齐，免得开赛第一轮从 0 跳一大截；
+ * 之后的走势由 tourTick 里的 stepPrice 逐轮追加，这里不再重置序列。
  */
 export function setTourRate(db, rate, at = Date.now(), source = '') {
   const t = ensureTour(db);
@@ -221,7 +222,7 @@ export function setTourRate(db, rate, at = Date.now(), source = '') {
   t.fx.at = num(at, Date.now());
   t.fx.source = String(source || '');
   t.fx.stale = false;
-  if (!t.startedAt && !t.frozen) {
+  if (!t.startedAt && !t.frozen && !t.stock.series.length) {
     t.stock.prev = r3(v);
     t.stock.price = r3(v);
     t.stock.series = [t.stock.price];
@@ -276,7 +277,12 @@ export function tourTick(db) {
   const t = ensureTour(db);
   if (t.frozen) return;
   maybeStart(t);
-  if (!t.startedAt) return;
+  // 还没开赛：走势图照样跟着实时汇率走，玩家一进页面就能看到真实行情在动；
+  // 但不加 tick、不结算、不判胜，交易仍被 guard() 锁着（要等 startAt 到点）
+  if (!t.startedAt) {
+    stepPrice(t);
+    return;
+  }
   t.tick += 1;
   stepPrice(t);
   for (const g of Object.values(t.players)) settleOne(t, g);
