@@ -3040,11 +3040,24 @@ async function placeLimit() {
     }
     payload = { code: st.code, action: 'close', side: pos.side, limit: limit > 0 ? limit : undefined, qty: closeQty > 0 ? closeQty : undefined };
   } else {
+    let qty = Math.floor(Number($('#orderQty').value) || 0);
+    if (!(qty > 0)) { toast('数量至少 1 股', 'err'); return; }
+    // 兜底：简单模式押金要留 3% 跳空缓冲，点完「全仓」到点下单价可能又跳了，
+    // 或者切模式后口径变了 —— 这时按当前资金收敛一次，别直接抛「资金不足」
+    if (simple) {
+      const cap = maxAffordableQty();
+      if (cap > 0 && qty > cap) {
+        qty = cap;
+        $('#orderQty').value = String(cap);
+        updateCostPreview();
+        toast(`数量超出可用资金，已按当前资金调整为 ${cap} 股`);
+      }
+    }
     payload = {
       code: st.code,
       action: 'open',
       side: state.side,
-      qty: Number($('#orderQty').value),
+      qty,
       leverage: Number($('#orderLev').value) || 1,
       limit: limit > 0 ? limit : undefined
     };
@@ -3097,6 +3110,14 @@ function applyOrderStyle(style, save = true) {
   if (hint) {
     hint.classList.toggle('hidden', !simple);
     hint.style.display = simple ? '' : 'none';
+  }
+
+  // 简单模式的押金口径比传统模式高 3%，从传统模式切过来时原先「全仓」的数量会买不起，
+  // 直接收敛到上限，免得玩家点下去才看到「资金不足」
+  if (simple && (state.orderMode || 'open') === 'open') {
+    const q = $('#orderQty');
+    const cap = maxAffordableQty();
+    if (q && cap > 0 && Number(q.value) > cap) q.value = String(cap);
   }
 
   updateOrderBtnLabel();
@@ -4619,6 +4640,13 @@ function impactCost(notional) {
   return sum;
 }
 
+/**
+ * 简单模式的押金跳空缓冲：服务端按「现价 ×(1+3%)」冻押金，
+ * 前端算「全仓能买多少」必须用同一口径，否则点全仓必然差 3% 报资金不足。
+ * 必须和 src/orders.js 的 SIMPLE_RESERVE_SLIP 保持一致。
+ */
+const SIMPLE_RESERVE_SLIP = 0.03;
+
 /** 下单成本拆解，口径与服务端冻结一致（含冲击成本） */
 function orderCostParts(qty, price) {
   const cfg = state.market?.config || {};
@@ -4641,7 +4669,13 @@ function orderRefPrice() {
   return isBuySide() ? rawPrice : Math.max(rawPrice, Number(st?.price) || 0);
 }
 
-/** 当前现金 + 当前杠杆下能买的最大股数（含手续费、印花税、冲击成本） */
+/** 用服务端的押金口径算「这笔单要冻多少钱」：简单模式在成交价上多留跳空缓冲 */
+function orderHoldTotal(qty, price) {
+  const holdPrice = isSimpleOrder() ? price * (1 + SIMPLE_RESERVE_SLIP) : price;
+  return orderCostParts(qty, holdPrice).total;
+}
+
+/** 当前现金 + 当前杠杆下能买的最大股数（含手续费、印花税、冲击成本、简单模式缓冲） */
 function maxAffordableQty() {
   const st = state.market?.stocks?.[state.code];
   if (!st) return 0;
@@ -4649,8 +4683,9 @@ function maxAffordableQty() {
   if (!(cash > 0)) return 0;
   const refPrice = orderRefPrice();
   if (!(refPrice > 0)) return 0;
-  const budget = cash * 0.998;          // 留 0.2% 余量，防浮点误差
-  const fits = (q) => orderCostParts(q, refPrice).total <= budget;
+  // 留一点余量防浮点误差；简单模式还叠了 3% 缓冲，多留 1% 兜住「下单那一刻价格又跳了」
+  const budget = cash * (isSimpleOrder() ? 0.99 : 0.998);
+  const fits = (q) => orderHoldTotal(q, refPrice) <= budget;
   if (!fits(1)) return 0;
   // 冲击成本随成交额非线性增长，用二分找真正买得起的股数
   let hi = 1;
@@ -4705,7 +4740,9 @@ function updateCostPreview() {
   const refPrice = orderRefPrice();
   const parts = orderCostParts(qty, refPrice);
   $('#costNotional').textContent = money(parts.notional);
-  $('#costMargin').textContent = money(parts.total);
+  // 「所需资金」显示实际会被冻结的押金：简单模式包含 3% 跳空缓冲
+  // （不用 parts.total，否则玩家看到「所需 $100 万、我有 $100 万」却提示资金不足）
+  $('#costMargin').textContent = money(orderHoldTotal(qty, refPrice));
   $('#costFee').textContent = money(parts.fee + parts.stamp);
   const ci = $('#costImpact');
   if (ci) ci.textContent = money(parts.impact);

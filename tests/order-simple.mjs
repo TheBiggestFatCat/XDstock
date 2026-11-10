@@ -259,6 +259,32 @@ log('=== 13 简单模式押金只看现价，不看（可能填得很远的）�
     ra.ok ? `reserved=${ra.reserved.toFixed(4)}` : '-');
 }
 
+// ---------------------------------------------------------------- 14
+log('');
+log('=== 14 全仓买入：按前端口径算出的股数必须被服务端接受（旧 bug：差 3% 报资金不足）===');
+{
+  const db = newDb();
+  const p = mkPlayer(db, 'a', 100000);
+  const px = 100;
+  // 复刻 public/app.js#maxAffordableQty 的简单模式口径：
+  //   预算 = 现金 × 0.99，每股成本按「现价 × 1.03」算（= 服务端 SIMPLE_RESERVE_SLIP 缓冲）
+  const perShare = px * 1.03 * (1 + db.config.feeRate);
+  const qty = Math.floor((100000 * 0.99) / perShare);
+  const r = placeLimitOrder(db, p, { code: 'TGW', action: 'open', side: 'long', qty, leverage: 1, simple: true });
+  check('全仓股数（' + qty + '）被接受', r.ok === true, r.error || '');
+  check('冻结押金不超过现金', r.ok && r.reserved <= 100000, r.ok ? `reserved=${r.reserved.toFixed(2)}` : '-');
+  check('冻结后现金非负', p.cash >= -1e-9, `cash=${p.cash.toFixed(4)}`);
+
+  // 下一轮成交：按现价（不打 3% 折）成交，多冻的押金退回，现金不能为负
+  const ev = nextTick(db);
+  const fill = ev.find((e) => e.type === 'fill' && e.playerId === 'a');
+  check('全仓单成交', !!fill);
+  check('成交后现金非负', p.cash >= -1e-6, `cash=${p.cash.toFixed(4)}`);
+  check('按全仓股数全部成交', p.positions.TGW?.qty === qty, `qty=${p.positions.TGW?.qty ?? 0} 期望=${qty}`);
+  check('剩余冻结押金已退回（没有挂单残留押金）', p.orders.every((o) => !o.reserve),
+    `reserve=${p.orders.reduce((s, o) => s + (o.reserve || 0), 0).toFixed(4)}`);
+}
+
 console.log(out.join('\n'));
 console.log(`\n---- ${passes} 通过 / ${fails} 失败 ----`);
 if (fails > 0) process.exit(1);
