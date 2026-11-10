@@ -376,6 +376,29 @@ main {
 .frac button:hover { border-color: var(--accent); color: var(--accent-2); }
 .frac button:active { background: var(--accent-soft); }
 
+/* 杠杆快捷档位：1~1000 的滑条拖不准，给几个常用值 */
+.lev-presets { display: flex; gap: 6px; margin-top: 8px; }
+.lev-presets button {
+  flex: 1;
+  height: 30px;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.lev-presets button:hover { border-color: var(--accent); color: var(--accent-2); }
+.lev-presets button.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-2);
+  font-weight: 650;
+}
+
 .calc {
   margin-top: 12px;
   padding: 10px 12px;

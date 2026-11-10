@@ -158,7 +158,8 @@ const pB = { id: 'b', nickname: '阿乙' };
   check('tick 从 1 开始', db.tour.tick === 1, String(db.tour.tick));
   check('开赛首轮沿用当前汇率', db.tour.stock.price === 108.5 && before === 108.5,
     `${before} -> ${db.tour.stock.price}`);
-  check('汇率没变不插重复点', db.tour.stock.series.length === 1, String(db.tour.stock.series.length));
+  check('每轮落一个点（时间轴均匀）', db.tour.stock.series.length === db.tour.tick + 1,
+    `${db.tour.stock.series.length} / tick ${db.tour.tick}`);
 
   for (let i = 1; i <= 5; i++) {
     setTourRate(db, 108.5 + i * 0.1);     // 汇率每轮动一下
@@ -169,12 +170,12 @@ const pB = { id: 'b', nickname: '阿乙' };
     String(new Set(db.tour.stock.series).size));
   check('价格严格等于最后一次汇率', near(db.tour.stock.price, 109, 1e-9), String(db.tour.stock.price));
 
-  // 汇率抓不到 → 价格原地不动，也不该插新点
+  // 汇率抓不到 → 价格原地不动，但时间轴照样往前走（画成平线）
   const frozenPx = db.tour.stock.price;
   for (let i = 0; i < 3; i++) tourTick(db);
   check('汇率没更新时价格不动', db.tour.stock.price === frozenPx, String(db.tour.stock.price));
-  check('汇率没更新时序列不膨胀', db.tour.stock.series.length === 6,
-    String(db.tour.stock.series.length));
+  check('汇率没更新时序列照样加长', db.tour.stock.series.length === db.tour.tick + 1,
+    `${db.tour.stock.series.length} / tick ${db.tour.tick}`);
 }
 
 // ---------------- 4. 开仓 / 平仓 ----------------
@@ -231,7 +232,7 @@ const pB = { id: 'b', nickname: '阿乙' };
   check('数量非数字被拒', tourOpen(db, pA, { side: 'long', qty: 'abc' }).ok === false);
   check('现金不够被拒', tourOpen(db, pA, { side: 'long', qty: 1000000, leverage: 1 }).ok === false);
 
-  tourOpen(db, pA, { side: 'long', qty: 100, leverage: 999 });
+  tourOpen(db, pA, { side: 'long', qty: 100, leverage: 99999 });
   check(`杠杆超上限被夹到 ${TOUR_MAX_LEVERAGE}`, Math.round(g.positions.LMFX.leverage) === TOUR_MAX_LEVERAGE,
     String(g.positions.LMFX.leverage));
   const rev = tourOpen(db, pA, { side: 'short', qty: 100, leverage: 5 });

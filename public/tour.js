@@ -265,6 +265,15 @@ function renderTrade(me, status) {
   $('#calcFee').textContent = money2(fee);
   $('#calcCash').textContent = money2(cash);
 
+  // 保证金亏到 5% 就强平：价格逆向走 0.95 / 杠杆。1000 倍下只有 0.095%，必须让玩家看见
+  const liqMove = 0.95 / Math.max(1, lev);
+  const liqPx = state.side === 'long' ? price * (1 - liqMove) : price * (1 + liqMove);
+  $('#calcLiq').textContent = price > 0 ? price3(liqPx) : '--';
+
+  $$('#levPresets button').forEach((b) => {
+    b.classList.toggle('on', Number(b.dataset.lev) === lev);
+  });
+
   const openBtn = $('#openBtn');
   const canOpen = !!me && status === 'running' && qty > 0 && margin + fee <= cash + 1e-6;
   openBtn.disabled = !canOpen || state.busy;
@@ -413,7 +422,12 @@ function drawChart(series) {
 
   // 还没开赛 / 还没抓到汇率：画条虚线 + 提示，别留一块纯白
   if (!Array.isArray(series) || series.length < 2) {
-    const running = state.data && state.data.status === 'running';
+    const d = state.data;
+    const running = d && d.status === 'running';
+    const hasPx = d && Number(d.stock.price) > 0;
+    const text = running
+      ? (hasPx ? '等待下一个报价…' : '正在连接实时汇率…')
+      : '开赛后这里显示 LMFX 的实时走势';
     ctx.strokeStyle = 'rgba(15,42,38,.13)';
     ctx.setLineDash([6, 6]);
     ctx.lineWidth = 1;
@@ -425,7 +439,7 @@ function drawChart(series) {
     ctx.fillStyle = 'rgba(15,42,38,.40)';
     ctx.font = '13px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(running ? '正在连接实时汇率…' : '开赛后这里显示 LMFX 的实时走势', w / 2, h / 2 - 16);
+    ctx.fillText(text, w / 2, h / 2 - 16);
     return;
   }
 
@@ -584,6 +598,18 @@ function bind() {
 
   $('#lev').addEventListener('input', (e) => {
     state.lev = Math.max(1, Math.min(maxLev(), Number(e.target.value) || 1));
+    $('#levVal').textContent = state.lev;
+    state.qtyManual = false;
+    render();
+  });
+
+  // 1~1000 的滑条太难精确拖到中间档，给几个常用值
+  $('#levPresets').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-lev]');
+    if (!b) return;
+    state.lev = Math.max(1, Math.min(maxLev(), Number(b.dataset.lev) || 1));
+    const levEl = $('#lev');
+    if (levEl) levEl.value = String(state.lev);
     $('#levVal').textContent = state.lev;
     state.qtyManual = false;
     render();

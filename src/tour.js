@@ -15,7 +15,7 @@ export const TOUR_START_CASH = 300000;
 export const TOUR_TARGET = 20000000;
 /** 手续费（开平仓都收，按成交额） */
 export const TOUR_FEE_RATE = 0.0002;
-export const TOUR_MAX_LEVERAGE = 100;
+export const TOUR_MAX_LEVERAGE = 1000;
 /** 报价序列上限（每个 tick 一个点） */
 const SERIES_MAX = 900;
 const TRADE_LOG_MAX = 120;
@@ -195,9 +195,8 @@ function logTourTrade(t, g, row) {
 function stepPrice(t) {
   const rate = num(t.fx.rate, 0);
   if (!(rate > 0)) return;
+  // 每轮都落一个点：汇率 10 秒才更新一次，价格没变时画平线，时间轴才和真实分时图一致
   const px = r3(rate);
-  // 汇率没变（抓取间隔内常见）：价格原地不动，也别往序列里插重复点
-  if (t.stock.series.length && px === num(t.stock.price, -1)) return;
   t.stock.prev = num(t.stock.price, px);
   t.stock.price = px;
   t.stock.series.push(px);
