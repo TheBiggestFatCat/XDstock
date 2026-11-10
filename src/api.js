@@ -215,6 +215,32 @@ function publicPlayer(p, db) {
 }
 
 /**
+ * 管理端「打钱」：直接改玩家**现金**（负数 = 扣钱）。
+ *
+ * 现金是能立刻下单用的钱，银行里的钱要等「取钱救急」才动得了，
+ * 所以发补偿 / 活动奖励应该打到现金（2026-11 改，之前打到银行）。
+ *
+ * 口径：
+ * - 现金不允许为负（扣到 0 为止），否则会连带影响爆仓判定
+ * - 返回值 `amount` 是**实际变动额**（现金为 0 时再扣就是 0），前端按它播报
+ * - 不进 `bankDeposited`（那是玩家自己升级存进去的累计值，不能被管理端污染）
+ */
+export function grantCash(player, rawAmount) {
+  const raw = Number(rawAmount);
+  if (!Number.isFinite(raw) || raw === 0) return { ok: false, error: '金额要填非零数字' };
+  if (Math.abs(raw) > 1e12) return { ok: false, error: '金额太大了' };
+  const before = Math.max(0, Number(player.cash) || 0);
+  const after = Math.max(0, before + Math.trunc(raw));
+  player.cash = Math.round(after * 100) / 100;
+  return {
+    ok: true,
+    before: Math.round(before * 100) / 100,
+    cash: player.cash,
+    amount: Math.round((player.cash - before) * 100) / 100
+  };
+}
+
+/**
  * 管理端「控制台」：真人玩家最近的成交。
  *
  * - 过滤掉 `isMarket` 的噪声成交（那些不是人下的单）
@@ -902,7 +928,18 @@ export async function handleApi(ctx) {
       saveDb();
       return json(res, 200, { ok: true, kicked: killed });
     }
+    if (action === 'cash') {
+      // 管理端「打钱」：打到现金（负数 = 扣钱）。管理界面走的是这一条（2026-11 改）
+      const r = grantCash(p, body.amount);
+      if (!r.ok) return json(res, 400, { error: r.error });
+      saveDb();
+      return json(res, 200, {
+        ok: true, nickname: p.nickname,
+        amount: r.amount, before: r.before, cash: r.cash
+      });
+    }
     if (action === 'bank') {
+      // 旧能力：直接改银行存款（管理界面已改走 action: 'cash'，这里保留给脚本/应急用）
       // 管理端给指定玩家的银行账户打钱（负数 = 扣钱），方便发补偿/活动奖励
       const raw = Number(body.amount);
       if (!Number.isFinite(raw) || raw === 0) {

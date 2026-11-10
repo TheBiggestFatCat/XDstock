@@ -2562,11 +2562,11 @@ function renderBanList() {
         ${p.banned ? '<span class="ban-tag">已封禁</span>' : ''}
         ${p.hidden ? '<span class="ban-tag hide">榜上隐身</span>' : ''}
         ${p.banReason ? `<span class="ban-reason">${escapeHtml(p.banReason)}</span>` : ''}
-        ${p.bank > 0 ? `<span class="ban-bank">🏦 ${money0(p.bank)}</span>` : ''}
-        <span class="ban-money">${money0(p.equity)}</span>
+        ${p.cash > 0 ? `<span class="ban-cash" title="现金余额（能直接下单的钱）">💵 ${money0(p.cash)}</span>` : ''}
+        <span class="ban-money" title="总资产（现金 + 持仓市值）">${money0(p.equity)}</span>
       </div>
       <div class="ban-actions">
-        <button class="ban-btn bank" data-bank-id="${p.id}" data-bank-name="${escapeHtml(p.nickname)}">打钱</button>
+        <button class="ban-btn cash" data-cash-id="${p.id}" data-cash-name="${escapeHtml(p.nickname)}">打钱</button>
         <button class="ban-btn hide" data-hide-id="${p.id}" data-hide-name="${escapeHtml(p.nickname)}" data-hide-action="${p.hidden ? 'show' : 'hide'}">
           ${p.hidden ? '上榜' : '隐身'}
         </button>
@@ -2578,8 +2578,8 @@ function renderBanList() {
       </div>
     </div>`).join('');
 
-  box.querySelectorAll('[data-bank-id]').forEach((b) => {
-    b.addEventListener('click', () => giveBankMoney(b.dataset.bankId, b.dataset.bankName));
+  box.querySelectorAll('[data-cash-id]').forEach((b) => {
+    b.addEventListener('click', () => giveCashMoney(b.dataset.cashId, b.dataset.cashName));
   });
 
   box.querySelectorAll('[data-ban-id]').forEach((b) => {
@@ -2613,10 +2613,11 @@ async function toggleRankHide(id, name, action) {
   }
 }
 
-/** 管理端：给指定玩家的银行账户打钱（负数 = 扣钱） */
-async function giveBankMoney(id, name) {
+/** 管理端：给指定玩家的**现金**打钱（负数 = 扣钱）
+ *  现金是能立刻下单用的钱；银行的钱要等「取钱救急」才拿得出来，发补偿不方便 */
+async function giveCashMoney(id, name) {
   const raw = prompt(
-    `给「${name}」的银行账户打多少钱？\n\n单位：美元，可以填负数扣钱\n例：1000000`,
+    `给「${name}」打多少现金？\n\n单位：美元，可以填负数扣钱\n打到现金（能直接下单的钱），不是银行\n例：1000000`,
     '1000000'
   );
   if (raw === null) return;
@@ -2626,9 +2627,15 @@ async function giveBankMoney(id, name) {
     return;
   }
   try {
-    const r = await adminApi('/api/admin/player', { id, action: 'bank', amount });
-    const word = r.amount >= 0 ? '打' : '扣';
-    toast(`已给「${name}」${word} $${money0(Math.abs(r.amount))}，银行余额 $${money0(r.bank)}`, 'ok');
+    const r = await adminApi('/api/admin/player', { id, action: 'cash', amount });
+    if (!r.amount) {
+      // 实际变动 0：现金已经是 0，再扣也扣不出东西
+      toast(`「${name}」现金为 $0，扣不动`, 'err');
+    } else {
+      const word = r.amount > 0 ? '打' : '扣';
+      // money0() 自带 $，别再拼一个（老代码这里写成了 $$，toast 会显示「$$10,000」）
+      toast(`已给「${name}」${word} ${money0(Math.abs(r.amount))}，现金余额 ${money0(r.cash)}`, 'ok');
+    }
     loadAdminPlayers();
   } catch (e) {
     toast(e.message, 'err');
