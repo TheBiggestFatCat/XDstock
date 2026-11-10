@@ -16,6 +16,10 @@ export const TOUR_TARGET = 20000000;
 /** 手续费：0 —— 零摩擦，进出只按价格差结算（1000 倍杠杆下任何费率都会吃掉大块保证金） */
 export const TOUR_FEE_RATE = 0;
 export const TOUR_MAX_LEVERAGE = 1000;
+/** 杠杆下限：20 倍封底（再低保证金占用太大，外汇日内根本没波动空间） */
+export const TOUR_MIN_LEVERAGE = 20;
+/** 杠杆步长：只能开 10 的倍数，滑条手感也更稳 */
+export const TOUR_LEV_STEP = 10;
 /**
  * 报价序列上限（每个 tick 一个点）——和主站 config.historyTicks 同一口径：
  * 5 秒 × 3600 = 5 小时，正好铺满 1 分钟图的 300 根。
@@ -429,7 +433,13 @@ export function tourOpen(db, player, body = {}) {
   if (!g) return { ok: false, error: '先登录再参赛' };
 
   const side = body.side === 'short' ? 'short' : 'long';
-  const leverage = clamp(Math.round(num(body.leverage, 1)), 1, TOUR_MAX_LEVERAGE);
+  // 杠杆只收 20~1000 且必须是 10 的倍数：前端滑条已经按 step=10 走，这里兜一道，
+  // 防止直接打接口开出 37 倍这种脏数据（持仓杠杆会按它算保证金和爆仓价）
+  const leverage = clamp(
+    Math.round(num(body.leverage, TOUR_MIN_LEVERAGE) / TOUR_LEV_STEP) * TOUR_LEV_STEP,
+    TOUR_MIN_LEVERAGE,
+    TOUR_MAX_LEVERAGE
+  );
   const qty = Math.floor(num(body.qty));
   if (!(qty > 0)) return { ok: false, error: '数量必须是正整数' };
 
@@ -627,6 +637,8 @@ export function tourState(db, player) {
     startCash: TOUR_START_CASH,
     feeRate: TOUR_FEE_RATE,
     maxLeverage: TOUR_MAX_LEVERAGE,
+    minLeverage: TOUR_MIN_LEVERAGE,
+    levStep: TOUR_LEV_STEP,
     winner: t.winner || null,
     jobs: num(t.jobs),
     players: rows.length,

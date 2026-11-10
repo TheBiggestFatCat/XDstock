@@ -210,20 +210,20 @@ const pB = { id: 'b', nickname: '阿乙' };
   t.stock.price = 100;
   t.stock.prev = 100;
   const g = db.tour.players.a;
-  const r = tourOpen(db, pA, { side: 'long', qty: 1000, leverage: 10 });
+  const r = tourOpen(db, pA, { side: 'long', qty: 1000, leverage: 20 });
   check('开多成功', r.ok === true, r.error || '');
   check('建立了持仓', g.positions.LMFX?.qty === 1000, String(g.positions.LMFX?.qty));
-  check('保证金 = 名义 / 杠杆', near(g.positions.LMFX.margin, 1000 * 100 / 10), String(g.positions.LMFX.margin));
+  check('保证金 = 名义 / 杠杆', near(g.positions.LMFX.margin, 1000 * 100 / 20), String(g.positions.LMFX.margin));
   check('现金 = 30 万 − 保证金（零手续费）',
-    near(g.cash, 300000 - 10000), String(g.cash));
-  check('权益 = 现金 + 保证金（不亏不赚）', near(tourEquity(t, g), g.cash + 10000), String(tourEquity(t, g)));
+    near(g.cash, 300000 - 5000), String(g.cash));
+  check('权益 = 现金 + 保证金（不亏不赚）', near(tourEquity(t, g), g.cash + 5000), String(tourEquity(t, g)));
   check('开仓计入战绩', g.opens === 1, String(g.opens));
   check('开仓写了流水', g.log.length === 1 && g.log[0].action === 'open', JSON.stringify(g.log[0]));
 
-  // 价格涨 10%，10 倍杠杆 → 保证金翻倍
+  // 价格涨 10%（1000 份 × 10 日元 = +1 万）
   t.stock.price = 110;
   const eqUp = tourEquity(t, g);
-  check('涨 10% × 10 倍 → 权益 +1 万', near(eqUp, g.cash + 10000 + 10000, 1e-6), String(eqUp));
+  check('涨 10% × 20 倍 → 权益 +1 万', near(eqUp, g.cash + 5000 + 10000, 1e-6), String(eqUp));
 
   const c = tourClose(db, pA, {});
   check('平仓成功', c.ok === true, c.error || '');
@@ -240,13 +240,28 @@ const pB = { id: 'b', nickname: '阿乙' };
   const t = db.tour;
   t.stock.price = 100;
   const g = t.players.a;
-  tourOpen(db, pA, { side: 'short', qty: 500, leverage: 5 });
+  tourOpen(db, pA, { side: 'short', qty: 500, leverage: 20 });
   t.stock.price = 90;
   const eq = tourEquity(t, g);
   // 500 份跌 10 日元 = +5000
-  check('做空跌 10% 赚钱', near(eq, g.cash + 500 * 100 / 5 + 5000), String(eq));
+  check('做空跌 10% 赚钱', near(eq, g.cash + 500 * 100 / 20 + 5000), String(eq));
   const c = tourClose(db, pA, {});
   check('做空平仓盈利 5000', near(c.pnl, 5000), String(c.pnl));
+}
+
+// ---------------- 5.5 杠杆档位（20~1000，只收 10 的倍数） ----------------
+for (const [raw, want, label] of [
+  [1, 20, '低于下限夹到 20'],
+  [37, 40, '37 倍取整到 40'],
+  [55, 60, '55 倍取整到 60'],
+  [1004, 1000, '高于上限夹到 1000'],
+  [20, 20, '20 倍原样']
+]) {
+  const db = newDb();
+  const g = db.tour.players.a;
+  tourOpen(db, pA, { side: 'long', qty: 100, leverage: raw });
+  const got = Math.round(g.positions.LMFX.leverage);
+  check(`杠杆 ${raw} → ${want}（${label}）`, got === want, String(got));
 }
 
 // ---------------- 6. 校验与拦截 ----------------

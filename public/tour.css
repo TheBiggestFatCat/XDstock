@@ -11,7 +11,7 @@
   --accent-2: #0ea5a4;
   --accent-soft: #d9f6f1;
   --up: #f04b4b;
-  --down: #0d9caa;              /* 阴线 / 下跌：青绿偏蓝（原 #12b886 太绿） */
+  --down: #0b82c4;              /* 阴线 / 下跌：青蓝（偏蓝一档，和 --accent 的青色拉开） */
   --warn: #b45309;
   --warn-soft: #fff7ed;
   --shadow: 0 8px 28px rgba(15, 42, 38, .07);
@@ -29,9 +29,9 @@
   --hl-cool: #f5f7ff;
   --hl-orange: #fff7ed;
   --hl-up: #fee4e2;
-  --hl-down: #d5f2f7;
+  --hl-down: #dbecfb;
   --bd-up: #fecaca;
-  --bd-down: #8dd9e3;
+  --bd-down: #9bcdec;
   --bd-warn: #fed7aa;
   --bd-accent: #a7ddd2;
 }
@@ -438,9 +438,9 @@ main {
   transition: background .2s, color .2s, box-shadow .2s;
 }
 .side-btn.active.up { background: var(--up); color: #fff; box-shadow: 0 6px 16px rgba(240, 75, 75, .3); }
-.side-btn.active.down { background: var(--down); color: #fff; box-shadow: 0 6px 16px rgba(13, 156, 170, .3); }
+.side-btn.active.down { background: var(--down); color: #fff; box-shadow: 0 6px 16px rgba(11, 130, 196, .3); }
 .side-btn[data-side="long"].active { background: var(--up); color: #fff; box-shadow: 0 6px 16px rgba(240, 75, 75, .3); }
-.side-btn[data-side="short"].active { background: var(--down); color: #fff; box-shadow: 0 6px 16px rgba(18, 184, 134, .3); }
+.side-btn[data-side="short"].active { background: var(--down); color: #fff; box-shadow: 0 6px 16px rgba(11, 130, 196, .3); }
 
 .quick-qty { display: flex; gap: 6px; margin: -6px 0 14px; }
 .quick-qty button {
@@ -588,7 +588,7 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.12); }
   padding: 3px 0;
 }
 .st-side.buy { color: #d92d20; background: var(--hl-up); }
-.st-side.sell { color: #0a8894; background: var(--hl-down); }
+.st-side.sell { color: #0a6fa8; background: var(--hl-down); }
 .st-side.liq { color: #b45309; background: var(--hl-orange); }
 .st-time { color: var(--ink-3); font-variant-numeric: tabular-nums; }
 .st-main { color: var(--ink-2); font-variant-numeric: tabular-nums; }
@@ -617,7 +617,7 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.12); }
 
 .pill { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 7px; font-weight: 600; }
 .pill.long { background: rgba(240, 75, 75, .12); color: var(--up); }
-.pill.short { background: rgba(18, 184, 134, .12); color: var(--down); }
+.pill.short { background: rgba(11, 130, 196, .12); color: var(--down); }
 .pill.gray { background: var(--hl-3); color: var(--ink-3); }
 
 .positions-panel { margin-top: 16px; }

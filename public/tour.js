@@ -40,10 +40,23 @@ function price3(v) {
   return (Number(v) || 0).toFixed(3);
 }
 
-/** 杠杆上限以后端 maxLeverage 为准，前端不写死数字 */
+/** 杠杆上下限以后端 minLeverage / maxLeverage 为准，前端不写死数字 */
 function maxLev() {
   const m = Number(state.data?.maxLeverage);
-  return m > 0 ? m : 100;
+  return m > 0 ? m : 1000;
+}
+
+function minLev() {
+  const m = Number(state.data?.minLeverage);
+  return m > 0 ? m : 20;
+}
+
+/** 杠杆只走 10 的倍数：滑条、快捷档、手输都从这里过一遍 */
+function clampLev(v) {
+  const lo = minLev();
+  const hi = maxLev();
+  const n = Math.round((Number(v) || lo) / 10) * 10;
+  return Math.max(lo, Math.min(hi, n));
 }
 
 /**
@@ -314,7 +327,9 @@ function renderClock() {
 
 /** 杠杆越低越绿、越高越红：滑条和数字同色，一眼看出自己开了多大 */
 function levColor(lev, levMax) {
-  const t = levMax > 1 ? (lev - 1) / (levMax - 1) : 0;
+  const lo = minLev();
+  const span = levMax - lo;
+  const t = span > 0 ? (lev - lo) / span : 0;
   if (t < 0.25) return '#16a34a';
   if (t < 0.5) return '#84cc16';
   if (t < 0.7) return '#eab308';
@@ -327,7 +342,8 @@ function renderTrade(me, status) {
   const price = Number(d.stock.price) || 0;
   const cash = me ? Number(me.cash) || 0 : 0;
   const levMax = maxLev();
-  if (state.lev > levMax) state.lev = levMax;   // 后端调低上限时别让滑条越界
+  const levMin = minLev();
+  state.lev = clampLev(state.lev);   // 后端调上下限、或旧状态不是 10 的倍数时纠正回来
   const lev = state.lev;
   const pos = me ? me.position : null;
 
@@ -345,14 +361,16 @@ function renderTrade(me, status) {
   // 杠杆：标签、滑条填充、档位色
   const levEl = $('#orderLev');
   if (levEl) {
+    if (Number(levEl.min) !== levMin) levEl.min = String(levMin);
     if (Number(levEl.max) !== levMax) levEl.max = String(levMax);
+    if (Number(levEl.step) !== 10) levEl.step = '10';
     if (Number(levEl.value) !== lev) levEl.value = String(lev);
     levEl.style.setProperty('--lev-color', levColor(lev, levMax));
   }
   const levLabel = $('#levLabel');
   levLabel.textContent = lev + 'x';
   levLabel.style.color = levColor(lev, levMax);
-  $('#levHint').textContent = `（1~${levMax} 倍）`;
+  $('#levHint').textContent = `（${levMin}~${levMax} 倍，10 的倍数）`;
 
   // 可开数量：只有保证金占款，零手续费
   const perUnit = price / lev;
@@ -486,7 +504,7 @@ function renderPositionsTable(me, status) {
         <td><img class="stock-icon-sm" src="/assets/stocks/LMFX.jpeg" alt="" />留美外汇 <span class="code">LMFX</span></td>
         <td><span class="pill ${pos.side}">${pos.side === 'long' ? '多' : '空'}</span></td>
         <td>${pos.qty.toLocaleString('en-US')}</td>
-        <td>${lev.toFixed(1)}x</td>
+        <td>${Math.round(lev)}x</td>
         <td>${price3(pos.entry)}</td>
         <td>${price > 0 ? price3(price) : '—'}</td>
         <td><span class="${cls(pos.pnl)}">${pos.pnl >= 0 ? '+' : '-'}${money(Math.abs(pos.pnl))} <small>(${pct(roe)})</small></span></td>
@@ -687,10 +705,10 @@ function ensureChart() {
   });
   candle = chart.addSeries(LightweightCharts.CandlestickSeries, {
     upColor: '#f04b4b',
-    downColor: '#0d9caa',
+    downColor: '#0b82c4',
     borderVisible: false,
     wickUpColor: '#f04b4b',
-    wickDownColor: '#0d9caa',
+    wickDownColor: '#0b82c4',
     priceFormat: { type: 'price', precision: 3, minMove: 0.001 }
   });
   // 均线：主站那三根，颜色照抄
@@ -968,16 +986,16 @@ function bind() {
   });
 
   $('#orderLev').addEventListener('input', (e) => {
-    state.lev = Math.max(1, Math.min(maxLev(), Number(e.target.value) || 1));
+    state.lev = clampLev(e.target.value);
     state.qtyManual = false;
     render();
   });
 
-  // 1~1000 的滑条太难精确拖到中间档，给几个常用值
+  // 1000 档的滑条太粗，给几个常用值（都是 10 的倍数）
   $('#levQuick').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-lev]');
     if (!b) return;
-    state.lev = Math.max(1, Math.min(maxLev(), Number(b.dataset.lev) || 1));
+    state.lev = clampLev(b.dataset.lev);
     state.qtyManual = false;
     render();
   });

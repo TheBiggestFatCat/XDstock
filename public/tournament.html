@@ -116,7 +116,7 @@
         <span class="label">规则</span>
         <ul class="rules">
           <li>起手现金 30 万日元，标的只有 <b>LMFX（留美外汇）</b> 一只，报价就是实时 AUD/JPY 汇率本身，不做任何加工。</li>
-          <li>支持 1~1000 倍杠杆、做多/做空，<b>零手续费</b>，进出只按价格差结算。</li>
+          <li>支持 20~1000 倍杠杆（10 的倍数）、做多/做空，<b>零手续费</b>，进出只按价格差结算。</li>
           <li>保证金只剩 5% 时<b>强制平仓</b>，这一仓的钱就没了。</li>
           <li>第一个把权益做到 <b>2000 万</b> 的人夺冠，赛区立刻冻结，排名定格。</li>
         </ul>
@@ -199,8 +199,8 @@
             </div>
 
             <label class="field">
-              <span>杠杆 <b id="levLabel">20x</b> <i class="field-hint" id="levHint">（1~1000 倍）</i></span>
-              <input id="orderLev" type="range" min="1" max="1000" step="1" value="20" />
+              <span>杠杆 <b id="levLabel">20x</b> <i class="field-hint" id="levHint">（20~1000 倍，10 的倍数）</i></span>
+              <input id="orderLev" type="range" min="20" max="1000" step="10" value="20" />
             </label>
 
             <div class="quick-qty lev-quick" id="levQuick">
