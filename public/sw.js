@@ -2,7 +2,7 @@
 // 静态资源：网络优先，失败时用缓存（离线也能打开）
 // 接口请求：直接走网络，绝不缓存（行情必须实时）
 
-const CACHE = 'xdstock-v146';
+const CACHE = 'xdstock-v147';
 const SHELL = [
   '/',
   '/index.html',

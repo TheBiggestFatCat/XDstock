@@ -545,6 +545,9 @@ const MA_DEFS = [
 let chart = null;
 let candle = null;
 const maSeries = {};
+// 视野只自动定一次（首绘/切 tab/换周期），之后交给用户拖；
+// 否则每 5 秒一次的重绘会把刚拖到的位置又拉回去
+let viewFitted = false;
 
 function p2(n) {
   return String(n).padStart(2, '0');
@@ -586,14 +589,17 @@ function ensureChart() {
       vertLine: { color: 'rgba(20,184,166,.4)', labelBackgroundColor: '#14b8a6' },
       horzLine: { color: 'rgba(20,184,166,.4)', labelBackgroundColor: '#14b8a6' }
     },
-    handleScale: { axisPressedMouseMove: true },
-    // 手机上图表只有一屏高的一部分，手指几乎避不开：别让它抢走页面的滑动
+    // 主站没写这段（默认全开）；这里显式打开：刻度可拖、手机单指横拖看历史。
+    // vertTouchDrag 平时关着，手指落在图上竖滑照样滚页面（见下方价格轴特判）
+    handleScale: { axisPressedMouseMove: { time: true, price: true }, pinch: true },
     handleScroll: {
       mouseWheel: true,
       pressedMouseMove: true,
-      horzTouchDrag: window.innerWidth >= 760,
+      horzTouchDrag: true,
       vertTouchDrag: false
     },
+    // 手机上松手后惯性滑一段，和原生列表手感一致
+    kineticScroll: { touch: true, mouse: false },
     autoSize: true
   });
   candle = chart.addSeries(LightweightCharts.CandlestickSeries, {
@@ -614,6 +620,40 @@ function ensureChart() {
       crosshairMarkerVisible: false
     });
   }
+  // 右侧价格刻度：触摸下只有开着 vertTouchDrag 才拖得动（库的既有行为），
+  // 但全局开它，手指落在图上竖滑就滚不动页面了。
+  // 折中：按下点落在刻度条上时临时打开，抬手（rAF 后，别抢库自己的 touchend）再关回去
+  const setVertDrag = (on) => {
+    chart.applyOptions({
+      handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: on }
+    });
+  };
+  let onAxis = false;
+  const inAxis = (t) => {
+    if (!t) return false;
+    const w = chart.priceScale('right').width();
+    if (!(w > 0)) return false;
+    return t.clientX >= el.getBoundingClientRect().right - w - 6;
+  };
+  el.addEventListener(
+    'touchstart',
+    (e) => {
+      if (onAxis || !inAxis(e.touches[0])) return;
+      onAxis = true;
+      setVertDrag(true);
+    },
+    { capture: true, passive: true }
+  );
+  const axisEnd = () => {
+    if (!onAxis) return;
+    requestAnimationFrame(() => {
+      if (!onAxis) return;
+      onAxis = false;
+      setVertDrag(false);
+    });
+  };
+  el.addEventListener('touchend', axisEnd, { capture: true, passive: true });
+  el.addEventListener('touchcancel', axisEnd, { capture: true, passive: true });
   return chart;
 }
 
@@ -661,6 +701,8 @@ function drawChart(series, seriesAt, reset = false) {
   // 注意得先把图清空：否则切到 5 分/15 分时会留着上一个周期的柱子，
   // 提示文字叠在旧 K 线上，看起来像卡住了。
   if (bars.length < 2) {
+    // 数据被清空了，等攒够两根再重新定视野
+    viewFitted = false;
     if (candle) {
       candle.setData([]);
       for (const m of MA_DEFS) maSeries[m.n]?.setData([]);
@@ -682,13 +724,17 @@ function drawChart(series, seriesAt, reset = false) {
     if (s) s.setData(state.ma[m.n] ? maLine(bars, m.n) : []);
   }
   // 数据还没铺满一屏时手动定视野（默认从「最新一根往前 80 根」开始，左边空一大块）；
-  // 左右各留一点空，最后一根不贴边，价格轴上的现价标签和时间轴刻度才不被裁
-  const el = $('#chart');
-  const visible = Math.max(1, (el?.clientWidth || 0) - 60);
-  if (bars.length * 6 < visible) {
-    c.timeScale().setVisibleLogicalRange({ from: -0.5, to: bars.length + 1.5 });
-  } else if (reset) {
-    c.timeScale().fitContent();
+  // 左右各留一点空，最后一根不贴边，价格轴上的现价标签和时间轴刻度才不被裁。
+  // 只在首绘 / 切 tab / 换周期时定一次：定时重绘不再覆盖用户拖出来的视野
+  if (reset || !viewFitted) {
+    const el = $('#chart');
+    const visible = Math.max(1, (el?.clientWidth || 0) - 60);
+    if (bars.length * 6 < visible) {
+      c.timeScale().setVisibleLogicalRange({ from: -0.5, to: bars.length + 1.5 });
+    } else {
+      c.timeScale().fitContent();
+    }
+    viewFitted = true;
   }
 }
 
