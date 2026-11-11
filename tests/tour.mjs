@@ -322,6 +322,24 @@ for (const [raw, want, label] of [
 
   g.cash = 299999;
   check('差 1 日元也算不足，可以打工', tourJob(db, pA).ok === true);
+
+  // 满了就不给钱：超过 30 万直接拒，且一分不动、次数不加
+  g.cash = 350000;
+  const over = tourJob(db, pA);
+  check('现金超过 30 万不给钱', over.ok === false, over.error || '');
+  check('拒绝时现金一分不动', g.cash === 350000, String(g.cash));
+  const jobsBefore = g.jobs;
+  check('拒绝时打工次数不加', g.jobs === jobsBefore, String(g.jobs));
+
+  // 页面金额都是整数元：299,999.6 在界面上就显示成 ¥300,000，不能再补 4 毛
+  g.cash = 299999.6;
+  const dime = tourJob(db, pA);
+  check('界面上已满 30 万（299,999.6）不再补钱', dime.ok === false, dime.error || '');
+  check('没被顺手抹成 30 万整', g.cash === 299999.6, String(g.cash));
+
+  g.cash = 299000;
+  const gap = tourJob(db, pA);
+  check('差 1000 仍然照补', gap.ok === true && near(gap.gained, 1000), String(gap.gained));
 }
 
 // ---------------- 9. 夺冠冻结 ----------------

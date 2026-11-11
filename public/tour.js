@@ -232,7 +232,7 @@ function render() {
 
   // 打工
   const jobBtn = $('#jobBtn');
-  const canJob = !!me && status === 'running' && me.cash < d.startCash;
+  const canJob = !!me && status === 'running' && Math.round(me.cash) < d.startCash;
   jobBtn.disabled = !canJob;
   if (!me) {
     $('#jobNote').textContent = '登录后可以打工';
@@ -240,7 +240,7 @@ function render() {
     $('#jobNote').textContent = status === 'ended'
       ? '赛区已冻结'
       : status === 'closed' ? '休市中，暂停打工' : '开赛后才能打工';
-  } else if (me.cash >= d.startCash) {
+  } else if (Math.round(me.cash) >= d.startCash) {
     $('#jobNote').textContent = `现金 ${money(me.cash)}，已经够 30 万，不用打工`;
   } else {
     $('#jobNote').textContent = `现金只剩 ${money(me.cash)}，打一次工补齐到 ${money(d.startCash)}（第 ${me.jobs + 1} 次）`;

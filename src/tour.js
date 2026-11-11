@@ -749,10 +749,15 @@ export function tourJob(db, player) {
   const g = joinTour(t, player);
   if (!g) return { ok: false, error: '先登录再参赛' };
 
-  if (g.cash >= TOUR_START_CASH) {
-    return { ok: false, error: `手里还有 ${yen(g.cash)}，不用打工` };
+  // 现金口径跟界面一致（页面上的金额都是整数元）：四舍五入后 ≥ 30 万就算「已满」，
+  // 一分都不给。否则 299,999.6 在页面上显示成 ¥300,000，打工只补回 ¥0.4、
+  // 提示写「+¥0」，玩家眼里就是「明明满了还给钱」。
+  // 判断放在这里而不是只靠前端 disabled：直接打接口也拿不到钱。
+  const cash = num(g.cash, 0);
+  if (Math.round(cash) >= TOUR_START_CASH) {
+    return { ok: false, error: `手里还有 ${yen(cash)}，不用打工` };
   }
-  const before = g.cash;
+  const before = cash;
   g.cash = TOUR_START_CASH;
   g.jobs = (g.jobs || 0) + 1;
   t.jobs = (t.jobs || 0) + 1;
