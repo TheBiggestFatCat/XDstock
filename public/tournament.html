@@ -166,12 +166,15 @@
         <div id="chart" class="chart-canvas">
           <div id="chartHint" class="chart-hint">正在连接实时汇率…</div>
         </div>
+
+        <div id="chartLegend" class="chart-legend"></div>
       </section>
 
       <aside class="panel trade-panel">
         <div class="trade-tabs" id="tradeTabs">
           <button class="trade-tab active" data-ttab="order">下单</button>
           <button class="trade-tab" data-ttab="log">成交记录</button>
+          <button class="trade-tab" data-ttab="tpsl">止盈止损</button>
         </div>
 
         <div id="orderPane" class="trade-pane">
@@ -232,6 +235,28 @@
         <div id="logPane" class="trade-pane hidden">
           <p class="st-hint">你的每一次开仓、平仓与被强平</p>
           <div id="stockTradeList" class="stock-trade-list"></div>
+        </div>
+
+        <div id="tpslPane" class="trade-pane hidden">
+          <p class="st-hint">价格到线按现价自动平仓（跳空也能平），可以只平一部分</p>
+
+          <label class="field">
+            <span>止盈价</span>
+            <input id="tpPrice" type="number" step="0.001" placeholder="不到不填" />
+          </label>
+
+          <label class="field">
+            <span>止损价</span>
+            <input id="slPrice" type="number" step="0.001" placeholder="不到不填" />
+          </label>
+
+          <label class="field">
+            <span>触发平仓量 <i class="field-hint">留空 = 全平</i></span>
+            <input id="tpslQty" type="number" step="1" min="1" placeholder="全部持仓" />
+          </label>
+
+          <button id="tpslApply" class="btn btn-primary btn-block" type="button">应用止盈止损</button>
+          <div id="tpslStatus" class="tpsl-status"></div>
         </div>
       </aside>
     </div>

@@ -278,6 +278,7 @@ function render() {
   // 交易面板
   renderTrade(me, status);
   renderTradeLog(me);
+  renderTpSl();
 
   // 我的
   $('#meCash').textContent = me ? money(me.cash) : '--';
@@ -450,6 +451,7 @@ function renderTradeLog(me) {
   const label = { open: '开仓', close: '平仓', liquidate: '强平' };
   box.innerHTML = me.log.map((r) => {
     const isLiq = r.action === 'liquidate';
+    const auto = r.auto === 'tp' ? '止盈' : r.auto === 'sl' ? '止损' : '';
     const sideCls = isLiq ? 'liq' : (r.action === 'open'
       ? (r.side === 'short' ? 'sell' : 'buy')
       : (r.side === 'short' ? 'buy' : 'sell'));
@@ -457,7 +459,7 @@ function renderTradeLog(me) {
     const hasPnl = r.action !== 'open' && Number.isFinite(pnl);
     const at = new Date(Number(r.at) || 0);
     return `<div class="st-row">
-      <span class="st-side ${sideCls}">${label[r.action] || r.action}</span>
+      <span class="st-side ${sideCls}">${auto || label[r.action] || r.action}</span>
       <span class="st-main">${r.side === 'short' ? '空' : '多'} ${Number(r.qty).toLocaleString('en-US')} 份 @${price3(r.price)}</span>
       <span class="st-time">${pad2(at.getHours())}:${pad2(at.getMinutes())}</span>
       <span class="st-pnl ${hasPnl ? (pnl >= 0 ? 'up' : 'down') : 'flat'}">
@@ -465,6 +467,43 @@ function renderTradeLog(me) {
       </span>
     </div>`;
   }).join('');
+}
+
+/** 止盈止损页：当前持仓 + 条件列表（每条可删） */
+function renderTpSl() {
+  const box = $('#tpslStatus');
+  if (!box) return;
+  const d = state.data;
+  const pos = d?.me?.position;
+  const price = Number(d?.stock?.price) || 0;
+
+  if (!pos) {
+    box.innerHTML = '<span class="ts-empty">还没有持仓，先开一仓才能设止盈止损</span>';
+    return;
+  }
+
+  const head = `<div class="ts-title">当前持仓 ${Number(pos.qty).toLocaleString('en-US')} 份 · `
+    + `${pos.side === 'long' ? '做多' : '做空'} · 现价 ${price > 0 ? price3(price) : '—'}</div>`;
+  const list = Array.isArray(pos.tpsl) ? pos.tpsl : [];
+
+  if (!list.length) {
+    box.innerHTML = head + '<span class="ts-empty">还没有条件单，填好价格点上面的按钮添加</span>';
+    return;
+  }
+
+  box.innerHTML = head + list.map((x) => {
+    const isTp = x.kind === 'tp';
+    return `<div class="ts-row">
+      <span class="ts-kind ${isTp ? 'tp' : 'sl'}">${isTp ? '止盈' : '止损'}</span>
+      <b class="${isTp ? 'up' : 'down'}">${price3(x.price)}</b>
+      <i>${x.qty ? `平 ${Number(x.qty).toLocaleString('en-US')} 份` : '全平'}</i>
+      <button class="ts-del" data-tpsl-del="${escapeHtml(x.id)}" type="button" title="删除这条">✕</button>
+    </div>`;
+  }).join('');
+
+  box.querySelectorAll('[data-tpsl-del]').forEach((b) => {
+    b.addEventListener('click', () => removeTpSl(b.dataset.tpslDel));
+  });
 }
 
 /** 行情页下方的持仓表（主站同款表格） */
@@ -817,6 +856,76 @@ function maLine(bars, n) {
   return out;
 }
 
+// ---------- K 线上的成本 / 止盈止损 / 爆仓线 ----------
+let priceLines = [];
+let plSig = '';
+
+const LINE_COST = '#64748b';
+const LINE_TP = '#f04b4b';     // 止盈：赚钱，跟页面「涨」同一个红
+const LINE_SL = '#0b82c4';     // 止损：亏钱，跟页面「跌」同一个蓝
+const LINE_LIQ = '#f97316';
+
+function renderChartLegend(pos) {
+  const el = $('#chartLegend');
+  if (!el) return;
+  if (!pos) {
+    el.innerHTML = '<span class="legend-hint">开仓后这里会显示成本 / 止盈止损 / 爆仓线</span>';
+    return;
+  }
+  const lev = Number(pos.leverage) || 1;
+  const liq = pos.side === 'long' ? pos.entry * (1 - 0.95 / lev) : pos.entry * (1 + 0.95 / lev);
+  const items = [[LINE_COST, `成本 ${price3(pos.entry)}`]];
+  if (pos.tp) items.push([LINE_TP, `止盈 ${price3(pos.tp)}`]);
+  if (pos.sl) items.push([LINE_SL, `止损 ${price3(pos.sl)}`]);
+  if (lev > 1) items.push([LINE_LIQ, `爆仓 ${price3(liq)}`]);
+  el.innerHTML = items.map(([c, t]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('')
+    + `<span class="legend-hint">${pos.side === 'long' ? '做多' : '做空'} `
+    + `${Number(pos.qty).toLocaleString('en-US')} 份 · ${Math.round(lev)}x</span>`;
+}
+
+/** 只在签名变化时重建：否则每 2 秒一次的重绘会把线删了又加，看得见闪 */
+function updatePriceLines() {
+  const pos = state.data?.me?.position || null;
+  if (!candle) {
+    renderChartLegend(pos);
+    plSig = '';
+    return;
+  }
+
+  const sig = pos
+    ? `${pos.side}|${pos.entry}|${pos.tp}|${pos.sl}|${pos.leverage}|${pos.qty}`
+    : 'none';
+  if (sig === plSig) return;
+  plSig = sig;
+  renderChartLegend(pos);
+
+  for (const pl of priceLines) {
+    try { candle.removePriceLine(pl); } catch { /* 图重建过，句柄失效就算了 */ }
+  }
+  priceLines = [];
+  if (!pos) return;
+
+  const add = (price, color, title) => {
+    const v = Number(price);
+    if (!(v > 0) || !Number.isFinite(v)) return;
+    priceLines.push(candle.createPriceLine({
+      price: v,
+      color,
+      lineWidth: 1,
+      lineStyle: LightweightCharts.LineStyle.Dashed,
+      axisLabelVisible: true,
+      title
+    }));
+  };
+  add(pos.entry, LINE_COST, '成本');
+  add(pos.tp, LINE_TP, '止盈');
+  add(pos.sl, LINE_SL, '止损');
+  const lev = Number(pos.leverage) || 1;
+  if (lev > 1) {
+    add(pos.side === 'long' ? pos.entry * (1 - 0.95 / lev) : pos.entry * (1 + 0.95 / lev), LINE_LIQ, '爆仓');
+  }
+}
+
 function drawChart(bars, reset = false) {
   const hint = $('#chartHint');
   const list = Array.isArray(bars) ? bars : [];
@@ -839,6 +948,8 @@ function drawChart(bars, reset = false) {
       hint.classList.remove('hidden');
       hint.textContent = list.length ? '正在攒第一根 K 线…' : '正在连接实时汇率…';
     }
+    // K 线不够也得画成本/止盈止损线（它们是水平线，不依赖柱子）
+    updatePriceLines();
     return;
   }
   if (hint) hint.classList.add('hidden');
@@ -862,6 +973,7 @@ function drawChart(bars, reset = false) {
     }
     viewFitted = true;
   }
+  updatePriceLines();
 }
 
 // ---------- 交互 ----------
@@ -944,6 +1056,62 @@ async function doJob() {
   }
 }
 
+/** 应用止盈止损：可以只填一个，也可以两条一起加 */
+async function applyTpSl() {
+  const d = state.data;
+  const pos = d?.me?.position;
+  if (!pos) { toast('没有持仓', 'err'); return; }
+
+  const tpV = Number($('#tpPrice').value);
+  const slV = Number($('#slPrice').value);
+  const qtyV = Math.floor(Number($('#tpslQty').value) || 0);
+  if (!(tpV > 0) && !(slV > 0)) { toast('止盈和止损至少要填一个', 'err'); return; }
+
+  // 方向校验：做多时止盈在上、止损在下；做空反过来
+  const px = Number(d.stock.price) || 0;
+  const long = pos.side === 'long';
+  if (tpV > 0 && ((long && tpV <= px) || (!long && tpV >= px))) {
+    toast(long ? '做多的止盈价要高于现价' : '做空的止盈价要低于现价', 'err');
+    return;
+  }
+  if (slV > 0 && ((long && slV >= px) || (!long && slV <= px))) {
+    toast(long ? '做多的止损价要低于现价' : '做空的止损价要高于现价', 'err');
+    return;
+  }
+  if (qtyV > 0 && qtyV > pos.qty) { toast(`最多 ${pos.qty} 份`, 'err'); return; }
+
+  const body = { qty: qtyV || null };
+  if (tpV > 0) body.tp = tpV;
+  if (slV > 0) body.sl = slV;
+
+  try {
+    const r = await api('/api/tour/tpsl', { method: 'POST', body: JSON.stringify(body) });
+    state.data = r.state;
+    // 加完清空，方便接着加下一条
+    $('#tpPrice').value = '';
+    $('#slPrice').value = '';
+    $('#tpslQty').value = '';
+    render();
+    toast('止盈止损已更新' + (qtyV > 0 ? `（触发平 ${qtyV} 份）` : '（触发全平）'), 'ok');
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
+/** 删掉一条条件单 */
+async function removeTpSl(id) {
+  try {
+    const r = await api('/api/tour/tpsl/remove', {
+      method: 'POST', body: JSON.stringify({ id })
+    });
+    state.data = r.state;
+    render();
+    toast('已删除这条条件单', 'ok');
+  } catch (e) {
+    toast(e.message, 'err');
+  }
+}
+
 function syncTopHeight() {
   const h = $('.top')?.offsetHeight || 51;
   document.documentElement.style.setProperty('--topH', h + 'px');
@@ -959,7 +1127,7 @@ function bind() {
     if (g) switchTab(g.dataset.goto);
   });
 
-  // 下单 / 成交记录
+  // 下单 / 成交记录 / 止盈止损
   $('#tradeTabs').addEventListener('click', (e) => {
     const b = e.target.closest('.trade-tab');
     if (!b) return;
@@ -967,6 +1135,8 @@ function bind() {
     $$('#tradeTabs .trade-tab').forEach((x) => x.classList.toggle('active', x === b));
     $('#orderPane').classList.toggle('hidden', state.ttab !== 'order');
     $('#logPane').classList.toggle('hidden', state.ttab !== 'log');
+    $('#tpslPane').classList.toggle('hidden', state.ttab !== 'tpsl');
+    if (state.ttab === 'tpsl') renderTpSl();
   });
 
   // 开仓 / 平仓
@@ -1021,6 +1191,14 @@ function bind() {
 
   $('#orderBtn').addEventListener('click', doOrder);
   $('#jobBtn').addEventListener('click', doJob);
+
+  // 止盈止损
+  $('#tpslApply').addEventListener('click', applyTpSl);
+  for (const sel of ['#tpPrice', '#slPrice', '#tpslQty']) {
+    $(sel).addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') applyTpSl();
+    });
+  }
 
   // K 线周期
   $('#tfGroup').addEventListener('click', (e) => {

@@ -10,6 +10,7 @@ import {
   createTour, ensureTour, nextStartAt, tourTick, tourOpen, tourClose, tourJob,
   tourState, tourEquity, tourStatus, joinTour, setTourRate,
   setTourHist, tourCandles, tourSetClosed, TOUR_TFS,
+  tourTpSl, tourTpSlRemove,
   TOUR_START_CASH, TOUR_TARGET, TOUR_MAX_LEVERAGE
 } from '../src/tour.js';
 
@@ -22,6 +23,7 @@ function check(label, cond, detail = '') {
   log(`${cond ? 'PASS' : 'FAIL'}  ${label}${detail ? '  ' + detail : ''}`);
 }
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) < eps;
+const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
 
 function newDb() {
   const db = createDb();
@@ -504,6 +506,222 @@ for (const [raw, want, label] of [
   check('快照 changePct 用 1 分钟最后一根',
     near(tourState(db3, null).stock.changePct, c.changePct, 1e-3),
     `${tourState(db3, null).stock.changePct} / ${c.changePct}`);
+}
+
+// ---------------- 15. 止盈止损：到价按现价平 ----------------
+{
+  const db = newDb();
+  const t = db.tour;
+  const g = db.tour.players.a;
+  setPrice(t, 100);
+  tourOpen(db, pA, { side: 'long', qty: 100, leverage: 20 });
+
+  const r = tourTpSl(db, pA, { tp: 110 });
+  check('加了止盈条件', r.ok && r.position.tpsl.length === 1, JSON.stringify(r).slice(0, 90));
+  check('pos.tp 同步到条件价', num(g.positions.LMFX.tp) === 110, String(g.positions.LMFX.tp));
+  check('快照只发未触发的条件', tourState(db, pA).me.position.tpsl.length === 1);
+
+  setPrice(t, 105);
+  tourTick(db);
+  check('没到价不平仓', !!g.positions.LMFX);
+
+  setPrice(t, 110);
+  tourTick(db);
+  check('到价立刻平仓', !g.positions.LMFX);
+  const fill = g.log.find((x) => x.auto === 'tp');
+  check('流水标了 auto=tp', !!fill, JSON.stringify(g.log[g.log.length - 1]));
+  check('按现价 110 成交（不是 110 的限价单）', fill && near(fill.price, 110), String(fill?.price));
+  check('盈亏 = (110−100)×100', fill && near(fill.pnl, 1000), String(fill?.pnl));
+}
+
+// ---------------- 16. 止损：跌破按现价平，亏损算对 ----------------
+{
+  const db = newDb();
+  const t = db.tour;
+  const g = db.tour.players.a;
+  setPrice(t, 100);
+  tourOpen(db, pA, { side: 'long', qty: 100, leverage: 20 });
+  tourTpSl(db, pA, { sl: 97 });
+
+  setPrice(t, 99);
+  tourTick(db);
+  check('没跌破不平仓', !!g.positions.LMFX);
+
+  setPrice(t, 96.5);
+  tourTick(db);
+  check('跌破立刻平仓', !g.positions.LMFX);
+  const fill = g.log.find((x) => x.auto === 'sl');
+  check('流水标了 auto=sl', !!fill);
+  check('止损亏损 = (96.5−100)×100', fill && near(fill.pnl, -350), String(fill?.pnl));
+}
+
+// ---------------- 17. 空头：止盈（跌）与止损（涨）方向要对 ----------------
+{
+  const db = newDb();
+  const t = db.tour;
+  const g = db.tour.players.a;
+  setPrice(t, 100);
+  tourOpen(db, pA, { side: 'short', qty: 100, leverage: 20 });
+  tourTpSl(db, pA, { tp: 90 });
+
+  setPrice(t, 95);
+  tourTick(db);
+  check('空头止盈：涨到 95 不触发', !!g.positions.LMFX && !g.log.some((x) => x.auto));
+  setPrice(t, 89);
+  tourTick(db);
+  const fill = g.log.find((x) => x.auto === 'tp');
+  check('空头止盈：跌到 89 触发并盈利', !g.positions.LMFX && fill && fill.pnl > 0, String(fill?.pnl));
+
+  const db2 = newDb();
+  setPrice(db2.tour, 100);
+  const g2 = db2.tour.players.a;
+  tourOpen(db2, pA, { side: 'short', qty: 100, leverage: 20 });
+  tourTpSl(db2, pA, { sl: 103 });
+  setPrice(db2.tour, 102);
+  tourTick(db2);
+  check('空头止损：涨到 102 不触发', !!g2.positions.LMFX);
+  setPrice(db2.tour, 103.5);
+  tourTick(db2);
+  const f2 = g2.log.find((x) => x.auto === 'sl');
+  check('空头止损：涨到 103.5 触发并亏损', !g2.positions.LMFX && f2 && f2.pnl < 0, String(f2?.pnl));
+}
+
+// ---------------- 18. 只平一部分 + 多条条件 ----------------
+{
+  const db = newDb();
+  const t = db.tour;
+  const g = db.tour.players.a;
+  setPrice(t, 100);
+  tourOpen(db, pA, { side: 'long', qty: 1000, leverage: 20 });
+  tourTpSl(db, pA, { tp: 105, qty: 400 });
+  tourTpSl(db, pA, { tp: 120, qty: 300 });
+  tourTpSl(db, pA, { sl: 90 });
+  check('三条条件都挂上', g.positions.LMFX.tpsl.length === 3, String(g.positions.LMFX.tpsl.length));
+
+  setPrice(t, 106);
+  tourTick(db);
+  check('先触发 105 那条，只平 400', g.positions.LMFX?.qty === 600, String(g.positions.LMFX?.qty));
+  check('触发过的那条被标记 fired', g.positions.LMFX.tpsl[0].fired === true);
+  check('pos.tp 换成第二条的价', num(g.positions.LMFX.tp) === 120, String(g.positions.LMFX.tp));
+  check('止损那条还在', num(g.positions.LMFX.sl) === 90, String(g.positions.LMFX.sl));
+
+  setPrice(t, 121);
+  tourTick(db);
+  check('第二条到价，再平 300', g.positions.LMFX?.qty === 300, String(g.positions.LMFX?.qty));
+
+  setPrice(t, 80);
+  tourTick(db);
+  check('止损把剩下的全平掉（价格已跌到爆仓线下，先按爆仓处理）', !g.positions.LMFX);
+}
+
+// ---------------- 19. 校验：方向、数量、条数上�� ----------------
+{
+  const db = newDb();
+  const t = db.tour;
+  const g = db.tour.players.a;
+  setPrice(t, 100);
+
+  check('没有持仓不能设止盈止损', tourTpSl(db, pA, { tp: 110 }).ok === false);
+
+  tourOpen(db, pA, { side: 'long', qty: 1000, leverage: 20 });
+  check('多头止盈价低于现价被拒', tourTpSl(db, pA, { tp: 99 }).ok === false);
+  check('多头止损价高于现价被拒', tourTpSl(db, pA, { sl: 101 }).ok === false);
+  check('止盈止损都不填被拒', tourTpSl(db, pA, {}).ok === false);
+  check('负价格被拒', tourTpSl(db, pA, { tp: -5 }).ok === false);
+
+  const clampQty = tourTpSl(db, pA, { tp: 130, qty: 99999 });
+  check('触发数量超过持仓时夹到持仓', clampQty.ok && clampQty.position.tpsl[0].qty === 1000,
+    JSON.stringify(clampQty.position?.tpsl?.[0] || {}));
+
+  // 一条一条加满 8 条
+  let added = 1;
+  for (let i = 1; i <= 8; i++) {
+    const x = tourTpSl(db, pA, { tp: 130 + i, qty: 1 });
+    if (x.ok) added++;
+  }
+  check('最多 8 条，多出来的被拒', added === 8, `${added} 条`);
+  check('第 9 条报错信息说清上限', /最多 8 条/.test(tourTpSl(db, pA, { tp: 200 }).error || ''));
+}
+
+// ---------------- 20. 删除条件后不再触发 ----------------
+{
+  const db = newDb();
+  const t = db.tour;
+  const g = db.tour.players.a;
+  setPrice(t, 100);
+  tourOpen(db, pA, { side: 'long', qty: 100, leverage: 20 });
+  const r = tourTpSl(db, pA, { tp: 110, sl: 97 });
+  const tpId = r.position.tpsl.find((x) => x.kind === 'tp').id;
+  check('两条都挂上', r.position.tpsl.length === 2);
+
+  const d = tourTpSlRemove(db, pA, { id: tpId });
+  check('删掉止盈成功', d.ok && d.position.tpsl.length === 1, JSON.stringify(d).slice(0, 80));
+  check('pos.tp 清空', !num(g.positions.LMFX.tp), String(g.positions.LMFX.tp));
+  check('止损还在', num(g.positions.LMFX.sl) === 97);
+  check('删不存在的 id 报错', tourTpSlRemove(db, pA, { id: 'nope' }).ok === false);
+
+  setPrice(t, 120);
+  tourTick(db);
+  check('删掉的止盈不会再触发', !!g.positions.LMFX);
+}
+
+// ---------------- 21. 强平优先于止盈止损 ----------------
+{
+  const db = newDb();
+  const t = db.tour;
+  const g = db.tour.players.a;
+  setPrice(t, 100);
+  tourOpen(db, pA, { side: 'long', qty: 100, leverage: 20 });
+  tourTpSl(db, pA, { sl: 97 });
+
+  setPrice(t, 90);       // 亏 10%，20 倍下早就爆了
+  tourTick(db);
+  check('被强平', !g.positions.LMFX);
+  check('流水里是 liquidate，不是止损', g.log.some((x) => x.action === 'liquidate') && !g.log.some((x) => x.auto),
+    JSON.stringify(g.log.map((x) => x.action)));
+  check('强平后不会再多算一次平仓', g.closes === 0 || g.log.filter((x) => x.action === 'close').length === 0,
+    String(g.closes));
+}
+
+// ---------------- 22. 休市期间止盈止损不触发 ----------------
+{
+  const db = newDb();
+  const t = db.tour;
+  const g = db.tour.players.a;
+  setPrice(t, 100);
+  tourOpen(db, pA, { side: 'long', qty: 100, leverage: 20 });
+  tourTpSl(db, pA, { tp: 110 });
+  tourSetClosed(db, true);
+
+  // 休市期间汇率照抓（rate 变了），但价格不采纳：图上走平线
+  t.fx.rate = 130;
+  tourTick(db);
+  check('休市期间价格冻住', num(t.stock.price) === 100, String(t.stock.price));
+  check('休市期间仓位不动', !!g.positions.LMFX);
+
+  tourSetClosed(db, false);
+  tourTick(db);
+  check('恢复后按跳空价 130 平掉', !g.positions.LMFX);
+  const fill = g.log.find((x) => x.auto === 'tp');
+  check('按恢复后的现价成交，不是触发价', fill && near(fill.price, 130), String(fill?.price));
+}
+
+// ---------------- 23. 老存档：只有 pos.tp / pos.sl 也能触发 ----------------
+{
+  const db = newDb();
+  const t = db.tour;
+  const g = db.tour.players.a;
+  setPrice(t, 100);
+  tourOpen(db, pA, { side: 'long', qty: 100, leverage: 20 });
+  const pos = g.positions.LMFX;
+  delete pos.tpsl;
+  pos.tp = 108;
+  pos.sl = 95;
+
+  setPrice(t, 109);
+  tourTick(db);
+  check('老字段止盈触发', !g.positions.LMFX && !!g.log.find((x) => x.auto === 'tp'));
+  check('老字段被补成 tpsl 列表', !g.positions.LMFX || Array.isArray(g.positions.LMFX.tpsl));
 }
 
 console.log(out.join('\n'));

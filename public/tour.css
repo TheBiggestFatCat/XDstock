@@ -395,6 +395,44 @@ main {
 .hi-amp { color: var(--ink-3); }
 
 .chart-canvas { position: relative; flex: 1; min-height: 400px; border-radius: 12px; overflow: hidden; }
+
+/* 图例：成本 / 止盈 / 止损 / 爆仓，颜色跟着页面涨跌语义走 */
+.chart-legend {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
+  font-size: 12px; color: var(--ink-2); padding: 8px 2px 0; min-height: 20px;
+}
+.chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.chart-legend i {
+  width: 16px; height: 0;
+  border-top: 2px dashed var(--c, currentColor);
+  display: inline-block;
+}
+.chart-legend .legend-hint { color: var(--ink-3); margin-left: auto; }
+
+/* 止盈止损页（结构照搬主站） */
+#tpslApply { margin-top: 8px; margin-bottom: 8px; }
+.tpsl-status { margin-top: 4px; display: flex; flex-direction: column; gap: 6px; }
+.tpsl-status .ts-title { font-size: 11.5px; color: var(--ink-3); }
+.tpsl-status .ts-empty { font-size: 12px; color: var(--ink-3); }
+.ts-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; padding: 8px 10px; border-radius: 8px;
+  background: var(--soft-2);
+}
+.ts-kind {
+  font-size: 10.5px; padding: 2px 6px; border-radius: 5px;
+  background: var(--hl-up); color: var(--up); flex: none;
+}
+.ts-kind.sl { background: var(--hl-down); color: var(--down); }
+.ts-row b { font-variant-numeric: tabular-nums; font-size: 13px; }
+.ts-row i { font-style: normal; font-size: 11px; color: var(--ink-3); }
+.ts-del {
+  margin-left: auto; flex: none; width: 22px; height: 22px;
+  border: none; border-radius: 50%; cursor: pointer;
+  background: transparent; color: var(--ink-3); font-size: 12px;
+}
+.ts-del:hover { background: var(--soft-3); color: var(--up); }
+
 /* 图还没数据时的居中提示（拿到第一个报价后由 JS 隐藏） */
 .chart-hint {
   position: absolute;

@@ -20,6 +20,8 @@ export const TOUR_MAX_LEVERAGE = 1000;
 export const TOUR_MIN_LEVERAGE = 20;
 /** 杠杆步长：只能开 10 的倍数，滑条手感也更稳 */
 export const TOUR_LEV_STEP = 10;
+/** 每笔持仓最多挂几条止盈止损（和主站默认一致：够用，又不至于刷满一屏） */
+export const TOUR_MAX_TPSL = 8;
 /**
  * 报价序列上限（每个 tick 一个点）——和主站 config.historyTicks 同一口径：
  * 5 秒 × 3600 = 5 小时，正好铺满 1 分钟图的 300 根。
@@ -230,6 +232,34 @@ function logTourTrade(t, g, row) {
   if (t.trades.length > TRADE_LOG_MAX) t.trades.splice(0, t.trades.length - TRADE_LOG_MAX);
 }
 
+// ---------- 止盈止损 ----------
+
+/**
+ * 持仓上的条件列表。老存档里只有 pos.tp / pos.sl 两个数字，
+ * 第一次碰到时补成列表（和主站一个口径），老数据也能正常触发。
+ */
+function tpslList(pos) {
+  if (!Array.isArray(pos.tpsl)) {
+    pos.tpsl = [];
+    if (num(pos.tp) > 0) {
+      pos.tpsl.push({ id: 'ts_legacy_tp', kind: 'tp', price: num(pos.tp), qty: null, fired: false });
+    }
+    if (num(pos.sl) > 0) {
+      pos.tpsl.push({ id: 'ts_legacy_sl', kind: 'sl', price: num(pos.sl), qty: null, fired: false });
+    }
+  }
+  return pos.tpsl;
+}
+
+/** 把「还没触发的最靠前一条」同步回 pos.tp / pos.sl —— 前端和 K 线价格线直接读这两个 */
+function tuneLegacyTpSl(pos) {
+  const list = Array.isArray(pos.tpsl) ? pos.tpsl : [];
+  const tp = list.find((x) => x.kind === 'tp' && !x.fired);
+  const sl = list.find((x) => x.kind === 'sl' && !x.fired);
+  pos.tp = tp ? num(tp.price) : null;
+  pos.sl = sl ? num(sl.price) : null;
+}
+
 /** 往序列里落一个报价点：同一个价也要落，时间轴才连续（汇率 10 秒才更新一次） */
 function pushPrice(t, px) {
   const v = r3(px);
@@ -358,6 +388,44 @@ export function tourCandles(db, tf = '1m') {
   };
 }
 
+/**
+ * 平仓核心：手动平仓、止盈止损平仓都走这里。
+ * qty 不传（或超过持仓）= 全平；保证金按数量比例退回，盈亏按差价算。
+ */
+function closeCore(t, g, qty, extra = {}) {
+  const pos = g.positions.LMFX;
+  if (!pos) return null;
+
+  let n = Math.floor(num(qty, 0));
+  if (!(n > 0) || n > pos.qty) n = pos.qty;
+
+  const price = num(t.stock.price);
+  const dir = pos.side === 'long' ? 1 : -1;
+  const pnl = (price - num(pos.entry)) * n * dir;
+  const marginPart = (num(pos.margin) * n) / Math.max(1, num(pos.qty));
+  const fee = n * price * TOUR_FEE_RATE;
+  const side = pos.side;
+
+  g.cash += marginPart + pnl - fee;
+  pos.qty -= n;
+  pos.margin = Math.max(0, num(pos.margin) - marginPart);
+  if (pos.qty <= 0) delete g.positions.LMFX;
+
+  g.closes = (g.closes || 0) + 1;
+  logTourTrade(t, g, {
+    action: 'close',
+    code: 'LMFX',
+    side,
+    qty: n,
+    price,
+    pnl: r2(pnl),
+    fee: r2(fee),
+    cash: r2(g.cash),
+    ...extra
+  });
+  return { qty: n, price, pnl: r2(pnl), side };
+}
+
 /** 爆仓线：保证金只剩 5% 时强平 */
 function settleOne(t, g) {
   const pos = g.positions && g.positions.LMFX;
@@ -378,6 +446,46 @@ function settleOne(t, g) {
     cash: r2(g.cash)
   });
   delete g.positions.LMFX;
+}
+
+/**
+ * 止盈止损：价格到线就按现价平掉（外汇是连续报价，tick 里直接结算，不排队）。
+ * 跳空跨过触发价也按当时价格成交 —— 不给「按触发价成交」的假便宜。
+ * 返回这一轮有没有真的平过仓（给调用方判断要不要重算胜负）。
+ */
+function checkTpSl(t, g) {
+  const pos0 = g.positions && g.positions.LMFX;
+  if (!pos0) return false;
+
+  const list = tpslList(pos0);
+  if (!list.length) return false;
+
+  const px = num(t.stock.price);
+  if (!(px > 0)) return false;
+  const dir = pos0.side === 'long' ? 1 : -1;
+  let fired = false;
+
+  for (const x of list) {
+    if (x.fired) continue;
+    if (!(num(x.price) > 0)) continue;
+    // 多头：止盈在上、止损在下；空头反过来
+    const hit = x.kind === 'tp'
+      ? (px - num(x.price)) * dir >= 0
+      : (px - num(x.price)) * dir <= 0;
+    if (!hit) continue;
+
+    const pos = g.positions.LMFX;
+    if (!pos) break;             // 前面的条件已经全平了
+    // 每条条件可以只平一部分；留空 = 全平
+    const preset = Math.floor(num(x.qty, 0));
+    const qty = preset > 0 ? Math.min(pos.qty, preset) : pos.qty;
+    if (closeCore(t, g, qty, { auto: x.kind })) {
+      x.fired = true;
+      fired = true;
+    }
+    if (g.positions.LMFX) tuneLegacyTpSl(g.positions.LMFX);
+  }
+  return fired;
 }
 
 /** 第一个权益摸到 2000 万的人夺冠，随后整个赛区冻结 */
@@ -419,7 +527,10 @@ export function tourTick(db) {
   }
   t.tick += 1;
   stepPrice(t);
-  for (const g of Object.values(t.players)) settleOne(t, g);
+  for (const g of Object.values(t.players)) {
+    settleOne(t, g);        // 爆仓优先：已经爆掉的仓位不该再走止盈止损
+    checkTpSl(t, g);        // 到线按现价平，跳空也认
+  }
   checkWinner(t);
 }
 
@@ -513,43 +624,113 @@ export function tourClose(db, player, body = {}) {
   const g = joinTour(t, player);
   if (!g) return { ok: false, error: '先登录再参赛' };
 
-  const pos = g.positions.LMFX;
-  if (!pos) return { ok: false, error: '没有持仓可平' };
+  if (!g.positions.LMFX) return { ok: false, error: '没有持仓可平' };
+  const r = closeCore(t, g, body.qty);
+  if (!r) return { ok: false, error: '没有持仓可平' };
 
-  let qty = Math.floor(num(body.qty, 0));
-  if (!(qty > 0) || qty > pos.qty) qty = pos.qty;
-
-  const price = num(t.stock.price);
-  const dir = pos.side === 'long' ? 1 : -1;
-  const pnl = (price - num(pos.entry)) * qty * dir;
-  const marginPart = (num(pos.margin) * qty) / Math.max(1, num(pos.qty));
-  const fee = qty * price * TOUR_FEE_RATE;
-
-  g.cash += marginPart + pnl - fee;
-  pos.qty -= qty;
-  pos.margin = Math.max(0, num(pos.margin) - marginPart);
-  if (pos.qty <= 0) delete g.positions.LMFX;
-
-  g.closes = (g.closes || 0) + 1;
-  logTourTrade(t, g, {
-    action: 'close',
-    code: 'LMFX',
-    side: pos.side,
-    qty,
-    price,
-    pnl: r2(pnl),
-    fee: r2(fee),
-    cash: r2(g.cash)
-  });
   checkWinner(t);
   return {
     ok: true,
-    price,
-    qty,
-    pnl: r2(pnl),
+    price: r.price,
+    qty: r.qty,
+    pnl: r.pnl,
     cash: r2(g.cash),
     equity: r2(tourEquity(t, g))
   };
+}
+
+/**
+ * 加止盈止损条件（可以分多条，到一条触发一条）。
+ * body: { tp?, sl?, qty? } —— qty 留空 = 触发时全平。
+ * 和主站一样：最多 8 条、方向必须对（多头止盈在上/止损在下，空头反之）。
+ */
+export function tourTpSl(db, player, body = {}) {
+  maybeStart(db.tour);
+  const t = ensureTour(db);
+  const blocked = guard(t);
+  if (blocked) return blocked;
+  const g = joinTour(t, player);
+  if (!g) return { ok: false, error: '先登录再参赛' };
+
+  const pos = g.positions.LMFX;
+  if (!pos) return { ok: false, error: '没有持仓可设止盈止损' };
+
+  const price = num(t.stock.price);
+  if (!(price > 0)) return { ok: false, error: '行情异常，稍后再试' };
+  const dir = pos.side === 'long' ? 1 : -1;
+
+  const list = tpslList(pos);
+  const live = list.filter((x) => !x.fired).length;
+  if (live >= TOUR_MAX_TPSL) {
+    return { ok: false, error: `每笔持仓最多 ${TOUR_MAX_TPSL} 条止盈止损，先删掉一些` };
+  }
+
+  // 触发时平多少：留空 / 超过持仓 = 全平
+  const qtyN = Math.floor(num(body.qty));
+  const qty = Number.isFinite(qtyN) && qtyN > 0 ? Math.min(pos.qty, qtyN) : null;
+
+  const parse = (v) => {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : NaN;
+  };
+
+  const added = [];
+
+  const tpV = parse(body.tp);
+  if (tpV !== null) {
+    if (!Number.isFinite(tpV) || tpV <= 0) return { ok: false, error: '止盈价必须是正数' };
+    if ((tpV - price) * dir <= 0) {
+      return {
+        ok: false,
+        error: `止盈价必须${dir > 0 ? '高于' : '低于'}现价 ${price.toFixed(3)}`
+      };
+    }
+    added.push({
+      id: 'ts_' + Math.random().toString(36).slice(2, 9),
+      kind: 'tp', price: r3(tpV), qty, fired: false, createdTick: t.tick
+    });
+  }
+
+  const slV = parse(body.sl);
+  if (slV !== null) {
+    if (!Number.isFinite(slV) || slV <= 0) return { ok: false, error: '止损价必须是正数' };
+    if ((slV - price) * dir >= 0) {
+      return {
+        ok: false,
+        error: `止损价必须${dir > 0 ? '低于' : '高于'}现价 ${price.toFixed(3)}`
+      };
+    }
+    added.push({
+      id: 'ts_' + Math.random().toString(36).slice(2, 9),
+      kind: 'sl', price: r3(slV), qty, fired: false, createdTick: t.tick
+    });
+  }
+
+  if (!added.length) return { ok: false, error: '止盈和止损至少要填一个' };
+
+  list.push(...added);
+  tuneLegacyTpSl(pos);
+  return { ok: true, added, position: positionOut(t, g) };
+}
+
+/** 删掉一条止盈止损（只影响条件，不动持仓） */
+export function tourTpSlRemove(db, player, body = {}) {
+  const t = ensureTour(db);
+  const g = joinTour(t, player);
+  if (!g) return { ok: false, error: '先登录再参赛' };
+
+  const pos = g.positions.LMFX;
+  if (!pos) return { ok: false, error: '没有持仓可设止盈止损' };
+
+  const id = String(body.id || '');
+  const list = tpslList(pos);
+  const before = list.length;
+  pos.tpsl = list.filter((x) => x.id !== id);
+  if (pos.tpsl.length === before) return { ok: false, error: '没有这条记录' };
+
+  tuneLegacyTpSl(pos);
+  return { ok: true, position: positionOut(t, g) };
 }
 
 /** 打工：现金不足 30 万时一次性补齐，无次数限制 */
@@ -585,6 +766,35 @@ export function tourSetClosed(db, closed) {
   t.closed = want;
   t.closedAt = want ? Date.now() : 0;
   return { ok: true, closed: want, unchanged: false, status: tourStatus(t) };
+}
+
+/**
+ * 持仓出站（白名单）：前端只认这些字段。
+ * tpsl 只发**还没触发**的条件 —— 触发过的已经变成成交记录，没必要再占一行。
+ */
+function positionOut(t, g) {
+  const pos = g && g.positions && g.positions.LMFX;
+  if (!pos) return null;
+  const price = num(t.stock.price);
+  const dir = pos.side === 'long' ? 1 : -1;
+  const list = Array.isArray(pos.tpsl) ? pos.tpsl : [];
+  return {
+    code: 'LMFX',
+    side: pos.side,
+    qty: pos.qty,
+    entry: r3(pos.entry),
+    margin: r2(pos.margin),
+    leverage: Math.round(num(pos.leverage, 1) * 10) / 10,
+    pnl: r2((price - num(pos.entry)) * num(pos.qty) * dir),
+    tp: num(pos.tp) || null,
+    sl: num(pos.sl) || null,
+    tpsl: list.filter((x) => !x.fired).map((x) => ({
+      id: x.id,
+      kind: x.kind,
+      price: r3(x.price),
+      qty: x.qty ? Math.floor(num(x.qty)) : null
+    }))
+  };
 }
 
 function rankRows(db, t) {
@@ -670,21 +880,7 @@ export function tourState(db, player) {
         opens: me.opens || 0,
         closes: me.closes || 0,
         liquidations: me.liquidations || 0,
-        position: me.positions.LMFX
-          ? {
-            code: 'LMFX',
-            side: me.positions.LMFX.side,
-            qty: me.positions.LMFX.qty,
-            entry: r3(me.positions.LMFX.entry),
-            margin: r2(me.positions.LMFX.margin),
-            leverage: Math.round(num(me.positions.LMFX.leverage, 1) * 10) / 10,
-            pnl: r2(
-              (num(t.stock.price) - num(me.positions.LMFX.entry))
-              * num(me.positions.LMFX.qty)
-              * (me.positions.LMFX.side === 'long' ? 1 : -1)
-            )
-          }
-          : null,
+        position: positionOut(t, me),
         log: (me.log || []).slice(-12).reverse()
       }
       : null,

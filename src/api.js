@@ -16,7 +16,7 @@ import { getBuild } from './build.js';
 import { marketPhase, phaseText, normalizeSchedule, ensureSchedules, scheduleWindow, cyclePhase, fmtMinute, parseMinute, MINUTE_MS } from './schedule.js';
 import { playerEquity, positionPnl } from './trading.js';
 import { levelUpPlayer, withdrawFromBank, bankStatus } from './bank.js';
-import { tourState, tourOpen, tourClose, tourJob, tourCandles, tourSetClosed, tourStatus, ensureTour, TOUR_TFS } from './tour.js';
+import { tourState, tourOpen, tourClose, tourJob, tourCandles, tourSetClosed, tourStatus, ensureTour, TOUR_TFS, tourTpSl, tourTpSlRemove } from './tour.js';
 import { placeLimitOrder, cancelOrder, orderLimitBlocked, consumeOrderSlot, fillCapFor } from './orders.js';
 import {
   THEMES as ACHV_THEMES, THEME_EMOJI, THEME_ACHIEVEMENTS, achvPayload, ensureAchvState,
@@ -762,6 +762,25 @@ export async function handleApi(ctx) {
     const a = auth(ctx);
     if (!a) return json(res, 401, { error: '请先登录主站账号再参赛' });
     const r = tourJob(db, a.player);
+    if (!r.ok) return json(res, 400, r);
+    saveDb();
+    return json(res, 200, { ...r, state: tourState(db, a.player) });
+  }
+
+  // 赛区止盈止损：加条件 / 删条件（逻辑见 src/tour.js#tourTpSl）
+  if (pathname === '/api/tour/tpsl' && method === 'POST') {
+    const a = auth(ctx);
+    if (!a) return json(res, 401, { error: '请先登录主站账号再参赛' });
+    const r = tourTpSl(db, a.player, body);
+    if (!r.ok) return json(res, 400, r);
+    saveDb();
+    return json(res, 200, { ...r, state: tourState(db, a.player) });
+  }
+
+  if (pathname === '/api/tour/tpsl/remove' && method === 'POST') {
+    const a = auth(ctx);
+    if (!a) return json(res, 401, { error: '请先登录主站账号再参赛' });
+    const r = tourTpSlRemove(db, a.player, body);
     if (!r.ok) return json(res, 400, r);
     saveDb();
     return json(res, 200, { ...r, state: tourState(db, a.player) });
