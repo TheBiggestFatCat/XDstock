@@ -140,7 +140,11 @@ function clockText(ms) {
 }
 
 // ---------- 取数 ----------
+let loadBusy = false;
 async function load() {
+  // 1 秒一拍，网慢的时候别把请求叠起来（上一拍没回来就跳过这一拍）
+  if (loadBusy) return;
+  loadBusy = true;
   try {
     const d = await api('/api/tour');
     state.data = d;
@@ -148,6 +152,8 @@ async function load() {
     render();
   } catch (e) {
     console.error('[tour] 拉取失败', e);
+  } finally {
+    loadBusy = false;
   }
 }
 
@@ -175,7 +181,7 @@ async function loadCandles(reset = false) {
 }
 
 /**
- * 每 2 秒只拉一次快照，里面不带 K 线；用最新价把最后一根补上，
+ * 每 1 秒只拉一次快照，里面不带 K 线；用最新价把最后一根补上，
  * 这样整根图不用为每个 tick 重新请求，10 秒左右再整包对齐一次。
  */
 function patchLastBar(price) {
@@ -313,7 +319,7 @@ function renderClock() {
     if (Date.now() >= d.startAt) load();
   } else if (d.status === 'running') {
     clock.textContent = `第 ${d.tick} 轮`;
-    hint.textContent = `行情进行中 · 每 ${Math.round((d.tickMs || 5000) / 1000)} 秒一轮`;
+    hint.textContent = `行情进行中 · 每 ${Math.round((d.tickMs || 1000) / 1000)} 秒一轮`;
   } else if (d.status === 'closed') {
     // 休市不是结束：轮次不涨、价格不动，管理员恢复后从这一轮接着跑
     clock.textContent = `第 ${d.tick} 轮`;
@@ -1244,7 +1250,7 @@ async function boot() {
     $('#gate').classList.add('show');
   }
 
-  // 秒表 + 轮询
+  // 秒表 + 轮询：秒表本来就走 1 秒，数据也压到 1 秒一拍（后端 tourTick 也是 1 秒）
   state.timer = setInterval(() => {
     if (state.data) renderClock();
   }, 1000);
@@ -1252,7 +1258,7 @@ async function boot() {
     if (!document.hidden) load();
     // 行情 tab 上每 10 秒把 K 线整包对齐一次（其余时间靠 patchLastBar 打补丁）
     if (!document.hidden && state.tab === 'market' && Date.now() - state.barsAt > 10000) loadCandles();
-  }, 2000);
+  }, 1000);
 }
 
 boot();

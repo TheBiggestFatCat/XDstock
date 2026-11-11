@@ -3,7 +3,8 @@
 // 设计约束（和主市场的关系）：
 //   · 完全独立的一套账：自己的现金（日元）、自己的持仓、自己的价格序列，
 //     不碰 db.players / db.stocks，主市场一行都不受影响。
-//   · 只挂在主循环的末尾跑一步（server.js#tourTick），赢了就 frozen，价格与成交一起冻结。
+//   · 自己一条 1 秒的循环（server.js#startTourLoop），不跟主站 tickMs 走；
+//     赢了就 frozen，价格与成交一起冻结。
 //   · 标的机制：股价就是实时汇率 —— 每轮直接取抓到的 AUD/JPY 原值，
 //     不归一化、不放大、不叠加溢价、不记成交冲击，报价和任何行情软件上的 AUD/JPY 完全一致。
 //     汇率由 server.js#tourFxLoop 定时抓取（src/fx.js），本模块只负责读最新值。
@@ -23,14 +24,20 @@ export const TOUR_LEV_STEP = 10;
 /** 每笔持仓最多挂几条止盈止损（和主站默认一致：够用，又不至于刷满一屏） */
 export const TOUR_MAX_TPSL = 8;
 /**
- * 报价序列上限（每个 tick 一个点）——和主站 config.historyTicks 同一口径：
- * 5 秒 × 3600 = 5 小时，正好铺满 1 分钟图的 300 根。
+ * 赛区自己的节奏：1 秒一步。和主站 config.tickMs（5 秒）刻意解耦 ——
+ * 主站休市时 loop 直接 return，赛区照样走，报价点也不会被主站的节奏拖慢。
  */
-const SERIES_MAX = 3600;
+export const TOUR_TICK_MS = 1000;
+/**
+ * 报价序列上限（每个 tick 一个点）：1 秒 × 7200 = 2 小时。
+ * 1 分钟图 300 根要 5 小时，光靠 series 攒不出来，历史部分由 setTourHist
+ * 从真实行情补进来（每 5 分钟一轮），这里只要覆盖到接缝处够用就行。
+ */
+const SERIES_MAX = 7200;
 /**
  * 三个周期各自保留多少根，根数照抄主站：
  * 1m 300 根 = 5 小时、5m 300 根 = 25 小时、15m 192 根 = 48 小时。
- * 单靠 5 秒的 series 攒不出 25/48 小时，所以历史部分由 setTourHist 从真实行情补进来。
+ * 单靠 1 秒的 series 攒不出 25/48 小时，所以历史部分由 setTourHist 从真实行情补进来。
  */
 export const TOUR_TFS = {
   '1m': { sec: 60, max: 300 },
@@ -121,10 +128,10 @@ export function ensureTour(db) {
   }
   delete t.stock.initialPrice;   // 不再用初始价，股价就是汇率原值
   if (!Array.isArray(t.stock.series)) t.stock.series = [];
-  // 每个点配一个时间戳（K 线的 x 轴用），老存档缺这半边就按 tickMs 反推补上
+  // 每个点配一个时间戳（K 线的 x 轴用），老存档缺这半边就按赛区自己的节奏反推补上
   if (!Array.isArray(t.stock.seriesAt)) t.stock.seriesAt = [];
   if (t.stock.seriesAt.length !== t.stock.series.length) {
-    const step = Math.max(1000, num(db.config?.tickMs, 5000));
+    const step = TOUR_TICK_MS;
     const n = t.stock.series.length;
     const tail = num(t.fx?.at, Date.now());
     t.stock.seriesAt = t.stock.series.map((_, i) => tail - (n - 1 - i) * step);
@@ -339,7 +346,7 @@ export function setTourHist(db, tf, bars, at = Date.now()) {
   return true;
 }
 
-/** 5 秒报价点 → 指定周期的 OHLC（和主站 candlesFromSeries 一个口径） */
+/** 1 秒报价点 → 指定周期的 OHLC（和主站 candlesFromSeries 一个口径） */
 function barsFromSeries(t, sec) {
   const out = [];
   const series = Array.isArray(t.stock.series) ? t.stock.series : [];
@@ -381,7 +388,7 @@ export function tourCandles(db, tf = '1m') {
     : 0;
   return {
     tf,
-    tickMs: num(db.config?.tickMs, 5000),
+    tickMs: TOUR_TICK_MS,
     histAt: num(t.stock.histAt),
     changePct,
     candles
@@ -842,7 +849,7 @@ export function tourState(db, player) {
     startedAt: num(t.startedAt),
     endedAt: num(t.endedAt),
     tick: num(t.tick),
-    tickMs: num(db.config?.tickMs, 5000),
+    tickMs: TOUR_TICK_MS,
     target: TOUR_TARGET,
     startCash: TOUR_START_CASH,
     feeRate: TOUR_FEE_RATE,

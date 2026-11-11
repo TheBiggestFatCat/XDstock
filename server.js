@@ -11,7 +11,7 @@ import { TIMEFRAMES } from './src/config.js';
 import { checkPositions, playerEquity, logTrade } from './src/trading.js';
 import { processOrders, fillCapFor } from './src/orders.js';
 import { autoDcaTick } from './src/autoDca.js';
-import { tourTick, setTourRate, setTourHist, TOUR_TFS } from './src/tour.js';
+import { tourTick, setTourRate, setTourHist, TOUR_TFS, TOUR_TICK_MS } from './src/tour.js';
 import { marketPhase, phaseText } from './src/schedule.js';
 import { checkDelist } from './src/delist.js';
 import { fetchAudJpy, fetchAudJpyBars } from './src/fx.js';
@@ -627,13 +627,8 @@ function loop() {
     }
   }
 
-  // 锦标赛：独立赛区，一轮走一步（没开赛/已夺冠会自己跳过）。放在广播之前，
-  // 这样玩家下一帧拿到的就是本轮的最新价
-  try {
-    tourTick(d);
-  } catch (e) {
-    console.error('[tour] 推进出错:', e.message);
-  }
+  // 锦标赛不走这里了：它有自己 1 秒一条的循环（startTourLoop），
+  // 主站休市时 loop 直接 return，赛区也不会跟着停
 
   // 通知到个人
   const byPlayer = new Map();
@@ -736,29 +731,64 @@ async function refreshFx() {
 
 let fxTimer = null;
 let fxLastAt = 0;
-function startFxLoop() {  // 每 5 秒瞄一眼：到点没到点、开没开，都是现读个股设置。
+let fxBusy = false;
+function startFxLoop() {  // 每 1 秒瞄一眼：到点没到点、开没开，都是现读个股设置。
   // 主市场已经没有 fx 票了（LMFX 退市），这个循环现在主要喂锦标赛：
-  // 没有 fx 票时按锦标赛的 10 秒节奏抓，抓到的值同时写进 db.fx 和 db.tour.fx。
+  // 赛区 1 秒一拍，汇率也得 1 秒抓一次，否则价格 15 秒才动一下、1 秒刷新就是白刷。
+  // 源是 swissquote 的实时 BBO，实测单次 0.7~1.2 秒，所以用 fxBusy 防重入
+  // （上一笔没回来就不发下一笔），实际节奏约 1.2~1.5 秒一个新报价。
+  // 有 fx 票的主站市场仍按个股 refreshMs 走，一行没改。
+  const pull = () => {
+    if (fxBusy) return;
+    fxBusy = true;
+    fxLastAt = Date.now();
+    refreshFx()
+      .catch((e) => console.error('[fx] 抓取失败:', e.message))
+      .finally(() => { fxBusy = false; });
+  };
   const tick = () => {
     const d = getDb();
     const fxStock = Object.values(d.stocks).find((st) => st.trait?.id === 'fx');
     const t = fxStock ? (fxStock.trait || {}) : {};
     if (fxStock && Number(t.fxEnabled ?? d.config.fxEnabled ?? 1) === 0) return;
-    const ms = Math.max(
-      15000,
-      Number(fxStock ? (t.refreshMs ?? d.config.fxRefreshMs ?? 60000) : 10000)
-    );
+    // 没 fx 票 = 纯喂赛区，跟着赛区 1 秒走；有票就还按那只票自己的刷新节奏
+    const ms = fxStock
+      ? Math.max(1000, Number(t.refreshMs ?? d.config.fxRefreshMs ?? 60000))
+      : TOUR_TICK_MS;
     if (Date.now() - fxLastAt < ms) return;
-    fxLastAt = Date.now();
-    refreshFx().catch((e) => console.error('[fx] 抓取失败:', e.message));
+    pull();
   };
-  refreshFx().catch((e) => console.error('[fx] 初始化失败:', e.message));
+  pull();
   fxLastAt = Date.now();
-  const timer = setInterval(tick, 5000);
+  const timer = setInterval(tick, 1000);
   if (timer.unref) timer.unref();
 }
 
-// 赛区 K 线的历史部分：赛区只从服务启动那刻开始攒 5 秒报价点，
+// 锦标赛：赛区自己一条 1 秒的循环，不跟主站 tickMs（5 秒）绑在一起。
+// 这样主站休市（loop 开头直接 return）时赛区照样走，报价点也不会被主站节奏拖慢。
+// 落盘压到 5 秒一次 —— db.json 三兆多，每秒整库 stringify + rename 太浪费，
+// saveDb 自带 800ms 防抖，攒 5 秒正好合并成一次。
+let tourSaveAt = 0;
+function startTourLoop() {
+  const tick = () => {
+    const d = getDb();
+    try {
+      tourTick(d);
+    } catch (e) {
+      console.error('[tour] 推进出错:', e.message);
+    }
+    const nowMs = Date.now();
+    if (nowMs - tourSaveAt >= 5000) {
+      tourSaveAt = nowMs;
+      saveDb();
+    }
+  };
+  tick();   // 启动先走一拍，别让页面空等 1 秒
+  const timer = setInterval(tick, TOUR_TICK_MS);
+  if (timer.unref) timer.unref();
+}
+
+// 赛区 K 线的历史部分：赛区只从服务启动那刻开始攒 1 秒报价点，
 // 1m 的 300 根（5 小时）、5m 的 25 小时、15m 的 48 小时都攒不出来，
 // 所以定期抓真实行情的历史包补上（3 个请求一次，5 分钟一轮，很轻）。
 let histLastAt = 0;
@@ -789,6 +819,7 @@ backupDb('boot');
 setInterval(() => backupDb(), 30 * 60 * 1000);
 
 startFxLoop();
+startTourLoop();
 startTourHistLoop();
 
 server.listen(PORT, () => {

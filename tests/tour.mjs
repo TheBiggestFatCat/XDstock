@@ -452,11 +452,11 @@ for (const [raw, want, label] of [
   db2.tour.startAt = Date.now() - 1000;
   setTourRate(db2, 108.9, Date.now(), 'test');
   tourTick(db2);
-  for (let i = 0; i < 3700; i++) {
+  for (let i = 0; i < 7300; i++) {
     db2.tour.fx.rate = 108.9 + (i % 7) * 0.001;
     tourTick(db2);
   }
-  check('报价序列上限 3600（5 小时）', db2.tour.stock.series.length === 3600,
+  check('报价序列上限 7200（2 小时 @1 秒）', db2.tour.stock.series.length === 7200,
     String(db2.tour.stock.series.length));
   check('序列和时间戳同步裁剪',
     db2.tour.stock.seriesAt.length === db2.tour.stock.series.length,
