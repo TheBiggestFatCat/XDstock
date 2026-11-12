@@ -3214,6 +3214,7 @@ body[data-theme="night"] .fee-bonus { color: var(--down); }
   font-size: 11.5px; color: var(--ink-2); margin-bottom: 6px;
 }
 .rc-title { font-weight: 600; }
+.rc-hint { font-style: normal; font-weight: 400; font-size: 10px; color: var(--ink-3); margin-left: 6px; }
 .rc-legend { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-3); }
 .rc-legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-left: 6px; }
 .rc-l1 { background: var(--accent); }

@@ -1168,8 +1168,8 @@ function renderReport() {
  * 财报历史图（纯 SVG，不依赖图表库）
  *
  * 2026-11 改版：
- *   - **营收画柱状图**（左纵轴，单位按金额自动缩写：万/亿/万亿）
- *   - **净利同比画折线**（右纵轴，单位 %）
+ *   - **营收画柱状图**（左纵轴，单位按金额自动缩写：万/亿/万亿，**轴区间自适应、不从 0 起**）
+ *   - **净利同比画折线**（右纵轴，单位 %，同样自适应）
  *   - **左右两侧都显示纵坐标刻度**，柱子和折线各用各的轴
  *   - 保留原来的「各自拉满看趋势」思路，但现在有轴刻度，能读出量级
  */
@@ -1197,22 +1197,45 @@ function renderReportChart(hist) {
     return prev > 0 ? (v / prev - 1) * 100 : 0;
   });
 
-  /** 千分位缩写的坐标轴刻度（不带 $，轴更紧凑） */
-  const axisMoney = (v) => {
+  /**
+   * 坐标轴刻度文字：按金额自动缩写（T/B/M，小于 100 万直接千分位）。
+   * 传 step 时按「步长」补小数位 —— 自适应轴可能出现 201.5B / 202.5B，
+   * 固定 0 位会全变成 "202B" 看不出区别。
+   */
+  const axisMoney = (v, step = 0) => {
     const abs = Math.abs(v);
     if (!(abs > 0)) return '0';
-    const neg = v < 0 ? '-' : '';
-    const big = abbrMoney(abs);
-    return neg + (big || Math.round(abs).toLocaleString('en-US'));
+    const unit = abs >= 1e12 ? 1e12 : abs >= 1e9 ? 1e9 : abs >= 1e6 ? 1e6 : 1;
+    const suffix = unit === 1e12 ? 'T' : unit === 1e9 ? 'B' : unit === 1e6 ? 'M' : '';
+    const q = abs / unit;
+    const st = Math.abs(Number(step) || 0) / unit;
+    const digits = st >= 10 ? 0 : st >= 1 ? 1 : st >= 0.1 ? 2 : 3;
+    const txt = q.toFixed(digits).replace(/\.0+$/, '') + suffix;
+    return (v < 0 ? '-' : '') + txt;
   };
 
-  // 左轴：营收，从 0 起，取一个整齐的上界，3 段刻度
-  const revHiRaw = Math.max(1, ...rev);
-  const exp = Math.pow(10, Math.floor(Math.log10(revHiRaw)));
-  const mant = revHiRaw / exp;
-  const step = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((s) => mant <= s + 1e-9) || 10;
-  const revHi = step * exp;
-  const yRev = (v) => bottom - (v / revHi) * ih;
+  // 左轴：营收**自适应区间**（2026-11：一般不从 0 起，高位小区间也能看出变化）
+  // 取 1/2/2.5/5 的整齐步长、约 4 段刻度，两端留 15% 余量；数据完全持平时用 ±2% 窗口
+  const niceStep = (raw) => {
+    const e2 = Math.pow(10, Math.floor(Math.log10(Math.max(1e-12, raw))));
+    const f2 = raw / e2;
+    const s2 = [1, 2, 2.5, 5, 10].find((x) => f2 <= x + 1e-9) || 10;
+    return s2 * e2;
+  };
+  const revMinRaw = Math.min(...rev);
+  const revMaxRaw = Math.max(...rev);
+  const revSpanRaw = revMaxRaw - revMinRaw;
+  const revPad = Math.max(revSpanRaw * 0.15, revMaxRaw * 0.002);
+  let revLoRaw = Math.max(0, revMinRaw - revPad);
+  let revHiRaw = revMaxRaw + revPad;
+  if (revHiRaw - revLoRaw < 1e-9) {
+    revLoRaw = revMaxRaw * 0.98;
+    revHiRaw = revMaxRaw * 1.02;
+  }
+  const revStep = niceStep((revHiRaw - revLoRaw) / 3);
+  const revLo = Math.max(0, Math.floor(revLoRaw / revStep) * revStep);
+  const revHi = Math.ceil(revHiRaw / revStep) * revStep;
+  const yRev = (v) => bottom - ((v - revLo) / Math.max(1e-9, revHi - revLo)) * ih;
 
   // 右轴：净利同比 %，包含 0（有负数时零轴在中间偏上/下）
   const npValid = np.filter((v) => v !== null);
@@ -1226,7 +1249,8 @@ function renderReportChart(hist) {
   const xOf = (i) => padL + (list.length === 1 ? iw / 2 : ((i + 0.5) / list.length) * iw);
   const barW = Math.max(1.5, Math.min(20, (iw / list.length) * 0.5));
 
-  const leftTicks = [0, 1 / 3, 2 / 3, 1].map((k) => revHi * k);
+  const leftTicks = [];
+  for (let v = revLo; v <= revHi + revStep * 0.001; v += revStep) leftTicks.push(v);
   const rightTicks = [npLo, (npLo + npHi) / 2, npHi];
   const fmtPct = (v) => `${v >= 0 ? '+' : ''}${v.toFixed(v > 0 && v < 10 ? 1 : 0)}%`;
 
@@ -1254,21 +1278,21 @@ function renderReportChart(hist) {
 
   const leftAxis = leftTicks.map((v) => `
     <line class="rc-grid" x1="${padL}" y1="${yRev(v).toFixed(1)}" x2="${W - padR}" y2="${yRev(v).toFixed(1)}" />
-    <text class="rc-ytick l" x="${padL - 6}" y="${(yRev(v) + 3.2).toFixed(1)}" text-anchor="end">${axisMoney(v)}</text>`).join('');
+    <text class="rc-ytick l" x="${padL - 6}" y="${(yRev(v) + 3.2).toFixed(1)}" text-anchor="end">${axisMoney(v, revStep)}</text>`).join('');
   const rightAxis = rightTicks.map((v) => `
     <text class="rc-ytick r" x="${W - padR + 6}" y="${(yNp(v) + 3.2).toFixed(1)}" text-anchor="start">${fmtPct(v)}</text>`).join('');
 
   return `
     <div class="rc-wrap">
       <div class="rc-head">
-        <span class="rc-title">财报趋势 · 共 ${list.length} 期</span>
+        <span class="rc-title">财报趋势 · 共 ${list.length} 期<i class="rc-hint">左轴自适应（非 0 起点）</i></span>
         <span class="rc-legend">
           <i class="rc-l1"></i>营收（柱·左轴）
           <i class="rc-l2"></i>净利同比（线·右轴）
         </span>
       </div>
       <svg class="rc-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img"
-        aria-label="营收柱状图与净利同比折线，左右两侧为纵坐标">
+        aria-label="营收柱状图与净利同比折线，左右两侧为自适应纵坐标">
         ${leftAxis}
         ${rightAxis}
         <line class="rc-axis" x1="${padL}" y1="${padT}" x2="${padL}" y2="${bottom}" />
