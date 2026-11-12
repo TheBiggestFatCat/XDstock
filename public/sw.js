@@ -1,6 +1,6 @@
 ﻿// 灏忕伅璇佸埜 路 Service Worker
 // 闈欐€佽祫婧愶細缃戠粶浼樺厛锛屽け璐ユ椂鐢ㄧ紦瀛橈紙绂荤嚎涔熻兘鎵撳紑锛?// 鎺ュ彛璇锋眰锛氱洿鎺ヨ蛋缃戠粶锛岀粷涓嶇紦瀛橈紙琛屾儏蹇呴』瀹炴椂锛?
-const CACHE = 'xdstock-v161';
+const CACHE = 'xdstock-v162';
 const SHELL = [
   '/',
   '/index.html',

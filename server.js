@@ -7,7 +7,7 @@ import { getBuild } from './src/build.js';
 import { stepMarket, seedHistory, changesFor, noticeAlive, noticeLink, liveIndexWeights } from './src/engine.js';
 import { stockWire, positionWire } from './src/wire.js';
 import { stealCooldownFor, nightInfoFor, isNightWindow } from './src/theme.js';
-import { TIMEFRAMES } from './src/config.js';
+import { TIMEFRAMES, timeframeTicks } from './src/config.js';
 import { checkPositions, playerEquity, logTrade } from './src/trading.js';
 import { processOrders, fillCapFor } from './src/orders.js';
 import { autoDcaTick } from './src/autoDca.js';
@@ -300,7 +300,7 @@ function tickPayload(forPlayerId) {
     closedUntil: phaseNow(d).nextOpenAt,
     nextChangeAt: phaseNow(d).nextChangeAt,
     index: d.index.value,
-    indexChanges: changesFor(d.index.series, TIMEFRAMES),
+    indexChanges: changesFor(d.index.series, timeframeTicks(d.config.tickMs)),
     // 调仓后权重会变，不推的话前端面板一直是进页面时那份
     indexWeights: (() => {
       const live = liveIndexWeights(d, 'index');

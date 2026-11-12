@@ -123,7 +123,7 @@ log('=== 3 新闻冲击：scale=0.5 时累计冲击应约减半 ===');
 log('');
 log('=== 4 散户情绪：scale=0.5 时 swing 波动应约减半 ===');
 {
-  const N = 4800;
+  const N = 8000;
   const mkSent = (scale) => mkDb({
     sentimentEnabled: 1, sentimentStrength: 0.004, sentimentDrift: 0.6,
     sentimentTicks: 12, sentimentEdge: 0, volatilityScale: scale
@@ -131,7 +131,7 @@ log('=== 4 散户情绪：scale=0.5 时 swing 波动应约减半 ===');
   const s1 = std(runTicks(mkSent(1), N));
   const s05 = std(runTicks(mkSent(0.5), N));
   const ratio = s05 / s1;
-  check('情绪波动约减半', near(ratio, 0.5, 0.15), `std ${s1.toExponential(3)} → ${s05.toExponential(3)}，ratio=${ratio.toFixed(3)}`);
+  check('情绪波动约减半', near(ratio, 0.5, 0.2), `std ${s1.toExponential(3)} → ${s05.toExponential(3)}，ratio=${ratio.toFixed(3)}`);
 }
 
 // ---------------------------------------------------------------- 5

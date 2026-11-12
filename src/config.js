@@ -389,11 +389,24 @@ export const DEFAULT_CONFIG = {
 // 交易周期（tick 数）：一根 K 线由多少个 tick 聚合而成
 // 注意：'10 轮' 那一档 2026-11 下线了（前端按钮删掉，接口也不再支持），
 // 5m / 15m 各自有独立数据包（bars5 / bars15），这里只留 1m
+// ⚠️ 这里的数字是 **tickMs=5000（5 秒/轮）时的基准**；实际要用 `timeframeTicks(tickMs)` 换算，
+//    否则管理员把 tickMs 改成 2000ms 后，1m/5m/15m 全都会变成 24s/2min/6min 一根。
 export const TIMEFRAMES = {
   '1m': 12,
   '5m': 60,
   '15m': 180
 };
+
+/** 按当前 tickMs 换算各周期「一根 K 线要几个 tick」（基准 5000ms/tick） */
+export function timeframeTicks(tickMs) {
+  const ms = Number(tickMs) > 0 ? Number(tickMs) : 5000;
+  const k = 5000 / ms;
+  const out = {};
+  for (const [tf, n] of Object.entries(TIMEFRAMES)) {
+    out[tf] = Math.max(1, Math.round(Number(n) * k));
+  }
+  return out;
+}
 
 /**
  * 「全市场波动倍率」的规范化读取（总开关，2026-11）。

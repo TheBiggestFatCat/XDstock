@@ -23,7 +23,7 @@ import {
 } from './fundamentals.js';
 import { tycoonLeadTicks } from './achievements.js';
 import { positionPnl } from './trading.js';
-import { TIMEFRAMES } from './config.js';
+import { timeframeTicks } from './config.js';
 
 const num = (v, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
 
@@ -122,7 +122,7 @@ export function stockWire(db, st, me) {
   const out = {
     price: num(Number(st.price).toFixed(4)),
     changePct: prev > 0 ? ((st.price - prev) / prev) * 100 : 0,
-    changes: changesFor(st.series, TIMEFRAMES),
+    changes: changesFor(st.series, timeframeTicks(cfg.tickMs)),
     status: st.status,
     st: !!st.st,
     stTicks: num(st.stTicks),

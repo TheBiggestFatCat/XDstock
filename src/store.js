@@ -10,7 +10,8 @@ import { backDerive, fairFromReport, dfItemSeedFundamentals } from './fundamenta
 import { ensureDfItem, dfItemFair } from './dfItem.js';
 import {
   seedBars15, seedBars5, seedVolFromConfig,
-  BAR15_MAX, BAR15_SEED_VER, BAR5_MAX, BAR5_SEED_VER, BAR5_TICKS
+  bar5TicksFor, bar15TicksFor,
+  BAR15_MAX, BAR15_SEED_VER, BAR5_MAX, BAR5_SEED_VER
 } from './bars15.js';
 import { ensureSchedules } from './schedule.js';
 import { ensureAchvState, GLOBAL_ACHIEVEMENTS, achvTarget } from './achievements.js';
@@ -262,6 +263,55 @@ export function migrate(d) {
     console.log('  分红参数升级为「行业派息率 × 倍率」：倍率 1、封顶 1.5%/期');
   }
 
+  // K 线粒度跟随 tickMs（2026-11：管理员可把 tickMs 改成 2000ms 等）。
+  // tickMs 一变，老存档的 series / bars 是按旧节奏攒的：时间轴会混两种 cadence，
+  // 5m/15m 会画成「2 分钟 / 6 分钟」一根。这里统一重置成同一节奏的合成历史，
+  // 只影响 K 线外观（不动持仓、资金、财报、订单）。
+  const tickMsNow = Math.max(1000, Number(merged.config.tickMs) || 5000);
+  const b5Ticks = bar5TicksFor(tickMsNow);
+  const b15Ticks = bar15TicksFor(tickMsNow);
+  const prevTickMs = Math.max(0, Number(merged.tickMsSeen) || 0);
+  const tickMsChanged = prevTickMs !== tickMsNow;
+  merged.tickMsSeen = tickMsNow;
+  if (tickMsChanged) {
+    const n = Math.max(60, Math.min(3600, Math.floor(Number(merged.config.historyTicks) || 3600)));
+    const sig = Math.max(0.0005, Number(merged.config.baseVolatility) || 0.0022);
+    // 从现价往回随机走一段，尾巴接回现价（和 seedBars 同一套观感）
+    const synth = (price) => {
+      const anchor = Math.max(0.01, Number(price) || 1);
+      const out = [anchor];
+      let cur = anchor;
+      for (let i = 1; i < n; i++) {
+        const g = (Math.random() + Math.random() - 1) * sig * 1.4;
+        cur = Math.max(0.01, cur / (1 + g));
+        out.push(cur);
+      }
+      out.reverse();
+      out[out.length - 1] = anchor;
+      return out;
+    };
+    for (const st of Object.values(merged.stocks)) {
+      const px = Math.max(0.01, Number(st.price) || Number(st.initialPrice) || 1);
+      st.series = synth(px);
+      st.volSeries = new Array(n).fill(0);
+      st.bars5 = [];
+      st.bars15 = [];
+      st.bars5Ver = -1;      // 强制下面按新 tick 数重铺
+      st.bars15Ver = -1;
+    }
+    if (merged.index) merged.index.series = synth(merged.index.value || INDEX_BASE);
+    if (merged.smallIndex) merged.smallIndex.series = synth(merged.smallIndex.value || INDEX_BASE);
+    const nowMs = Date.now();
+    merged.tickTimes = Array.from({ length: n }, (_, i) => nowMs - (n - 1 - i) * tickMsNow);
+    merged.tickTimesStart = Math.max(0, (Number(merged.tick) || 0) - n + 1);
+    merged.startedAt = nowMs - (Number(merged.tick) || 0) * tickMsNow;
+    console.log(`  tickMs ${prevTickMs || '?'} → ${tickMsNow}ms：K 线历史按新节奏重新铺 ${n} 根`);
+  }
+  for (const st of Object.values(merged.stocks)) {
+    st.bars5Ticks = b5Ticks;
+    st.bars15Ticks = b15Ticks;
+  }
+
   // 指数标的（DENG / DENGS）也要 15 分钟 K 线，但上面那段按 isIndex 跳过了，这里补
   for (const st of Object.values(merged.stocks)) {
     if (!st.isIndex) continue;
@@ -269,7 +319,7 @@ export function migrate(d) {
       || Number(st.bars5Ver) !== BAR5_SEED_VER) {
       const price5 = Math.max(0.01, Number(st.price) || Number(st.initialPrice) || 1);
       st.bars5 = seedBars5(st.bars5, price5, Number(merged.tick) || 0,
-        seedVolFromConfig(merged.config, BAR5_TICKS) * 0.8);
+        seedVolFromConfig(merged.config, b5Ticks) * 0.8, b5Ticks);
       st.bars5Seeded = true;
       st.bars5Ver = BAR5_SEED_VER;
     }
@@ -280,7 +330,7 @@ export function migrate(d) {
       || Number(st.bars15Ver) !== BAR15_SEED_VER) {
       const price = Math.max(0.01, Number(st.price) || INDEX_BASE);
       st.bars15 = seedBars15(st.bars15, price, Number(merged.tick) || 0,
-        seedVolFromConfig(merged.config) * 0.8);   // 指数波动比个股小一点
+        seedVolFromConfig(merged.config, b15Ticks) * 0.8, b15Ticks);   // 指数波动比个股小一点
       st.bars15Seeded = true;
       st.bars15Ver = BAR15_SEED_VER;
     }
@@ -323,7 +373,7 @@ export function migrate(d) {
       || Number(st.bars5Ver) !== BAR5_SEED_VER) {
       const price5 = Math.max(0.01, Number(st.price) || Number(st.initialPrice) || 1);
       st.bars5 = seedBars5(st.bars5, price5, Number(merged.tick) || 0,
-        seedVolFromConfig(merged.config, BAR5_TICKS));
+        seedVolFromConfig(merged.config, b5Ticks), b5Ticks);
       st.bars5Seeded = true;
       st.bars5Ver = BAR5_SEED_VER;
     }
@@ -334,7 +384,7 @@ export function migrate(d) {
       || Number(st.bars15Ver) !== BAR15_SEED_VER) {
       const price = Math.max(0.01, Number(st.price) || Number(st.initialPrice) || 1);
       st.bars15 = seedBars15(st.bars15, price, Number(merged.tick) || 0,
-        seedVolFromConfig(merged.config));
+        seedVolFromConfig(merged.config, b15Ticks), b15Ticks);
       st.bars15Seeded = true;
       st.bars15Ver = BAR15_SEED_VER;
     }

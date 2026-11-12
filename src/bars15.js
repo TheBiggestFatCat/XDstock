@@ -14,14 +14,65 @@
  * 这个模块只做纯计算，不依赖 engine / store，避免循环引用。
  */
 
-export const BAR5_TICKS = 60;       // 5 分钟 = 60 tick
+export const BAR5_TICKS = 60;       // 基准（tickMs=5000 时）：5 分钟 = 60 tick
 export const BAR5_MAX = 300;        // 300 根 = 25 小时（和 1 分钟图的 300 根一样多）
 export const BAR5_SEED_VER = 1;
 
-export const BAR15_TICKS = 180;     // 15 分钟 = 180 tick
+export const BAR15_TICKS = 180;     // 基准（tickMs=5000 时）：15 分钟 = 180 tick
 export const BAR15_MAX = 192;       // 192 根 = 48 小时
 /** 冷启动数据的版本：算法改了就让老存档重铺一遍 */
 export const BAR15_SEED_VER = 2;
+
+/**
+ * 按当前 tickMs 算「一根 5 分钟 K 线要几个 tick」。
+ * 必须跟着 tickMs 走：以前写死 60，把 tickMs 改成 2000ms 后一根实际只有 2 分钟，
+ * 5m / 15m 图的时间轴就全错了（2026-11 修）。
+ */
+export function bar5TicksFor(tickMs) {
+  const ms = Number(tickMs) > 0 ? Number(tickMs) : 5000;
+  return Math.max(1, Math.round(300000 / ms));
+}
+
+/** 同上：一根 15 分钟 K 线要几个 tick */
+export function bar15TicksFor(tickMs) {
+  const ms = Number(tickMs) > 0 ? Number(tickMs) : 5000;
+  return Math.max(1, Math.round(900000 / ms));
+}
+
+/**
+ * 把按旧 tick 数切好的 K 线重新按新 tick 数分桶（合并/拆不开时以合并为准）。
+ * tickMs 被管理员改掉后，历史桶的宽度会变；直接继续往同一条数组里 push 会混入两种粒度。
+ * @param {Array} list  [bucket,o,h,l,c,vol]
+ * @param {number} oldTicks 旧的一根是多少 tick
+ * @param {number} newTicks 新的一根是多少 tick
+ */
+export function rebucketBars(list, oldTicks, newTicks, max = BAR15_MAX) {
+  if (!Array.isArray(list) || !list.length) return Array.isArray(list) ? list : [];
+  const from = Math.max(1, Number(oldTicks) || 1);
+  const to = Math.max(1, Number(newTicks) || 1);
+  if (from === to) return list;
+  const out = [];
+  for (const b of list) {
+    if (!Array.isArray(b) || b.length < 5) continue;
+    const bucket = Math.floor((Number(b[0]) || 0) * from / to);
+    const o = Number(b[1]);
+    const h = Number(b[2]);
+    const l = Number(b[3]);
+    const c = Number(b[4]);
+    const vol = Number(b[5]) || 0;
+    if (![o, h, l, c].every((x) => Number.isFinite(x) && x > 0)) continue;
+    const last = out[out.length - 1];
+    if (last && last[0] === bucket) {
+      last[2] = Math.max(last[2], h);
+      last[3] = Math.min(last[3], l);
+      last[4] = c;
+      last[5] = (Number(last[5]) || 0) + vol;
+    } else if (!last || bucket > last[0]) {
+      out.push([bucket, o, h, l, c, vol]);
+    }
+  }
+  return out.length > max ? out.slice(-max) : out;
+}
 
 /**
  * 往一份 K 线里塞一个价格（通用实现）。
@@ -127,20 +178,20 @@ export function barsToCandles(list, timeOf, ticks = BAR15_TICKS) {
 export function pushBar15(list, bucket, price, volume = 0) {
   return pushBar(list, bucket, price, volume, BAR15_MAX);
 }
-export function seedBars15(list, price, tickNow, vol = 0.08) {
-  return seedBars(list, price, tickNow, vol, BAR15_MAX, BAR15_TICKS);
+export function seedBars15(list, price, tickNow, vol = 0.08, ticks = BAR15_TICKS) {
+  return seedBars(list, price, tickNow, vol, BAR15_MAX, ticks);
 }
-export function bars15Candles(list, timeOf) {
-  return barsToCandles(list, timeOf, BAR15_TICKS);
+export function bars15Candles(list, timeOf, ticks = BAR15_TICKS) {
+  return barsToCandles(list, timeOf, ticks);
 }
 
 /* ---------- 5 分钟（2026-11 新增，根数和 1 分钟对齐） ---------- */
 export function pushBar5(list, bucket, price, volume = 0) {
   return pushBar(list, bucket, price, volume, BAR5_MAX);
 }
-export function seedBars5(list, price, tickNow, vol = 0.03) {
-  return seedBars(list, price, tickNow, vol, BAR5_MAX, BAR5_TICKS);
+export function seedBars5(list, price, tickNow, vol = 0.03, ticks = BAR5_TICKS) {
+  return seedBars(list, price, tickNow, vol, BAR5_MAX, ticks);
 }
-export function bars5Candles(list, timeOf) {
-  return barsToCandles(list, timeOf, BAR5_TICKS);
+export function bars5Candles(list, timeOf, ticks = BAR5_TICKS) {
+  return barsToCandles(list, timeOf, ticks);
 }

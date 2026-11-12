@@ -10,8 +10,14 @@ function fmtLocalTime(sec, withDate = false) {
   return withDate ? `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${hm}` : hm;
 }
 
-// K 线周期 → 一根 K 线聚合多少个 tick（必须和 src/config.js 的 TIMEFRAMES 一致）
+// K 线周期 → 一根 K 线聚合多少个 tick（基准 tickMs=5000；实际用 tfTicks() 按当前 tickMs 换算）
 const TF_SECONDS = { '1m': 12, '5m': 60, '15m': 180 };
+/** 当前 tickMs 下这个周期一根 K 线要几个 tick（必须和服务端 timeframeTicks() 一致） */
+function tfTicks(tf) {
+  const base = TF_SECONDS[tf] || 12;
+  const ms = Number(state.market?.tickMs) > 0 ? Number(state.market.tickMs) : 5000;
+  return Math.max(1, Math.round(base * 5000 / ms));
+}
 
 const state = {
   token: localStorage.getItem('xd_token') || '',
@@ -3699,7 +3705,7 @@ async function loadOverlay() {
     // 否则时间轴被撑长，主图会被挤到右边
     const t0 = state.candles[0]?.time;
     ov.candles = t0 ? clean.filter((c) => c.time >= t0) : clean;
-    ov.tickBucket = Math.floor((state.market?.tick || 0) / (TF_SECONDS[tf] || 12));
+    ov.tickBucket = Math.floor((state.market?.tick || 0) / tfTicks(tf));
     state.overlayAt = Date.now();
     series.setData(clean);
     renderOverlayChip();
@@ -3799,7 +3805,7 @@ function applyTickToOverlay() {
   const st = state.market?.stocks?.[ov.code];
   const price = Number(st?.price);
   if (!Number.isFinite(price) || price <= 0) return;
-  const group = TF_SECONDS[state.tf] || 12;
+  const group = tfTicks(state.tf);
   const tickMs = state.market?.tickMs || 5000;
   const tick = Number(state.market?.tick);
   if (!Number.isFinite(tick) || tick < 0) return;
@@ -3882,7 +3888,7 @@ async function loadCandles(opts = {}) {
 
     // 记下当前桶号：下一次 tick 落在同一根 K 线里就只更新它
     state.tickKey = code + '|' + tf;
-    state.tickBucket = Math.floor((state.market?.tick || 0) / (TF_SECONDS[tf] || 12));
+    state.tickBucket = Math.floor((state.market?.tick || 0) / tfTicks(tf));
     renderMAs();
     state.plSig = null;
     updatePriceLines();
@@ -4177,7 +4183,7 @@ function applyTickToChart(price) {
   if (!state.candleSeries) return;
   if (!Number.isFinite(price) || price <= 0) return;
 
-  const group = TF_SECONDS[state.tf] || 12;
+  const group = tfTicks(state.tf);
   const tickMs = state.market?.tickMs || 5000;
   const tick = Number(state.market?.tick);
   if (!Number.isFinite(tick) || tick < 0) return;

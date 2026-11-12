@@ -1,5 +1,5 @@
 import { INDEX_BASE, SMALL_INDEX_STOCK } from './stocks.js';
-import { pushBar15, pushBar5, BAR15_TICKS, BAR5_TICKS } from './bars15.js';
+import { pushBar15, pushBar5, BAR15_TICKS, BAR5_TICKS, BAR15_MAX, BAR5_MAX, bar5TicksFor, bar15TicksFor, rebucketBars } from './bars15.js';
 import { TYCOON_LEAD_TICKS, isTycoonSector, genNextReport, fairFromReport, fairFromHistory, impactFactor, industryMidGrowth, rollWeather, dividendPerShare } from './fundamentals.js';
 export { TYCOON_LEAD_TICKS };
 import { genMarketTrades } from './marketTrades.js';
@@ -798,6 +798,9 @@ export function lotteryFactor(up, pct) {
 
 export function stepMarket(db) {
   const cfg = db.config;
+  // K 线分桶必须跟着 tickMs 走（tickMs 改了以后 5m/15m 一根的 tick 数要同步变）
+  const b5Ticks = bar5TicksFor(cfg.tickMs);
+  const b15Ticks = bar15TicksFor(cfg.tickMs);
 
   // 0. 重大利好 / 重大利空（概率只有普通的 1/100，先掷）
   spawnMajorNews(db);
@@ -851,6 +854,17 @@ export function stepMarket(db) {
     db.fxVolAvg = (db.fxVolAvg || vol) * (1 - 0.1) + vol * 0.1;
   }
   const stocks = Object.values(db.stocks);
+  // 管理员运行中改了 tickMs：老桶宽度不一致，先把已有 K 线重分桶，再继续往里推
+  for (const st of stocks) {
+    if (Array.isArray(st.bars5) && st.bars5.length && Number(st.bars5Ticks) !== b5Ticks) {
+      st.bars5 = rebucketBars(st.bars5, Number(st.bars5Ticks) || BAR5_TICKS, b5Ticks, BAR5_MAX);
+    }
+    if (Array.isArray(st.bars15) && st.bars15.length && Number(st.bars15Ticks) !== b15Ticks) {
+      st.bars15 = rebucketBars(st.bars15, Number(st.bars15Ticks) || BAR15_TICKS, b15Ticks, BAR15_MAX);
+    }
+    st.bars5Ticks = b5Ticks;
+    st.bars15Ticks = b15Ticks;
+  }
   const xd = stocks.find((s) => s.trait?.id === 'broker');
   let brokerDrift = 0;
   if (xd) {
@@ -879,8 +893,8 @@ export function stepMarket(db) {
     const cap = cfg.historyTicks ?? 3600;
     if (st.series.length > cap) st.series.splice(0, st.series.length - cap);
     // 15 分钟 K 线单独攒一份（48 小时）
-    pushBar15(st.bars15, Math.floor(db.tick / BAR15_TICKS), st.price);
-    pushBar5(st.bars5, Math.floor(db.tick / BAR5_TICKS), st.price);
+    pushBar15(st.bars15, Math.floor(db.tick / b15Ticks), st.price);
+    pushBar5(st.bars5, Math.floor(db.tick / b5Ticks), st.price);
   }
 
   // 3.5 生成市场噪声成交（会推动价格：走 st.mflow 市场资金通道）
@@ -902,8 +916,8 @@ export function stepMarket(db) {
     const vcap = cfg.historyTicks ?? 3600;
     if (st.volSeries.length > vcap) st.volSeries.splice(0, st.volSeries.length - vcap);
     // 15 分钟 / 5 分钟那根：价格在上面已经 push 过，这里只补成交量
-    pushBar15(st.bars15, Math.floor(db.tick / BAR15_TICKS), st.price, vol);
-    pushBar5(st.bars5, Math.floor(db.tick / BAR5_TICKS), st.price, vol);
+    pushBar15(st.bars15, Math.floor(db.tick / b15Ticks), st.price, vol);
+    pushBar5(st.bars5, Math.floor(db.tick / b5Ticks), st.price, vol);
   }
   for (const st of stocks) {
     if (!st.isIndex) continue;
@@ -913,8 +927,8 @@ export function stepMarket(db) {
     st.volSeries.push(vol);
     const vcap = cfg.historyTicks ?? 3600;
     if (st.volSeries.length > vcap) st.volSeries.splice(0, st.volSeries.length - vcap);
-    pushBar15(st.bars15, Math.floor(db.tick / BAR15_TICKS), st.price, vol);
-    pushBar5(st.bars5, Math.floor(db.tick / BAR5_TICKS), st.price, vol);
+    pushBar15(st.bars15, Math.floor(db.tick / b15Ticks), st.price, vol);
+    pushBar5(st.bars5, Math.floor(db.tick / b5Ticks), st.price, vol);
   }
 
   // 3.58 天气股对齐（共用天气、同时发报）
@@ -995,8 +1009,8 @@ export function stepMarket(db) {
         if (idxStock.series.length > 3600) {
           idxStock.series.splice(0, idxStock.series.length - 3600);
         }
-        pushBar15(idxStock.bars15, Math.floor(db.tick / BAR15_TICKS), db.index.value);
-  pushBar5(idxStock.bars5, Math.floor(db.tick / BAR5_TICKS), db.index.value);
+        pushBar15(idxStock.bars15, Math.floor(db.tick / b15Ticks), db.index.value);
+  pushBar5(idxStock.bars5, Math.floor(db.tick / b5Ticks), db.index.value);
         idxStock.changePct = 0;
       }
     }
@@ -1054,8 +1068,8 @@ export function stepMarket(db) {
       if (sidxStock.series.length > 3600) {
         sidxStock.series.splice(0, sidxStock.series.length - 3600);
       }
-      pushBar15(sidxStock.bars15, Math.floor(db.tick / BAR15_TICKS), sidx.value);
-  pushBar5(sidxStock.bars5, Math.floor(db.tick / BAR5_TICKS), sidx.value);
+      pushBar15(sidxStock.bars15, Math.floor(db.tick / b15Ticks), sidx.value);
+  pushBar5(sidxStock.bars5, Math.floor(db.tick / b5Ticks), sidx.value);
     }
     sidx.series.push(sidx.value);
     if (sidx.series.length > 3600) sidx.series.splice(0, sidx.series.length - 3600);

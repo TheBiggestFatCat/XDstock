@@ -12,7 +12,7 @@ import {
 } from './chat.js';
 import { pushVersionPost, latestVersionPost, listVersionPosts, deleteVersionPost, updateVersionPost } from './version.js';
 import { nightInfoFor } from './theme.js';
-import { TIMEFRAMES } from './config.js';
+import { TIMEFRAMES, timeframeTicks } from './config.js';
 import { getBuild } from './build.js';
 import { marketPhase, phaseText, normalizeSchedule, ensureSchedules, scheduleWindow, cyclePhase, fmtMinute, parseMinute, MINUTE_MS } from './schedule.js';
 import { playerEquity, positionPnl } from './trading.js';
@@ -505,7 +505,7 @@ export function marketPayload(db, me) {
     index: {
       value: db.index.value,
       series: db.index.series.slice(-600),
-      changes: changesFor(db.index.series, TIMEFRAMES),
+      changes: changesFor(db.index.series, timeframeTicks(db.config.tickMs)),
       nextRebalanceTick: Number(db.index.nextRebalanceTick) || 0,
       rebalanceTick: Number(db.index.rebalanceTick) || 0,
       weights: (() => {
@@ -699,7 +699,8 @@ export async function handleApi(ctx) {
     const code = String(query.code || '').toUpperCase();
     const tf = String(query.tf || '1m');
     if (!TIMEFRAMES[tf]) return json(res, 400, { error: `不支持的周期：${tf}（现在只有 1m / 5m / 15m）` });
-    const group = TIMEFRAMES[tf];
+    // 聚合的 tick 数必须按当前 tickMs 换算（tickMs=2000 时 1m=30 tick，不是 12）
+    const group = timeframeTicks(db.config.tickMs)[tf];
     const isIndex = code === 'INDEX';
     const src = isIndex ? db.index : db.stocks[code];
     if (!src) return json(res, 404, { error: '标的不存在' });
@@ -722,7 +723,8 @@ export async function handleApi(ctx) {
     const src = db.stocks[code];
     if (!src) return json(res, 404, { error: '标的不存在' });
     const axis = tickTimeAxis(db);
-    const candles = bars5Candles(src.bars5 || [], (absTick) => timeFromAxis(axis, absTick, db));
+    const candles = bars5Candles(src.bars5 || [], (absTick) => timeFromAxis(axis, absTick, db),
+      timeframeTicks(db.config.tickMs)['5m']);
     return json(res, 200, { code, tf: '5m', candles, max: candles.length });
   }
 
@@ -731,7 +733,8 @@ export async function handleApi(ctx) {
     const src = db.stocks[code];
     if (!src) return json(res, 404, { error: '标的不存在' });
     const axis = tickTimeAxis(db);
-    const candles = bars15Candles(src.bars15 || [], (absTick) => timeFromAxis(axis, absTick, db));
+    const candles = bars15Candles(src.bars15 || [], (absTick) => timeFromAxis(axis, absTick, db),
+      timeframeTicks(db.config.tickMs)['15m']);
     return json(res, 200, { code, tf: '15m', candles, max: candles.length });
   }
 
