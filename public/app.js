@@ -67,11 +67,8 @@ const state = {
   eqTotal: null,
   eqTrading: null,
   listTab: 'quotes',
-  limitAuto: true,
   limitLine: null,
   orderMode: 'open',
-  // 下单方式：'limit' = 传统挂单（默认，行为不变）/ 'simple' = 简单模式（市价单）
-  orderStyle: localStorage.getItem('xd_order_style') === 'simple' ? 'simple' : 'limit',
   shopDir: 1,
   fakeNewsTargets: [],
   tradeTab: 'order',
@@ -2996,21 +2993,18 @@ function priceAtY(clientY) {
   return Math.round(p * 100) / 100;
 }
 
-/** 把价格写进输入框（并标记为手动） */
-function setLimitPrice(price, { manual = true } = {}) {
+/** 把价格写进输入框（图表点选/拖动用） */
+function setLimitPrice(price) {
   const inp = $('#orderLimit');
   if (!inp || !(price > 0)) return;
   inp.value = Number(price).toFixed(2);
-  if (manual) state.limitAuto = false;
   updateLimitLine(price);
+  updateCostPreview();
   updateOrderBtnLabel();
 }
 
-// ---------------- 限价挂单 ----------------
-// 自动定价：在这个方向稍微让一点价，保证下一轮能成交
-//   买入/平空 → 限价挂在现价上方（愿意多付一点）
-//   卖出/平多 → 限价挂在现价下方（愿意少收一点）
-// 让利比例必须每次现读，不能做成模块级常量——否则玩家改了要刷新才生效
+// ---------------- 下单 ----------------
+// 挂单价留空 = 简单模式（市价单，下一轮无条件成交）；填价格 = 传统挂单（到价才成交）
 
 /** 当前真正要下的方向：开仓看 state.side，平仓看持仓方向 */
 function effectiveSide() {
@@ -3021,76 +3015,11 @@ function effectiveSide() {
   return state.side;
 }
 
-/** 这一单是不是「买入」（决定挂单价的让利方向） */
+/** 这一单是不是「买入」（挂单价参考线颜色 / K 线划线方向用） */
 function isBuySide() {
   const side = effectiveSide();
   if ((state.orderMode || 'open') === 'close') return side === 'short'; // 平空 = 买回
   return side === 'long';
-}
-
-/** 让利百分比之上限：不设业务上限，只留结构兜底（100% 会让挂单价变成 0） */
-const SLIP_MAX = 99;
-
-/** 挂单让利百分比，默认 0.5%，存在本地长期有效 */
-function getSlipPct() {
-  const v = Number(localStorage.getItem('xd_slip'));
-  if (Number.isFinite(v) && v >= 0) return Math.min(SLIP_MAX, v);
-  return 0.5;
-}
-
-/** 保存让利比例，立刻重算挂单价
- *  normalize=false 时不回写输入框，避免打字过程中被改写 */
-function setSlipPct(v, normalize = true) {
-  const raw = Number(v);
-  const n = Number.isFinite(raw) ? Math.max(0, Math.min(SLIP_MAX, raw)) : getSlipPct();
-  localStorage.setItem('xd_slip', String(n));
-  const inp = $('#slipInput');
-  if (normalize && inp && Number(inp.value) !== n) inp.value = String(n);
-  syncLimitPrice(true);
-  return n;
-}
-
-function initSlipInput() {
-  const el = $('#slipInput');
-  if (!el) return;
-  el.value = String(getSlipPct());
-  // 以前这里没有任何监听：输入框是死的，改了既不保存也不重算挂单价
-  el.addEventListener('input', () => {
-    if (el.value === '') return;
-    const n = Number(el.value);
-    if (!Number.isFinite(n)) return;
-    setSlipPct(n, false);
-  });
-  el.addEventListener('change', () => {
-    setSlipPct(el.value === '' ? getSlipPct() : el.value);
-  });
-}
-
-function autoLimitPrice() {
-  const st = state.market?.stocks?.[state.code];
-  if (!st || !(st.price > 0)) return 0;
-  const price = Number(st.price);
-  const slip = getSlipPct() / 100;
-  const buy = isBuySide();
-  let p = Math.round((buy ? price * (1 + slip) : price * (1 - slip)) * 100) / 100;
-  // 低价股 0.01 就占 1%：四舍五入可能把让利抹平，这时至少让一跳
-  if (buy && p <= price) p = Math.round((price + 0.01) * 100) / 100;
-  if (!buy && p >= price) p = Math.max(0.01, Math.round((price - 0.01) * 100) / 100);
-  return p;
-}
-
-// 挂单价默认跟随现价（让利后），玩家手动改过就不再覆盖
-function syncLimitPrice(force = false) {
-  const inp = $('#orderLimit');
-  if (!inp) return;
-  if (force || state.limitAuto) {
-    const p = autoLimitPrice();
-    if (p > 0) {
-      inp.value = p.toFixed(2);
-      state.limitAuto = true;
-      updateLimitLine(p);
-    }
-  }
 }
 
 async function placeLimit() {
@@ -3098,9 +3027,8 @@ async function placeLimit() {
   if (!st) return;
   // 价格保留两位小数，避免出现 194.02499999999998 这种值
   const limit = Math.round(Number($('#orderLimit').value) * 100) / 100;
-  // 简单模式不看挂单价：没有价也能下单，后端会按现价估押金、下一轮按市价成交
+  // 挂单价留空 = 简单模式（下一轮按市价成交）；填了 = 按该价挂单
   const simple = isSimpleOrder();
-  if (!simple && !(limit > 0)) { toast('先填挂单价', 'err'); return; }
 
   const mode = state.orderMode || 'open';
   const pos = state.market?.me?.positions?.[state.code];
@@ -3153,50 +3081,11 @@ async function placeLimit() {
   }
 }
 
-/** 当前是不是「简单模式」（市价单）。默认 false = 保持原来的挂单逻辑 */
+/** 挂单价为空 = 简单模式（市价单）；填了价格 = 传统挂单 */
 function isSimpleOrder() {
-  return state.orderStyle === 'simple';
-}
-
-/**
- * 切换下单方式（传统挂单 ↔ 简单模式）。
- * 只影响前端提交的参数：传统模式带 limit、按价成交；简单模式带 simple: true、下一轮按市价成交。
- * 两种模式在服务端是两条独立分支，切回来 100% 是原来的行为。
- */
-function applyOrderStyle(style, save = true) {
-  state.orderStyle = style === 'simple' ? 'simple' : 'limit';
-  if (save) localStorage.setItem('xd_order_style', state.orderStyle);
-  const simple = isSimpleOrder();
-
-  $$('.os-btn').forEach((b) => {
-    const on = b.dataset.style === state.orderStyle;
-    b.classList.toggle('active', on);
-    b.setAttribute('aria-pressed', on ? 'true' : 'false');
-  });
-
-  // 简单模式没有挂单价概念，整块收起来。
-  // 用 class + style.display 双保险：`.field` 上的 display 可能把 hidden 覆盖掉（老坑）
-  const field = $('#limitField');
-  if (field) {
-    field.classList.toggle('hidden', simple);
-    field.style.display = simple ? 'none' : '';
-  }
-  const hint = $('#simpleHint');
-  if (hint) {
-    hint.classList.toggle('hidden', !simple);
-    hint.style.display = simple ? '' : 'none';
-  }
-
-  // 简单模式的押金口径比传统模式高 3%，从传统模式切过来时原先「全仓」的数量会买不起，
-  // 直接收敛到上限，免得玩家点下去才看到「资金不足」
-  if (simple && (state.orderMode || 'open') === 'open') {
-    const q = $('#orderQty');
-    const cap = maxAffordableQty();
-    if (q && cap > 0 && Number(q.value) > cap) q.value = String(cap);
-  }
-
-  updateOrderBtnLabel();
-  updateCostPreview();
+  const inp = $('#orderLimit');
+  const v = Math.round(Number(inp?.value) * 100) / 100;
+  return !(v > 0);
 }
 
 /** 开仓 / 平仓 模式切换 */
@@ -3244,7 +3133,6 @@ function switchOrderMode(mode) {
         : '这只票没有持仓';
     }
   }
-  if (state.limitAuto) syncLimitPrice(true);
   updateOrderBtnLabel();
 }
 
@@ -3380,11 +3268,13 @@ function selectStock(code) {
   const ce = $('#chartChange');
   ce.textContent = pct(chg0);
   ce.className = 'big-change ' + cls(chg0);
-  updateCostPreview();
-  state.limitAuto = true;
-  syncLimitPrice(true);
+  // 换票时挂单价清空：默认就是简单模式，不带着上一只票的价格
+  const limInp = $('#orderLimit');
+  if (limInp) limInp.value = '';
   switchOrderMode(state.orderMode || 'open');
-  updateLimitLine(Number($('#orderLimit')?.value));
+  updateLimitLine(0);
+  updateCostPreview();
+  updateOrderBtnLabel();
   loadMyTrades();
   loadCandles();
   state.stockTradesLoaded = false;
@@ -4524,7 +4414,6 @@ function onTick(d) {
     if (d.closed !== true) applyTickToChart(st.price);
   }
   updateCostPreview();
-  syncLimitPrice();
   updateOrderBtnLabel();
   // 聊天大厅跟着行情一轮一刷（只在聊天页开着时拉，省流量）
   if (state.chat?.open) loadChat(state.chat.seq || 0);
@@ -7730,8 +7619,6 @@ function bind() {
       if (state.orderMode === 'close') return;   // 平仓模式不切方向
       state.side = b.dataset.side;
       $$('#sideSwitch .side-btn').forEach((x) => x.classList.toggle('active', x === b));
-      // 方向变了，自动价的让利方向也要跟着变
-      if (state.limitAuto) syncLimitPrice(true);
       updateOrderBtnLabel();
       updateCostPreview();
     });
@@ -7757,8 +7644,9 @@ function bind() {
     $(sel).addEventListener('input', updateCostPreview);
   });
   $('#orderLimit')?.addEventListener('input', () => {
-    state.limitAuto = false;
     updateLimitLine(Number($('#orderLimit').value));
+    updateCostPreview();
+    updateOrderBtnLabel();
   });
   // 手动输入止盈止损
   $('#tpslApply')?.addEventListener('click', applyTpSl);
@@ -7785,11 +7673,6 @@ function bind() {
   $('#freeFeeBuy')?.addEventListener('click', buyFreeFee);
   $('#hotTipBuy')?.addEventListener('click', buyHotTip);
   $('#orderBtn').addEventListener('click', placeLimit);
-
-  // 下单方式切换：传统挂单 / 简单模式（选择存 localStorage，默认传统模式）
-  $$('.os-btn').forEach((b) => {
-    b.addEventListener('click', () => applyOrderStyle(b.dataset.style));
-  });
 
   // 暗中调查弹窗
   $('#spyClose')?.addEventListener('click', closeSpy);
@@ -7885,15 +7768,12 @@ function bind() {
 }
 
 // 调试用：把 state 挂到 window，方便排查问题（不含任何服务端秘密）
-try { window.__xd = { state, priceAtY, updateLimitLine, autoLimitPrice, setLimitPrice, pushAchvToast, maybeAchvToasts }; window.__xdState = state; } catch { /* ignore */ }
+try { window.__xd = { state, priceAtY, updateLimitLine, setLimitPrice, pushAchvToast, maybeAchvToasts }; window.__xdState = state; } catch { /* ignore */ }
 
 // ---------------- 启动 ----------------
 async function boot() {
   applyCachedTheme();
-  initSlipInput();
   bind();
-  // 恢复上次选的下单方式（默认传统挂单），并把按钮/说明/按钮文案刷成对应状态
-  applyOrderStyle(state.orderStyle, false);
   if (state.token) {
     // 上次停在「我的 → 银行/管理」，登录后自动切回去
     if (localStorage.getItem('xd_pf_pane')) switchPfPane(localStorage.getItem('xd_pf_pane'), true);

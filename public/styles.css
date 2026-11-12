@@ -1974,62 +1974,7 @@ input.tpsl-input {
 }
 .mode-btn[data-mode="close"].active { color: #d92d20; }
 
-/* ---------- 下单方式：传统挂单 / 简单模式（2026-11 新增） ---------- */
-/* 两个按钮并排、各自带一行说明；选中态用「描边 + 浅底」，
-   简单模式故意用橙色，和传统挂单的青色区分开，一眼看出来当前是哪一种 */
-.order-style { margin: 0 0 10px; }
-.os-label {
-  display: block;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--ink-2);
-  margin-bottom: 6px;
-}
-.os-switch { display: flex; gap: 6px; }
-.os-btn {
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  padding: 7px 6px;
-  min-height: 46px;              /* 触控目标 ≥ 44px */
-  font-family: inherit;
-  color: var(--ink-2);
-  background: var(--soft-2);
-  border: 1px solid transparent;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background .16s, color .16s, border-color .16s;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-.os-btn b { font-size: 12px; font-weight: 600; }
-.os-btn i { font-style: normal; font-size: 10.5px; opacity: .72; line-height: 1.3; }
-.os-btn:hover { color: var(--ink); }
-.os-btn.active {
-  color: #0d9488;
-  background: var(--surface);
-  border-color: #0d9488;
-  box-shadow: 0 1px 4px rgba(15, 42, 38, .1);
-}
-.os-btn[data-style="simple"].active { color: #b45309; border-color: #b45309; }
-.os-btn[data-style="simple"].active b { color: #b45309; }
-
-.simple-hint {
-  font-size: 11.5px;
-  line-height: 1.7;
-  color: var(--ink-2);
-  background: var(--hl-orange);
-  border: 1px solid var(--bd-warn);
-  border-radius: 10px;
-  padding: 8px 11px;
-  margin: 0 0 10px;
-}
-.simple-hint b { color: #b45309; }
-/* 简单模式下单按钮换成橙色，和「市价」语义对上 */
+/* 简单模式（挂单价留空）时下单按钮换成橙色，和「市价」语义对上 */
 #orderBtn.is-simple {
   background: #b45309;
   border-color: #b45309;
@@ -3574,16 +3519,6 @@ body[data-theme="bear"] .brand-logo {
   .admin-grid { grid-template-columns: 1fr; }
 }
 
-/* 挂单让利 */
-.slip-row {
-  display: flex; align-items: center; gap: 6px;
-  margin: 6px 0 2px; font-size: 12px; color: var(--ink-3);
-}
-.slip-row .slip-label { flex: none; }
-.slip-row #slipInput { width: 68px; flex: none; padding: 5px 8px; font-size: 12px; }
-.slip-row .slip-unit { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-
 /* ---------- 管理页：顶部标签 + 控制台 ---------- */
 .admin-tabs {
   display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 16px;
@@ -4805,15 +4740,4 @@ body[data-theme="bear"] .brand-logo {
     overflow: hidden;
   }
   .mms-left { flex: none; font-size: 11px; white-space: nowrap; opacity: .9; }
-}
-
-/* ---------- 下单方式（传统挂单 / 简单模式）：移动端触控适配 ----------
-   放在文件最后，才能盖住前面基础样式里的 min-height / padding
-   （同优先级下后出现的规则生效，之前写在中间那段是被覆盖掉的） */
-@media (max-width: 760px) {
-  .os-label { font-size: 12px; margin-bottom: 7px; }
-  .os-btn { min-height: 54px; padding: 8px 5px; border-radius: 11px; }
-  .os-btn b { font-size: 13px; }
-  .os-btn i { font-size: 10px; }
-  .os-switch { gap: 8px; }
 }
