@@ -3207,7 +3207,7 @@ body[data-theme="night"] .fee-bonus { color: var(--down); }
   padding-left: 8px; white-space: nowrap;
 }
 
-/* 财报趋势折线图 */
+/* 财报趋势图：营收柱状（左轴）+ 净利同比折线（右轴） */
 .rc-wrap { margin-top: 12px; }
 .rc-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -3218,13 +3218,21 @@ body[data-theme="night"] .fee-bonus { color: var(--down); }
 .rc-legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-left: 6px; }
 .rc-l1 { background: var(--accent); }
 .rc-l2 { background: #f59e0b; }
-.rc-svg { width: 100%; height: 118px; display: block; }
+.rc-svg { width: 100%; height: auto; display: block; }
 .rc-axis { stroke: var(--line); stroke-width: 1; }
-.rc-area { fill: var(--accent); opacity: .12; }
+.rc-axis.r { stroke: rgba(245, 158, 11, .55); }
+.rc-grid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 4; opacity: .7; }
+.rc-zero { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 3 3; opacity: .65; }
+.rc-bar { fill: var(--accent); opacity: .85; }
+.rc-bar:hover { opacity: 1; }
 .rc-line { fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linejoin: round; }
-.rc-line.np { stroke: #f59e0b; }
+.rc-line.np { stroke: #f59e0b; stroke-width: 2; }
 .rc-dot { fill: var(--accent); }
-.rc-dot.np { fill: #f59e0b; }
+.rc-dot.np { fill: #f59e0b; stroke: var(--panel, #171a21); stroke-width: .8; }
+.rc-ytick { font-size: 9.5px; fill: var(--ink-3); font-variant-numeric: tabular-nums; }
+.rc-ytick.l { fill: var(--ink-3); }
+.rc-ytick.r { fill: #f59e0b; opacity: .9; }
+.rc-xtick { font-size: 9.5px; fill: var(--ink-3); font-variant-numeric: tabular-nums; }
 .rc-foot {
   display: flex; justify-content: space-between;
   font-size: 11px; color: var(--ink-3); margin-top: 4px;

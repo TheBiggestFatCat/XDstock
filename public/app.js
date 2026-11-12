@@ -1164,83 +1164,125 @@ function renderReport() {
 }
 
 
-/** 财报历史折线图（纯 SVG，不依赖图表库） */
+/**
+ * 财报历史图（纯 SVG，不依赖图表库）
+ *
+ * 2026-11 改版：
+ *   - **营收画柱状图**（左纵轴，单位按金额自动缩写：万/亿/万亿）
+ *   - **净利同比画折线**（右纵轴，单位 %）
+ *   - **左右两侧都显示纵坐标刻度**，柱子和折线各用各的轴
+ *   - 保留原来的「各自拉满看趋势」思路，但现在有轴刻度，能读出量级
+ */
 function renderReportChart(hist) {
   const list = (hist || []).filter((h) => Number(h.revenue) > 0);
   if (list.length < 2) {
     return '<div class="rc-empty">财报记录还不够，再等一期就能画图了</div>';
   }
   const W = 560;
-  const H = 118;
-  const padL = 8;
-  const padR = 8;
-  const padT = 12;
-  const padB = 18;
+  const H = 156;
+  const padL = 52;    // 左轴标签
+  const padR = 48;    // 右轴标签
+  const padT = 10;
+  const padB = 22;    // 底部期号
   const iw = W - padL - padR;
   const ih = H - padT - padB;
+  const bottom = padT + ih;
 
   const rev = list.map((h) => Number(h.revenue) || 0);
   const npAbs = list.map((h) => Number(h.netProfit) || 0);
-  // 第二条线画「净利同比」：本期净利相对上一期的变化率（%）
+  // 净利同比（%）：本期净利相对上一期的变化率
   const np = npAbs.map((v, i) => {
     if (i === 0) return null;
     const prev = npAbs[i - 1];
     return prev > 0 ? (v / prev - 1) * 100 : 0;
   });
 
-  // 营收和净利量级差太多（几千亿 vs 几百亿），各自拉满，看趋势而不是比大小
-  const scaleOf = (arr) => {
-    const hi = Math.max(...arr);
-    const lo = Math.min(...arr);
-    const pad = Math.max(1e-9, (hi - lo) * 0.15);
-    return { lo: lo - pad, hi: hi + pad };
+  /** 千分位缩写的坐标轴刻度（不带 $，轴更紧凑） */
+  const axisMoney = (v) => {
+    const abs = Math.abs(v);
+    if (!(abs > 0)) return '0';
+    const neg = v < 0 ? '-' : '';
+    const big = abbrMoney(abs);
+    return neg + (big || Math.round(abs).toLocaleString('en-US'));
   };
-  const sRev = scaleOf(rev);
+
+  // 左轴：营收，从 0 起，取一个整齐的上界，3 段刻度
+  const revHiRaw = Math.max(1, ...rev);
+  const exp = Math.pow(10, Math.floor(Math.log10(revHiRaw)));
+  const mant = revHiRaw / exp;
+  const step = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((s) => mant <= s + 1e-9) || 10;
+  const revHi = step * exp;
+  const yRev = (v) => bottom - (v / revHi) * ih;
+
+  // 右轴：净利同比 %，包含 0（有负数时零轴在中间偏上/下）
   const npValid = np.filter((v) => v !== null);
-  const sNp = scaleOf(npValid.length ? npValid : [0]);
+  const npMinRaw = Math.min(0, ...(npValid.length ? npValid : [0]));
+  const npMaxRaw = Math.max(0, ...(npValid.length ? npValid : [0]));
+  const npPad = Math.max(0.5, (npMaxRaw - npMinRaw) * 0.12);
+  const npLo = npMinRaw - (npMinRaw < 0 ? npPad : 0);
+  const npHi = npMaxRaw + npPad;
+  const yNp = (v) => bottom - ((v - npLo) / Math.max(1e-9, npHi - npLo)) * ih;
 
-  const x = (i) => padL + (list.length === 1 ? iw / 2 : (i / (list.length - 1)) * iw);
-  const yOf = (v, sc) => padT + ih - ((v - sc.lo) / Math.max(1e-9, sc.hi - sc.lo)) * ih;
-  const y = (v) => yOf(v, sRev);
-  const yNp = (v) => yOf(v, sNp);
+  const xOf = (i) => padL + (list.length === 1 ? iw / 2 : ((i + 0.5) / list.length) * iw);
+  const barW = Math.max(1.5, Math.min(20, (iw / list.length) * 0.5));
 
-  const path = (arr) => arr.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-  const area = `${path(rev)} L${x(list.length - 1).toFixed(1)},${(padT + ih).toFixed(1)} L${x(0).toFixed(1)},${(padT + ih).toFixed(1)} Z`;
+  const leftTicks = [0, 1 / 3, 2 / 3, 1].map((k) => revHi * k);
+  const rightTicks = [npLo, (npLo + npHi) / 2, npHi];
+  const fmtPct = (v) => `${v >= 0 ? '+' : ''}${v.toFixed(v > 0 && v < 10 ? 1 : 0)}%`;
+
+  const bars = list.map((h, i) => {
+    const y = yRev(Number(h.revenue) || 0);
+    const hgt = Math.max(0.6, bottom - y);
+    return `<rect class="rc-bar" x="${(xOf(i) - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" `
+      + `width="${barW.toFixed(1)}" height="${hgt.toFixed(1)}" rx="1.2">`
+      + `<title>${escapeHtml(String(h.period ?? i + 1))} 期营收 ${money0(h.revenue)}</title></rect>`;
+  }).join('');
+
+  const npPts = np.map((v, i) => (v === null ? null : { x: xOf(i), y: yNp(v), v }));
+  const npPath = npPts.filter(Boolean)
+    .map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+    .join(' ');
 
   const last = list[list.length - 1];
   const first = list[0];
   const revChg = Number(first.revenue) > 0
     ? (Number(last.revenue) / Number(first.revenue) - 1) * 100 : 0;
+  const lastNp = np[list.length - 1] ?? 0;
 
-  const npPath = np
-    .map((v, i) => (v === null ? null : `${i ? 'L' : 'M'}${x(i).toFixed(1)},${yNp(v).toFixed(1)}`))
-    .filter(Boolean)
-    .join(' ')
-    .replace(/^L/, 'M');
+  const xLabels = [0, list.length - 1].map((i) => `
+    <text class="rc-xtick" x="${xOf(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${escapeHtml(String(list[i].period ?? i + 1))}</text>`).join('');
 
-  const dots = list.map((h, i) => `
-    <circle cx="${x(i).toFixed(1)}" cy="${y(Number(h.revenue)).toFixed(1)}" r="2.6" class="rc-dot" />
-    ${np[i] === null ? '' : `<circle cx="${x(i).toFixed(1)}" cy="${yNp(np[i]).toFixed(1)}" r="2.2" class="rc-dot np" />`}`).join('');
+  const leftAxis = leftTicks.map((v) => `
+    <line class="rc-grid" x1="${padL}" y1="${yRev(v).toFixed(1)}" x2="${W - padR}" y2="${yRev(v).toFixed(1)}" />
+    <text class="rc-ytick l" x="${padL - 6}" y="${(yRev(v) + 3.2).toFixed(1)}" text-anchor="end">${axisMoney(v)}</text>`).join('');
+  const rightAxis = rightTicks.map((v) => `
+    <text class="rc-ytick r" x="${W - padR + 6}" y="${(yNp(v) + 3.2).toFixed(1)}" text-anchor="start">${fmtPct(v)}</text>`).join('');
 
   return `
     <div class="rc-wrap">
       <div class="rc-head">
         <span class="rc-title">财报趋势 · 共 ${list.length} 期</span>
         <span class="rc-legend">
-          <i class="rc-l1"></i>营收
-          <i class="rc-l2"></i>净利同比
+          <i class="rc-l1"></i>营收（柱·左轴）
+          <i class="rc-l2"></i>净利同比（线·右轴）
         </span>
       </div>
-      <svg class="rc-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
-        <line x1="${padL}" y1="${padT + ih}" x2="${W - padR}" y2="${padT + ih}" class="rc-axis" />
-        <path d="${area}" class="rc-area" />
-        <path d="${path(rev)}" class="rc-line" />
-        <path d="${npPath}" class="rc-line np" />
-        ${dots}
+      <svg class="rc-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img"
+        aria-label="营收柱状图与净利同比折线，左右两侧为纵坐标">
+        ${leftAxis}
+        ${rightAxis}
+        <line class="rc-axis" x1="${padL}" y1="${padT}" x2="${padL}" y2="${bottom}" />
+        <line class="rc-axis r" x1="${W - padR}" y1="${padT}" x2="${W - padR}" y2="${bottom}" />
+        <line class="rc-axis" x1="${padL}" y1="${bottom}" x2="${W - padR}" y2="${bottom}" />
+        ${npMinRaw < 0 ? `<line class="rc-zero" x1="${padL}" y1="${yNp(0).toFixed(1)}" x2="${W - padR}" y2="${yNp(0).toFixed(1)}" />` : ''}
+        ${bars}
+        ${npPath ? `<path class="rc-line np" d="${npPath}" />` : ''}
+        ${npPts.filter(Boolean).map((p) => `<circle class="rc-dot np" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.2" />`).join('')}
+        ${xLabels}
       </svg>
       <div class="rc-foot">
-        <span>营收 ${revChg >= 0 ? '+' : ''}${revChg.toFixed(0)}%</span>
-        <span>净利同比 ${(np[list.length - 1] ?? 0) >= 0 ? '+' : ''}${(np[list.length - 1] ?? 0).toFixed(1)}%</span>
+        <span>营收 ${revChg >= 0 ? '+' : ''}${revChg.toFixed(0)}%（${list.length} 期）</span>
+        <span>净利同比 ${fmtPct(lastNp)}</span>
         <span>营收 ${money0(last.revenue)} · 净利 ${money0(last.netProfit)}</span>
       </div>
     </div>`;
