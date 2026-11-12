@@ -354,6 +354,19 @@ textarea { resize: vertical; }
 }
 .market-grid > .panel { min-height: 0; }
 
+/* PC 端（≥761px）：左右 aside 卡片高度按**自身内容**自适应。
+   以前三栏 align-items: stretch，中间图表/财报面板一变高，左右卡片就被拉长；
+   中间缩回去后，aside 只要还有一点内容（列表/表单）就会一直顶着那个高度 —— 看起来「只会变长、不会缩回」。
+   这里让 aside 改成 align-self: start，内容多就长、内容少就缩；超长列表仍在卡片内滚动（max-height 620 见下）。
+   移动端（≤760px）有自己的单列布局，不受这条影响。 */
+@media (min-width: 761px) {
+  .market-grid { align-items: start; }
+  /* 图表栏继续撑满整行（图表高度靠 ResizeObserver 跟随容器），左右 aside 按自身内容高度 */
+  .chart-panel { align-self: stretch; }
+  .stock-list-panel,
+  .trade-panel { align-self: start; }
+}
+
 /* ---------- 股票列表 ---------- */
 /* 行情卡片：高度固定（和之前一致），股票多了在卡片内滚动 */
 .stock-list-panel {
