@@ -10,6 +10,10 @@ export const DEFAULT_CONFIG = {
   baseVolatility: 0.0022,
   meanReversion: 0.00017,   // 对数空间回归，半衰期约 5.7 小时
   eventImpactScale: 1.0,    // 新闻冲击倍率
+  // 全市场波动倍率（总开关，2026-11）：1 = 标准，0.5 = 全部波动减半。
+  // 同时缩放「基础噪声 / 新闻冲击 / 散户情绪 / 虚假成交·游资推动 / 玩家下单冲击 / 财报当日冲击」；
+  // 不动基本面（财报数值、fair、均值回归）和固定事件（麦当劳整点、KFC 星期四、早市冲量、汇率跟随）。
+  volatilityScale: 1.0,
 
   // ---- 交易 ----
   startingCash: 0,          // 新开户从 0 开始，得先打工
@@ -390,6 +394,17 @@ export const TIMEFRAMES = {
   '5m': 60,
   '15m': 180
 };
+
+/**
+ * 「全市场波动倍率」的规范化读取（总开关，2026-11）。
+ * 缺省 / 脏值按 1；合法区间 0.01~3（0.01 近似静音，3 = 三倍波动）。
+ * 所有缩放点都走这个函数，避免各处 clamp 口径不一致。
+ */
+export function volatilityScaleOf(cfg) {
+  const raw = Number(cfg && cfg.volatilityScale);
+  const v = Number.isFinite(raw) ? raw : 1;
+  return Math.max(0.01, Math.min(3, v));
+}
 
 export const TF_LABELS = {
   '1m': '1 分钟',

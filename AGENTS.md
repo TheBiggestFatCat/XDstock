@@ -1,7 +1,7 @@
 # AGENTS.md · XDstock 维护须知
 
 > 完整文档见 [`docs/开发者文档.md`](docs/开发者文档.md)。本文件是速查版，**动手前至少读完「铁律」一节**。
-> 2026-11 已按当前实现同步（聊天未读红点 / 赛区 1 秒循环 + 止盈止损 / 海洋之泪 HYZL 物价驱动财报 / 66 套 2596 条测试）。
+> 2026-11 已按当前实现同步（聊天未读红点 / 赛区 1 秒循环 + 止盈止损 / 海洋之泪 HYZL 物价驱动财报 / 全市场波动总开关 / 67 套 2612 条测试）。
 
 ## 项目是什么
 
@@ -18,7 +18,7 @@ node server.js                       # 本地起服务
 node --check src/api.js              # 语法检查（改完必跑）
 node --check public/app.js
 
-# 改到哪块跑哪套：完整清单（66 套 / 2596 条断言，含每套条数）见 docs/开发者文档.md §13
+# 改到哪块跑哪套：完整清单（67 套 / 2612 条断言，含每套条数）见 docs/开发者文档.md §13
 node tests/imports.mjs               # 跨模块「用了但没 import」（17 条，改 server/api 必跑）
 node tests/payload-wire.mjs          # 前端数据包白名单（125 条，加字段/改 payload 必跑）
 node tests/admin-panel.mjs           # 参数面板一致性（18 条，改设置面板必跑）
@@ -28,6 +28,7 @@ node tests/order-conflict.mjs        # 同票开平冲突（21 条）
 node tests/order-simple.mjs          # 简单模式市价单（53 条）
 node tests/market-money.mjs          # 虚假成交推动股价 / 游资 / 市场资金（112 条）
 node tests/gold-stock.mjs            # 金价驱动 + 退市清理（82 条）
+node tests/volatility-scale.mjs      # 全市场波动总开关：各通道按倍率缩放（16 条，改波动/情绪/冲击必跑）
 node tests/chat.mjs                  # 聊天大厅 / 拼手气 / 未读红点（64 条，改聊天必跑）
 node tests/dfitem-stock.mjs          # 海洋之泪 HYZL：物价驱动财报 / 平衡价锚定（65 条，改 HYZL 必跑）
 node tests/tour.mjs                  # 锦标赛全套（193 条，改 src/tour.js 必跑）
@@ -162,6 +163,9 @@ public/vendor/     lightweight-charts v5（本地化）
 - 市场资金（虚假成交 + 游资，2026-11）：虚假成交三档 1万~10万 / 10万~100万 / 100万~1000万（权重 70/24/6）；
   游资每笔 1000万~3000万、每 20~300 轮换一次板块；推动力 = 压力 × 0.002 × impactFactor，单轮封顶 0.8%
   → 实测一笔 1000 万 ≈ +0.3%~1%，一笔 3000 万 ≈ +1%~3%（大盘股取低值）
+- **全市场波动总开关 `volatilityScale`（2026-11，面板「行情节奏 → 总波动倍率」）**：默认 1；
+  0.5 = 把随机/冲击类波动全部减半（基础噪声 / 新闻冲击 / 散户情绪 / 玩家下单冲击 / 虚假成交·游资 / 财报当日冲击）；
+  **不动**基本面、fair、均值回归、固定事件（整点拉升 / 疯狂星期四 / 早市冲量 / 汇率跟随）；读取走 `config.js#volatilityScaleOf()`（夹 0.01~3）
 - 指数：DENG（11 成分）、DENGS（市值最小的 7 只）
 - 聊天（2026-11）：已读游标存服务端 `player.chatReadSeq`，未读 = `db.chat.seq > chatReadSeq`；
   payload 只下发布尔值 `me.chatUnread`（`publicPlayer` + `tickPayload` 两处）；进聊天页/拉到新消息会

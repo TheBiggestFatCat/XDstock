@@ -1253,7 +1253,7 @@ export async function handleApi(ctx) {
   if (pathname === '/api/admin/config' && method === 'POST') {
     const patch = body.patch || {};
     const allowed = [
-      'tickMs', 'baseVolatility', 'meanReversion', 'eventImpactScale',
+      'tickMs', 'baseVolatility', 'volatilityScale', 'meanReversion', 'eventImpactScale',
       'feeRate', 'stampDuty', 'minLeverage', 'maxLeverage',
       'dividendRate', 'dividendCap',
       'growthCeiling', 'indexRebalanceTicks', 'rallyMin', 'rallyMax',

@@ -10,6 +10,7 @@ import { kfcRallyStep, kfcRallyInfo } from './kfc.js';
 
 import { stepGold, goldReturnSinceReport, ensureGold } from './gold.js';
 import { dfItemFair } from './dfItem.js';
+import { volatilityScaleOf } from './config.js';
 import { now } from './store.js';
 
 /** 公告最多留几条（超出就丢最老的） */
@@ -337,7 +338,9 @@ export function applyMorningRally(cfg, st, price, nowMs = Date.now()) {
 /** 单只股票走一步 */
 function stepStock(st, cfg, events, brokerDrift, fxData, db) {
   const t = st.trait || {};
-  const sigma = cfg.baseVolatility * (t.volMult ?? 1);
+  // 全市场波动倍率（总开关）：缩放「噪声/新闻/情绪/资金冲击」，不动基本面、均值回归和固定事件
+  const vScale = volatilityScaleOf(cfg);
+  const sigma = cfg.baseVolatility * (t.volMult ?? 1) * vScale;
   let logRet = gauss() * sigma;
 
   if (t.drift) logRet += t.drift;
@@ -353,7 +356,7 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
     evImpact += (ev.trend || 0) * (isGlobal ? globalScale : 1);
   }
   if (evImpact !== 0) {
-    logRet += evImpact * (cfg.eventImpactScale ?? 1) * (t.eventMult ?? 1);
+    logRet += evImpact * (cfg.eventImpactScale ?? 1) * (t.eventMult ?? 1) * vScale;
   }
 
   // 反向跟随（肯德基）：读上一轮麦当劳的涨跌幅，叠加一个反向的加成
@@ -429,7 +432,7 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
   // 散户情绪：每隔一段随机周期重掷方向，按固定间隔施加随机偏移（每只票独立）
   if (db && Number(cfg.sentimentEnabled ?? 1) !== 0) {
     const t2 = st.trait || {};
-    const strength = Math.max(0, Number(t2.sentStrength ?? cfg.sentimentStrength ?? 0.004));
+    const strength = Math.max(0, Number(t2.sentStrength ?? cfg.sentimentStrength ?? 0.004)) * vScale;
     const every = Math.max(1, Math.floor(Number(t2.sentTicks ?? cfg.sentimentTicks ?? 12)));
     // 方向分量：0 = 纯随机（v 只决定抖多大），1 = 纯方向（v 决定涨还是跌）
     // 个股 trait.sentDrift 可以单独覆盖全局 config.sentimentDrift
@@ -473,7 +476,7 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
   if (flow !== 0 && Number(cfg.playerImpactEnabled ?? 1) !== 0) {
     const refCap = Number(cfg.impactRefFreeCap) || 0;
     const factor = refCap > 0 ? impactFactor(st, refCap) : 1;
-    const strength = Number(cfg.playerImpactStrength ?? 0.0009) * factor;
+    const strength = Number(cfg.playerImpactStrength ?? 0.0009) * factor * vScale;
     const capPerTick = Number(cfg.playerImpactMax ?? 0.008);
     // 首轮全额，后续按「后续影响倍率」打折
     const tail = st.flowFresh ? 1 : Number(cfg.playerImpactTail ?? 1);
@@ -493,7 +496,7 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
   if (mflow !== 0 && Number(cfg.marketImpactEnabled ?? 1) !== 0) {
     const refCapM = Number(cfg.impactRefFreeCap) || 0;
     const factorM = refCapM > 0 ? impactFactor(st, refCapM) : 1;
-    const strengthM = Number(cfg.marketImpactStrength ?? 0.002) * factorM;
+    const strengthM = Number(cfg.marketImpactStrength ?? 0.002) * factorM * vScale;
     const capM = Math.max(0, Number(cfg.marketImpactMax ?? 0.008));
     let impactM = mflow * strengthM;
     impactM = Math.max(-capM, Math.min(capM, impactM));
@@ -1472,8 +1475,9 @@ export function runReports(db) {
     }
 
     // 财报当期的价格冲击：超预期就上冲/下杀
+    // 2026-11：吃「全市场波动倍率」—— 想要整市更平静时，财报日也不会一根大阳/大阴
     const surprise = st.lastSurprise;
-    const shock = Math.max(-0.06, Math.min(0.06, surprise * 0.8));
+    const shock = Math.max(-0.06, Math.min(0.06, surprise * 0.8)) * volatilityScaleOf(cfg);
     if (Number.isFinite(shock) && Math.abs(shock) > 0.0005) {
       st.price = Number((st.price * (1 + shock)).toFixed(4));
     }
