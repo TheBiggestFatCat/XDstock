@@ -152,7 +152,7 @@ public/vendor/     lightweight-charts v5（本地化）
 ## 已验证的关键数值（线上）
 
 - 夜行者：夜里（**22:00~05:00**）偷钱冷却 `nightStealCooldown = 50` 轮，进化后 `20` 轮；白天用 `stealCooldownTicks`；偷钱金额 = 随机[stealMin,stealMax] 再被「对方现金 × stealCapRatio」封顶
-- `tickMs = 5000`，1 轮 5 秒；**开市 5 分钟 / 休市 2 分钟循环**（`marketCycleOpenMin/CloseMin`，5 分 K 线 = 一个交易日）；顶栏指数右侧有「距休市 / 距开市」倒计时，每秒本地刷新
+- `tickMs` 默认 5000ms（1 轮 5 秒），**线上 2026-11 已调到 2000ms**（K 线粒度按 tickMs 动态换算，见 `tests/candles-tickms.mjs`）；**开市 5 分钟 / 休市 2 分钟循环**（`marketCycleOpenMin/CloseMin`，5 分 K 线 = 一个交易日）；顶栏指数右侧有「距休市 / 距开市」倒计时，每秒本地刷新
 - `playerImpactRef = 1000000`、`impactRefFreeCap = 100亿`
 - `levelBaseAsset = 1000万`、`levelGrowth = 2`、`levelUpRatio = 0.6`
 - 挂单：每人同时挂单上限 `maxPendingOrders = 10`（2026-11 从 5 提升；止盈止损单 / 自动定投单不占名额，
