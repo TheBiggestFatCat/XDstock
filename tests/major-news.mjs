@@ -47,7 +47,7 @@ function newDb(patch = {}) {
 // ---------------------------------------------------------------- 1
 log('=== 1 文案：每只票 5 条利好 + 5 条利空 ===');
 {
-  check('总条数 = 10 只票 × 10 条', MAJOR_NEWS_POOL.length === 100, String(MAJOR_NEWS_POOL.length));
+  check('总条数 = 11 只票 × 10 条', MAJOR_NEWS_POOL.length === 110, String(MAJOR_NEWS_POOL.length));
   for (const c of CODES) {
     const { up, down } = majorPoolByCode(c);
     check(`${c} 利好 5 条 / 利空 5 条`, up.length === 5 && down.length === 5, `${up.length}/${down.length}`);

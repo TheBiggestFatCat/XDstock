@@ -358,9 +358,9 @@ log('=== 9 尺寸：不再带模型参数 ===');
   const json = JSON.stringify(p);
   const traitBytes = Object.values(p.stocks)
     .reduce((a, st) => a + JSON.stringify(st.trait).length, 0);
-  check('每只票的 trait 不超过 20 字节', traitBytes / 12 < 20, String(traitBytes));
+  check('每只票的 trait 不超过 20 字节', traitBytes / 13 < 20, String(traitBytes));
   check('整包仍在合理大小内（< 120KB）', json.length < 120000, `${(json.length / 1024).toFixed(1)} KB`);
-  check('12 只票都在', Object.keys(p.stocks).length === 12, String(Object.keys(p.stocks).length));
+  check('13 只票都在', Object.keys(p.stocks).length === 13, String(Object.keys(p.stocks).length));
   check('每个 tick 字段都是有限数字或 null/对象',
     Object.values(p.stocks).every((s) => Number.isFinite(s.price) && Number.isFinite(s.changePct)));
   check('traitWire 只认 fx/broker',

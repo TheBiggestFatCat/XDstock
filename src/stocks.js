@@ -217,6 +217,36 @@ export const STOCK_SEED = {
       // 没有天花板时的每期增速（有 capCeiling 时越接近越慢）
       steadyGrowth: 0.028
     }
+  },
+  HYZL: {
+    code: 'HYZL',
+    name: '海洋之泪',
+    icon: '/assets/stocks/HYZL.png',
+    industry: '消费娱乐',
+    // 1 亿股 × 平衡价 200 = 200 亿市值（小盘，会进小灯指数 DENGS）
+    shares: 100000000,
+    freeFloat: 0.45,
+    desc: '高价天然珍珠，行情与游戏内交易行深度绑定',
+    // 上市价 100（5 折），靠均值回归向平衡价 200 收敛 —— 不会从 100 一路爬高
+    initialPrice: 100,
+    // 财报**完全**由三角洲行动物品「海洋之泪」的官方统计均价决定（无独立随机项）：
+    //   EPS_t = (dfAnchorFair / PE) × (price_t / dfRefPrice)^dfPower
+    //   fair  = dfAnchorFair × (price_t / dfRefPrice)^dfPower
+    // 参数来自 2026-11 本地 30 期模拟（开发者文档 §6.18.4）：
+    //   power=1.0 → 财报单期 std≈7.25%（在 DFY 5.4% 与 NW 10.1% 之间）
+    //   初始 100 → 中位 9 期收敛到 200±10%，30 期中位约 199
+    dfRefPrice: 31974562,   // 参考物价：2026-11 线上官方 avgPrice（海洋之泪）
+    dfPower: 1,
+    dfAnchorFair: 200,      // 参考物价对应的平衡价
+    trait: {
+      id: 'dfitem',
+      name: '藏品行情',
+      desc: '财报跟着海洋之泪的交易价走，价格围绕 200 上下波动',
+      volMult: 0.5,
+      revMult: 1.8,
+      // 弱情绪：默认 0.004 会把价格推离 200（模拟：期末 p95 284 / 回撤 39%），0.001 时 p95 231 / 回撤 16%
+      sentStrength: 0.001
+    }
   }
 };
 

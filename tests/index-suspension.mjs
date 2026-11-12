@@ -52,7 +52,7 @@ log('=== 1 停牌不会让指数闪崩（复现线上事故）===');
   const db = calmDb();
   tick(db);                       // 第一次 tick 建仓权重
   const v0 = db.index.value;
-  check('期初权重里有全部 10 只票', Object.keys(db.index.weights).length === 10,
+  check('期初权重里有全部 11 只票', Object.keys(db.index.weights).length === 11,
     Object.keys(db.index.weights).join(','));
   const w = mcdWeight(db);
   check('麦当劳权重是个正经数字（10%~30%）', w > 0.1 && w < 0.3, (w * 100).toFixed(1) + '%');
@@ -99,7 +99,7 @@ log('=== 2 停牌很久也不会「自己恢复不了」 ===');
   db.stocks.MCD.status = 'suspended';       // 只停牌，价格一动不动
   for (let i = 0; i < 50; i++) tick(db);
   check('停 50 轮指数一点没掉', near(db.index.value, v0, 0.01), `${v0.toFixed(2)} → ${db.index.value.toFixed(2)}`);
-  check('50 轮里没被强制调仓（权重还是 10 个）', Object.keys(db.index.weights).length === 10,
+  check('50 轮里没被强制调仓（权重还是 11 个）', Object.keys(db.index.weights).length === 11,
     String(Object.keys(db.index.weights).length));
   db.stocks.MCD.status = 'normal';
   const v1 = tick(db);

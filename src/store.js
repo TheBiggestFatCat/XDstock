@@ -6,7 +6,8 @@ import { DEFAULT_CONFIG } from './config.js';
 import { STOCK_SEED, STOCK_CODES, INDEX_BASE, INDEX_STOCK, SMALL_INDEX_STOCK } from './stocks.js';
 import { ensureGold } from './gold.js';
 import { createTour, ensureTour } from './tour.js';
-import { backDerive, fairFromReport } from './fundamentals.js';
+import { backDerive, fairFromReport, dfItemSeedFundamentals } from './fundamentals.js';
+import { ensureDfItem, dfItemFair } from './dfItem.js';
 import {
   seedBars15, seedBars5, seedVolFromConfig,
   BAR15_MAX, BAR15_SEED_VER, BAR5_MAX, BAR5_SEED_VER, BAR5_TICKS
@@ -43,8 +44,13 @@ function freshStock(code) {
     growthCeiling: Number(seed.growthCeiling) || 0,
     rallyHours: Array.isArray(seed.rallyHours) ? [...seed.rallyHours] : [],
     traitHidden: !!seed.traitHidden,
+    // 海洋之泪（HYZL）：物价驱动的财报参数（平衡价锚 + 参考物价 + 弹性）
+    dfRefPrice: Number(seed.dfRefPrice) || 0,
+    dfPower: Number.isFinite(Number(seed.dfPower)) ? Number(seed.dfPower) : 1,
+    dfAnchorFair: Number(seed.dfAnchorFair) || 0,
     price: seed.initialPrice,
-    fair: seed.initialPrice,
+    // HYZL 上市价 100、平衡价 200：fair 一开始就是 200，均值回归把价格往上修
+    fair: Number(seed.dfAnchorFair) || seed.initialPrice,
     flow: 0,          // 玩家资金冲击累积（正=净买入，负=净卖出）
     mflow: 0,         // 市场资金冲击累积（虚假成交 / 游资，和 flow 分开）
     // 停牌 / 退市
@@ -298,9 +304,15 @@ export function migrate(d) {
       st.growthCeiling = Number(seed.growthCeiling) || 0;
       st.rallyHours = Array.isArray(seed.rallyHours) ? [...seed.rallyHours] : [];
       st.traitHidden = !!seed.traitHidden;
+      // 海洋之泪（HYZL）：物价驱动参数一律以种子为准
+      st.dfRefPrice = Number(seed.dfRefPrice) || 0;
+      st.dfPower = Number.isFinite(Number(seed.dfPower)) ? Number(seed.dfPower) : 1;
+      st.dfAnchorFair = Number(seed.dfAnchorFair) || 0;
     }
     if (!st.fundamentals) {
-      st.fundamentals = backDerive(st, Math.max(0.01, Number(st.price) || Number(st.initialPrice) || 1));
+      st.fundamentals = st.trait?.id === 'dfitem'
+        ? dfItemSeedFundamentals(st)
+        : backDerive(st, Math.max(0.01, Number(st.price) || Number(st.initialPrice) || 1));
     }
     // 15 分钟 K 线：老档没有就铺满 48 小时（尾部接上现价，图上不会断）。
     // 单根波动直接由 baseVolatility 推（每 tick σ × √180），第一次铺得太安静
@@ -330,6 +342,15 @@ export function migrate(d) {
     if (!Array.isArray(st.bars15)) st.bars15 = [];
     // 合理价跟着财报走
     st.fair = Number(fairFromReport(st).toFixed(4));
+    // 海洋之泪（HYZL）：平衡价锚定 200（×物价/参考价），不受 fairFromReport 的成长溢价影响
+    if (st.trait?.id === 'dfitem') {
+      st.fair = Number(dfItemFair({
+        price: Number(merged.dfItem?.price) || 0,
+        refPrice: st.dfRefPrice,
+        power: st.dfPower,
+        anchorFair: st.dfAnchorFair
+      }).toFixed(4));
+    }
 
     // 老存档没有财报历史，按当前这一期的数字往前倒推几期，图表才有东西看。
     // 新上市的票（period 还没几期）不补：否则会编出一串「第 1 期」在前面、真的一期在最后，
@@ -443,6 +464,8 @@ export function migrate(d) {
 
   // 金价状态（矿工银行的财报驱动源）
   ensureGold(merged);
+  // 三角洲物品价格状态（海洋之泪 HYZL 的财报驱动源；由 server.js 定时抓取）
+  ensureDfItem(merged);
 
   // 补齐新增标的 / 补字段
   for (const code of STOCK_CODES) {

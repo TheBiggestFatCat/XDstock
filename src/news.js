@@ -230,6 +230,17 @@ export const NEWS_POOL = [
   { companies: ['MCD'], dir: -1, text: '麦当劳的「整点拉升」被指是剧本，公司回应：剧本也是要成本的' },
   { companies: ['MCD'], dir: 1, text: '麦当劳的冰淇淋机今天居然没坏，全公司当成大喜事发了内部通告' },
   { companies: ['MCD'], dir: -1, text: '麦当劳的冰淇淋机又坏了，这已经是本周第十七次，维修师傅已住店里' },
+  // ================= 海洋之泪 HYZL =================
+  { companies: ['HYZL'], dir: 1, text: '海洋之泪在拍卖行拍出天价，买家说只是想让鱼缸里有个伴' },
+  { companies: ['HYZL'], dir: 1, text: '潮汐监狱爆率被暗改的传言四起，海洋之泪价格应声上涨' },
+  { companies: ['HYZL'], dir: 1, text: '主播开箱连出三颗海洋之泪，直播间观众集体破防' },
+  { companies: ['HYZL'], dir: 1, text: '某收藏家宣布用海洋之泪装饰鱼缸，配文「鱼也值得最好的」' },
+  { companies: ['HYZL'], dir: 1, text: '海洋之泪成为赛季限定展示品，带价求购的帖子刷屏' },
+  { companies: ['HYZL'], dir: -1, text: '海洋之泪被曝有赝品流出，鉴定师连夜加班' },
+  { companies: ['HYZL'], dir: -1, text: '交易行挂单量翻倍，海洋之泪价格被砸下一档' },
+  { companies: ['HYZL'], dir: -1, text: '官方调整掉落池，海洋之泪的稀有度被稀释' },
+  { companies: ['HYZL'], dir: -1, text: '海洋之泪展柜失窃，安保公司连夜升级系统' },
+  { companies: ['HYZL'], dir: -1, text: '玩家发现海洋之泪能被大量合成，收藏圈集体沉默' },
 ];
 
 
@@ -363,7 +374,19 @@ export const MAJOR_NEWS_POOL = [
   { companies: ['MCD'], dir: -1, text: '【重大】麦当劳被工会集体诉讼，赔偿金额创纪录' },
   { companies: ['MCD'], dir: -1, text: '【重大】麦当劳核心市场同店销售转负' },
   { companies: ['MCD'], dir: -1, text: '【重大】麦当劳特许经营商大面积退出' },
-  { companies: ['MCD'], dir: -1, text: '【重大】麦当劳被曝财务重述，历史数据全部修正' }
+  { companies: ['MCD'], dir: -1, text: '【重大】麦当劳被曝财务重述，历史数据全部修正' },
+
+  // ================= 海洋之泪 HYZL =================
+  { companies: ['HYZL'], dir: 1, text: '【重大】海洋之泪拍出赛季最高成交价，收藏圈沸腾' },
+  { companies: ['HYZL'], dir: 1, text: '【重大】潮汐监狱掉落数据公布，海洋之泪产量预期大增' },
+  { companies: ['HYZL'], dir: 1, text: '【重大】海洋之泪入选年度最值得收藏物品' },
+  { companies: ['HYZL'], dir: 1, text: '【重大】富豪收藏家批量收购海洋之泪，交易行库存见底' },
+  { companies: ['HYZL'], dir: 1, text: '【重大】海洋之泪外观优化，官方宣布增加动态光泽' },
+  { companies: ['HYZL'], dir: -1, text: '【重大】海洋之泪被查出复制漏洞，官方紧急封禁' },
+  { companies: ['HYZL'], dir: -1, text: '【重大】交易行手续费上调，海洋之泪大单抛售' },
+  { companies: ['HYZL'], dir: -1, text: '【重大】潮汐监狱调整掉落，海洋之泪价格一周腰斩' },
+  { companies: ['HYZL'], dir: -1, text: '【重大】收藏圈曝出海洋之泪赝品产业链' },
+  { companies: ['HYZL'], dir: -1, text: '【重大】海洋之泪展品失窃案告破，赃物全部追回引发抛售' }
 ];
 
 /** 这只票的（利好, 利空）文案对数——测试用 */

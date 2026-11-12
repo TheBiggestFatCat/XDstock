@@ -1,7 +1,7 @@
 # AGENTS.md · XDstock 维护须知
 
 > 完整文档见 [`docs/开发者文档.md`](docs/开发者文档.md)。本文件是速查版，**动手前至少读完「铁律」一节**。
-> 2026-11 已按当前实现同步（聊天未读红点 / 赛区 1 秒循环 + 止盈止损 / 65 套 2527 条测试）。
+> 2026-11 已按当前实现同步（聊天未读红点 / 赛区 1 秒循环 + 止盈止损 / 海洋之泪 HYZL 物价驱动财报 / 66 套 2595 条测试）。
 
 ## 项目是什么
 
@@ -18,7 +18,7 @@ node server.js                       # 本地起服务
 node --check src/api.js              # 语法检查（改完必跑）
 node --check public/app.js
 
-# 改到哪块跑哪套：完整清单（65 套 / 2527 条断言，含每套条数）见 docs/开发者文档.md §13
+# 改到哪块跑哪套：完整清单（66 套 / 2595 条断言，含每套条数）见 docs/开发者文档.md §13
 node tests/imports.mjs               # 跨模块「用了但没 import」（17 条，改 server/api 必跑）
 node tests/payload-wire.mjs          # 前端数据包白名单（125 条，加字段/改 payload 必跑）
 node tests/admin-panel.mjs           # 参数面板一致性（18 条，改设置面板必跑）
@@ -29,6 +29,7 @@ node tests/order-simple.mjs          # 简单模式市价单（53 条）
 node tests/market-money.mjs          # 虚假成交推动股价 / 游资 / 市场资金（112 条）
 node tests/gold-stock.mjs            # 金价驱动 + 退市清理（82 条）
 node tests/chat.mjs                  # 聊天大厅 / 拼手气 / 未读红点（64 条，改聊天必跑）
+node tests/dfitem-stock.mjs          # 海洋之泪 HYZL：物价驱动财报 / 平衡价锚定（64 条，改 HYZL 必跑）
 node tests/tour.mjs                  # 锦标赛全套（193 条，改 src/tour.js 必跑）
 node tests/market-schedule.mjs       # 定时休市 / 循环作息（48 条）
 node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占比（看表格，不算一套）
@@ -110,13 +111,14 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 server.js          HTTP 入口、静态文件、SSE、tickPayload、主 tick / 赛区 1 秒 / 汇率 / 历史 K 线四个定时循环
 src/config.js      全部可调参数默认值 + K 线周期定义（TIMEFRAMES）
 src/store.js       db 加载/保存/migrate/自动备份
-src/stocks.js      股票种子（10 只 + DENG / DENGS）
+src/stocks.js      股票种子（11 只 + DENG / DENGS）
 src/engine.js      stepMarket 主循环（顺序敏感：噪声→新闻→漂移→特质→回归→情绪→冲击）+ 指数/新闻/财报调度
 src/trading.js     开平仓、保证金、爆仓、冲击、成交量、止盈止损触发
 src/orders.js      限价/简单模式挂单、撮合队列（风控单优先 → 价格优先；每玩家每票每方向限额）
 src/api.js         全部 REST + payload 组装 + 管理接口
 src/wire.js        前端数据包白名单（什么能发给浏览器只在这里定义；防作弊）+ positionWire
-src/fundamentals.js 财报生成、估值 fair（8 期回归）、市场预期、预告
+src/fundamentals.js 财报生成、估值 fair（8 期回归）、市场预期、预告、HYZL 物价驱动分支
+src/dfItem.js      三角洲「海洋之泪」物品价格：AMS 请求/解析 + EPS·fair 映射（HYZL 驱动源）
 src/news.js        普通新闻池 + 重大利好/利空池
 src/marketTrades.js 虚假成交（三档金额，**会推动股价**：写 st.mflow）
 src/hotmoney.js    游资（板块轮动，成交记录混在虚假成交里、看不出区别）
@@ -160,7 +162,7 @@ public/vendor/     lightweight-charts v5（本地化）
 - 市场资金（虚假成交 + 游资，2026-11）：虚假成交三档 1万~10万 / 10万~100万 / 100万~1000万（权重 70/24/6）；
   游资每笔 1000万~3000万、每 20~300 轮换一次板块；推动力 = 压力 × 0.002 × impactFactor，单轮封顶 0.8%
   → 实测一笔 1000 万 ≈ +0.3%~1%，一笔 3000 万 ≈ +1%~3%（大盘股取低值）
-- 指数：DENG（10 成分）、DENGS（市值最小的 7 只）
+- 指数：DENG（11 成分）、DENGS（市值最小的 7 只）
 - 聊天（2026-11）：已读游标存服务端 `player.chatReadSeq`，未读 = `db.chat.seq > chatReadSeq`；
   payload 只下发布尔值 `me.chatUnread`（`publicPlayer` + `tickPayload` 两处）；进聊天页/拉到新消息会
   `POST /api/chat/read`。手机端底部标签栏与桌面同一套 DOM（`.tab-dot`）
@@ -170,6 +172,12 @@ public/vendor/     lightweight-charts v5（本地化）
 - 金价：基准 2400，每轮波动 0.12%；MB 财报 = 目标增速 + 金价涨跌 ×2.2 ±3%
 - MB 市值：1000 亿起步（10 亿股 × 100），目标是 3000 亿（capTargetRate 0.08/期）
 - KFC 市值：800 亿起步（8 亿股 × 100），目标是 1000 亿；每轮反向跟随 MCD 上一轮涨跌幅；周四 11~13 点随机一轮 +50%
+- **海洋之泪 HYZL（2026-11 上线）**：财报**完全**由三角洲物品「海洋之泪」的官方 `avgPrice` 决定，无随机项。
+  上线价 100、平衡价锚定 **200**；`EPS = (200/18) × (avgPrice/dfRefPrice)^1`；`fair = 200 × (avgPrice/dfRefPrice)^1`；
+  `dfRefPrice = 31974562`；trait `volMult 0.5 / revMult 1.8 / sentStrength 0.001`；股本 1 亿股（市值 200 亿，进 DENGS）。
+  数据源：官方 AMS `dfm/object.list`（免费无登录，约每小时刷新），`server.js` 每 10 分钟抓一次 → `db.dfItem`。
+  模拟结论：财报单期 std ≈ 7.25%；价格中位 9 期收敛到 200±10%，30 期中位 ≈ 199，最大回撤中位 15.7%。
+  改它必跑 `node tests/dfitem-stock.mjs`
 - 财报基线：零期望随机偏移（对数空间零均值），σ = 5% × √(1000亿 / 市值)，夹在 1%~10%
 
 ## 提交信息

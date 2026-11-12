@@ -9,6 +9,7 @@ import { maskSentiment } from './mind.js';
 import { kfcRallyStep, kfcRallyInfo } from './kfc.js';
 
 import { stepGold, goldReturnSinceReport, ensureGold } from './gold.js';
+import { dfItemFair } from './dfItem.js';
 import { now } from './store.js';
 
 /** 公告最多留几条（超出就丢最老的） */
@@ -1281,7 +1282,9 @@ export function runReports(db) {
         reportVolMin: cfg.reportVolMin,
         reportVolMax: cfg.reportVolMax,
         reportRefCap: cfg.reportRefCap,
-        growthCeiling: cfg.growthCeiling
+        growthCeiling: cfg.growthCeiling,
+        // 海洋之泪 HYZL：财报完全由三角洲物品价格决定
+        dfItemPrice: Number(db.dfItem?.price) || 0
       };
       st.pendingReport = genNextReport(st, ctxP);
     }
@@ -1301,7 +1304,9 @@ export function runReports(db) {
       goldReturn, goldCoef: cfg.goldCoef, goldJitter: cfg.goldJitter,
       reportVol: cfg.reportVol, reportVolMin: cfg.reportVolMin,
       reportVolMax: cfg.reportVolMax, reportRefCap: cfg.reportRefCap,
-      growthCeiling: cfg.growthCeiling
+      growthCeiling: cfg.growthCeiling,
+      // 海洋之泪 HYZL：财报完全由三角洲物品价格决定（抓不到就沿用上一次发报的价）
+      dfItemPrice: Number(db.dfItem?.price) || 0
     });
     // 这一期结束后，汇率 / 金价基准往前推
     if (db.fx) db.fx.reportBase = fxNow;
@@ -1336,6 +1341,18 @@ export function runReports(db) {
       st.fair = Number((st.fair + (tgtPrice - st.fair) * rate).toFixed(4));
       // 还在目标上方时只许跌不许涨 —— 才不会出现「萎了一半又弹回去」
       if (st.fair > tgtPrice && st.fair > before) st.fair = before;
+    }
+
+    // 海洋之泪（HYZL）：平衡价锚定 dfAnchorFair（默认 200），跟着物品价格走。
+    // 财报完全由物价决定，所以 fair 不做平滑、不走 EPS 回归 —— 直接锚 200×(物价/参考价)^power。
+    // 上市价 100 时 fair 已经是 200，均值回归会把价格往上修（模拟：中位 9 期收敛到 ±10%）。
+    if (st.trait?.id === 'dfitem') {
+      st.fair = Number(dfItemFair({
+        price: Number(db.dfItem?.price) || 0,
+        refPrice: st.dfRefPrice,
+        power: st.dfPower,
+        anchorFair: st.dfAnchorFair
+      }).toFixed(4));
     }
 
     // 超预期 = 实际增速 − 市场预期（这家公司按规模应有的增速）

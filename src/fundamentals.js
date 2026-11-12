@@ -9,6 +9,8 @@
  *     每 10 万元净买入带来的单轮涨幅 ∝ (参考流通市值 / 本公司流通市值)^0.6
  */
 
+import { dfItemEps } from './dfItem.js';
+
 /** 行业：合理市盈率 + 净利率区间 + 营收增速区间 + 派息率（参考现实：成长股少分、金融多分） */
 export const INDUSTRY = {
   消费: { pe: 18, margin: [0.06, 0.16], growth: [-0.08, 0.16], payout: 0.45 },
@@ -332,6 +334,40 @@ export function backDerive(st, targetFair) {
 }
 
 /**
+ * 海洋之泪（HYZL）的初始财报：由锚定平衡价反推，**不带随机**。
+ * 参考物价对应 anchorFair=200，EPS = 200/PE ≈ 11.11；
+ * 这样它上市第一天 fair 就是 200（股价 100 → 均值回归往上修），
+ * 而不是等第一期财报才从 100 的估值跳上去。
+ */
+export function dfItemSeedFundamentals(st) {
+  const ind = industryOf(st);
+  const shares = Number(st.shares) || 1;
+  const anchor = Math.max(1, Number(st.dfAnchorFair) || Number(st.price) || 100);
+  const eps = anchor / Math.max(1, ind.pe);
+  const margin = (ind.margin[0] + ind.margin[1]) / 2;
+  const revenue = Math.max(1, (eps * shares) / Math.max(0.02, margin));
+  // 净资产按 ROE≈10% 反推：BPS×0.8 的地板会落在 fair 下面，不会反托价格
+  const bps = Math.max(1, eps / 0.1);
+  return {
+    period: 0,
+    revenue,
+    baseRevenue: revenue,
+    netProfit: eps * shares,
+    tradePnl: 0,
+    eps,
+    bps,
+    roe: bps > 0 ? eps / bps : 0,
+    margin,
+    growth: 0,
+    expectedGrowth: 0,
+    debt: 0.3,
+    dividendRate: clamp(Number(ind.payout) || 0.35, 0, 0.6),
+    reportAt: Date.now(),
+    bias: 0
+  };
+}
+
+/**
  * 生成下一期财报。
  * 营收按增速滚动，净利率小幅漂移，EPS 由净利润 / 股本算出。
  */
@@ -341,6 +377,48 @@ export function genNextReport(st, ctx = {}) {
   const shares = Number(st.shares) || 1;
   const midG = (ind.growth[0] + ind.growth[1]) / 2;
   const trait = st.trait?.id;
+
+  // ===== 海洋之泪（HYZL）：财报**完全**由物品价格决定 =====
+  // 没有任何随机项：物价不动，财报就不动。详见 src/dfItem.js 与开发者文档 §6.18.4。
+  // EPS_t = (dfAnchorFair / PE) × (price_t / dfRefPrice)^dfPower
+  // growth = EPS_t / EPS_{t-1} - 1（市场预期固定为 0：没人能提前知道物价怎么走）
+  if (trait === 'dfitem') {
+    const pe = ind.pe;
+    const ref = Math.max(1, Number(st.dfRefPrice) || 0);
+    const price = Number(ctx.dfItemPrice) || Number(st.dfLastItemPrice) || ref;
+    const eps = dfItemEps({
+      price,
+      refPrice: ref,
+      power: st.dfPower,
+      anchorFair: st.dfAnchorFair,
+      pe
+    });
+    const prevEps = Number(f.eps) > 0 ? Number(f.eps) : eps;
+    const growth = clamp(eps / prevEps - 1, -0.6, 1.0);
+    const margin = (ind.margin[0] + ind.margin[1]) / 2;
+    const revenue = Math.max(1, (eps * shares) / Math.max(0.02, margin));
+    const baseRevenue = Math.max(Number(f.baseRevenue) || revenue, revenue * 0.25);
+    const bps = nextBps(Number(f.bps) || eps / 0.1, eps, { pe, growth });
+    // 记下这次发报用的物价，抓取失败时下一期还能沿用（不会突然按 0 算）
+    st.dfLastItemPrice = price;
+    return {
+      period: (Number(f.period) || 0) + 1,
+      revenue,
+      baseRevenue,
+      netProfit: eps * shares,
+      tradePnl: 0,
+      eps,
+      bps,
+      roe: bps > 0 ? eps / bps : 0,
+      margin,
+      growth,
+      debt: clamp(Number(f.debt) || 0.3, 0.05, 0.9),
+      dividendRate: clamp(Number(f.dividendRate) || ind.payout, 0, 0.6),
+      reportAt: Date.now(),
+      bias: 0,
+      expectedGrowth: 0
+    };
+  }
 
   // ===== 新的财报基线：**零期望的随机偏移** =====
   // 不再向行业中枢回归、也没有「天生体质」：每期就在上一期的基础上随机抖一下，
@@ -675,7 +753,11 @@ export function reportPayload(st) {
   const f = st.fundamentals || {};
   const cap = marketCap(st);
   const free = freeCap(st);
-  const fair = fairFromReport(st);
+  // 海洋之泪（HYZL）的 fair 由引擎按「锚定 200 × 物价比例」直接维护（见 engine.js#runReports），
+  // 这里优先用它，保证前端看到的估值线和均值回归锚一致
+  const fair = st.trait?.id === 'dfitem' && Number(st.fair) > 0
+    ? Number(st.fair)
+    : fairFromReport(st);
   const price = Number(st.price) || 0;
   return {
     industry: st.industry || '',

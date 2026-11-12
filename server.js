@@ -15,6 +15,7 @@ import { tourTick, setTourRate, setTourHist, TOUR_TFS, TOUR_TICK_MS } from './sr
 import { marketPhase, phaseText } from './src/schedule.js';
 import { checkDelist } from './src/delist.js';
 import { fetchAudJpy, fetchAudJpyBars } from './src/fx.js';
+import { dfItemRequestUrl, parseDfItemPrice, ensureDfItem } from './src/dfItem.js';
 import { handleApi } from './src/api.js';
 import { NEWS_POOL, MAJOR_NEWS_POOL } from './src/news.js';
 import { pushNotify, notifyList } from './src/notify.js';
@@ -768,6 +769,57 @@ function startFxLoop() {  // 每 1 秒瞄一眼：到点没到点、开没开，
   if (timer.unref) timer.unref();
 }
 
+// ---------------- 三角洲物品价格（海洋之泪 HYZL 的财报驱动源）----------------
+// 官方 AMS 接口：免费、无需登录；2026-11 实测数据约每小时刷新一次，
+// 所以 10 分钟拉一次足够（只在发报时用价格，不需要高频）。
+// 抓失败：沿用上一次价格并标 stale —— 财报按旧价算，绝不自己编一个数。
+let dfItemLastAt = 0;
+let dfItemBusy = false;
+async function refreshDfItem() {
+  const d = getDb();
+  ensureDfItem(d);
+  const res = await fetch(dfItemRequestUrl(), {
+    method: 'POST',
+    headers: {
+      'User-Agent': 'XDstock/1.0 (+https://github.com/TheBiggestFatCat/XDstock)'
+    },
+    signal: AbortSignal.timeout(15000)
+  });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const json = await res.json();
+  const got = parseDfItemPrice(json);
+  if (!got.found) throw new Error('响应里没有海洋之泪的 avgPrice');
+  d.dfItem.price = got.price;
+  d.dfItem.chg = got.chg;
+  d.dfItem.at = now();
+  d.dfItem.stale = false;
+  saveDb();
+  return got.price;
+}
+function startDfItemLoop() {
+  const pull = () => {
+    if (dfItemBusy) return;
+    dfItemBusy = true;
+    dfItemLastAt = Date.now();
+    refreshDfItem()
+      .then((price) => console.log(`[dfItem] 海洋之泪 avgPrice = ${price}`))
+      .catch((e) => {
+        const d = getDb();
+        ensureDfItem(d);
+        d.dfItem.stale = true;
+        console.error('[dfItem] 抓取失败（沿用上一次价格）:', e.message);
+      })
+      .finally(() => { dfItemBusy = false; });
+  };
+  const tick = () => {
+    if (Date.now() - dfItemLastAt < 10 * 60 * 1000) return;
+    pull();
+  };
+  pull();
+  const timer = setInterval(tick, 60 * 1000);
+  if (timer.unref) timer.unref();
+}
+
 // 锦标赛：赛区自己一条 1 秒的循环，不跟主站 tickMs（5 秒）绑在一起。
 // 这样主站休市（loop 开头直接 return）时赛区照样走，报价点也不会被主站节奏拖慢。
 // 落盘压到 5 秒一次 —— db.json 三兆多，每秒整库 stringify + rename 太浪费，
@@ -823,6 +875,7 @@ backupDb('boot');
 setInterval(() => backupDb(), 30 * 60 * 1000);
 
 startFxLoop();
+startDfItemLoop();
 startTourLoop();
 startTourHistLoop();
 
