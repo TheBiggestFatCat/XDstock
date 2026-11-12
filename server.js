@@ -21,6 +21,7 @@ import { pushNotify, notifyList } from './src/notify.js';
 import { visibleEmotes } from './src/emoji.js';
 import { latestVersionPost } from './src/version.js';
 import { stealAmount } from './src/steal.js';
+import { chatUnreadFor } from './src/chat.js';
 import {
   achvPayload, ensureAchvState, bumpAchv, isEvolved, ownsTheme
 } from './src/achievements.js';
@@ -277,7 +278,10 @@ function tickPayload(forPlayerId) {
       // 主题成就 / 进化（进度、结晶、阶数）
       achv: achvPayload(d, p),
       // 站内通知：最新一份（安卓壳靠它发系统通知；网页端不显示）
-      notices: notifyList(p, 20)
+      notices: notifyList(p, 20),
+      // 聊天大厅：有没有未读消息（导航「聊天」标签的红点）。
+      // 已读游标 chatReadSeq 存在服务端，手机/电脑共享同一个状态
+      chatUnread: chatUnreadFor(d, p)
     };
   }
   return {

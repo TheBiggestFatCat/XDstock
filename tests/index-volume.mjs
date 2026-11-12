@@ -30,7 +30,7 @@ function calmDb() {
     baseVolatility: 0, meanReversion: 0, eventChance: 0, localEventChance: 0,
     marketTradesEnabled: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0,
     marketImpactEnabled: 0, sentimentEnabled: 0, goldVol: 0, goldRev: 0,
-    reportIntervalTicks: 1e9, dividendRate: 0, maxPremium: 1e9,
+    reportIntervalTicks: 1e9, dividendRate: 0,
     morningRallyEnabled: 0, marketCycleEnabled: 0, marketOpen: 1
   });
   db.tick = 1000;

@@ -29,7 +29,7 @@ function calmDb(patch = {}) {
   Object.assign(db.config, {
     baseVolatility: 0, meanReversion: 0, eventChance: 0, localEventChance: 0,
     marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0, sentimentEnabled: 0,
-    levelFillBonus: 0, maxPremium: 8
+    levelFillBonus: 0
   }, patch);
   db.tick = 1000;
   db.events = [];

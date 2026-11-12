@@ -406,6 +406,35 @@ log('=== 挂单有效期 ===');
     r.ok ? `expireTick=${r.order.expireTick}` : r.error);
 }
 
+// ---------------------------------------------------------------- 同时挂单上限
+log('');
+log('=== 同时挂单上限：默认 10 笔（2026-11 从 5 提到 10）===');
+{
+  check('出厂默认 maxPendingOrders = 10', DEFAULT_CONFIG.maxPendingOrders === 10,
+    String(DEFAULT_CONFIG.maxPendingOrders));
+  const codes = ['TGW', 'MAMA', 'DFY', 'LU', 'NW', 'XJ', 'MB', 'KFC', 'XD', 'MCD'];
+  const put = (d, p) => codes.map((code) => placeLimitOrder(d, p,
+    { code, action: 'open', side: 'long', qty: 1, leverage: 1, limit: 101 }));
+
+  const db = newDb();
+  db.config.maxPendingOrders = 10;
+  const p = mkPlayer(db, 'many', 1e7);
+  const rs = put(db, p);
+  check('10 笔全都能挂上', rs.every((r) => r.ok) && p.orders.length === 10,
+    `${rs.filter((r) => r.ok).length} 笔 / ${p.orders.length}`);
+  const over = placeLimitOrder(db, p, { code: 'TGW', action: 'open', side: 'long', qty: 1, leverage: 1, limit: 101 });
+  check('第 11 笔被拒，提示 10 笔上限', over.ok === false && /10 笔/.test(over.error || ''), over.error || '');
+
+  // 老存档缺这个字段时（`num(cfg.maxPendingOrders, ...)` 的兜底）也必须是 10
+  const db2 = newDb();
+  delete db2.config.maxPendingOrders;
+  const p2 = mkPlayer(db2, 'fallback', 1e7);
+  const rs2 = put(db2, p2);
+  const over2 = placeLimitOrder(db2, p2, { code: 'TGW', action: 'open', side: 'long', qty: 1, leverage: 1, limit: 101 });
+  check('缺字段时兜底同样是 10 笔', rs2.every((r) => r.ok) && p2.orders.length === 10 && over2.ok === false,
+    `${p2.orders.length} 笔 / ${over2.error || 'ok'}`);
+}
+
 // ---------------------------------------------------------------- 休市
 log('');
 log('=== 休市：只冻结行情和撮合，挂单照常（2026-11 改）===');

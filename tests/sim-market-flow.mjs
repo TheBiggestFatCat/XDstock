@@ -14,7 +14,7 @@ import { impactFactor } from '../src/fundamentals.js';
 // ---- 线上实际生效的参数（从 data/db.json 读出来的，不是 DEFAULT_CONFIG）----
 const LIVE = {
   baseVolatility: 0.01, meanReversion: 0.002, eventImpactScale: 1.5, globalEventScale: 0.2,
-  eventChance: 0.04, maxPremium: 2.5, reportIntervalTicks: 720, indexRebalanceTicks: 2160,
+  eventChance: 0.04, reportIntervalTicks: 720, indexRebalanceTicks: 2160,
   playerImpactEnabled: 1, playerImpactRef: 100000, playerImpactStrength: 0.0003,
   playerImpactTail: 0.6, playerImpactDecay: 0.88, playerImpactMax: 0.008, playerImpactFlowMax: 12,
   impactRefFreeCap: 1e10,

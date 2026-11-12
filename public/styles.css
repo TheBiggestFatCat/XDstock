@@ -291,6 +291,7 @@ textarea { resize: vertical; }
 .tabs::-webkit-scrollbar { display: none; }
 .tab {
   flex: none;
+  position: relative;            /* 聊天未读红点 .tab-dot 的定位锚点 */
   font-family: inherit; font-size: 14px; font-weight: 500;
   padding: 9px 18px; border-radius: 12px; border: none; cursor: pointer;
   color: var(--ink-2); background: transparent;
@@ -301,6 +302,24 @@ textarea { resize: vertical; }
   color: #fff;
   background: linear-gradient(135deg, #2dd4bf, #14b8a6);
   box-shadow: 0 8px 18px rgba(20, 184, 166, .28);
+}
+
+/* 聊天未读红点（有未读消息时挂在「聊天」标签上；桌面贴右上角，见手机端覆盖） */
+.tab-dot {
+  position: absolute;
+  top: 5px; right: 7px;
+  display: none;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #ff4d4f;
+  box-shadow: 0 0 0 2px var(--card, #fff);
+  pointer-events: none;
+  animation: tabDotPulse 1.6s ease-in-out infinite;
+}
+.tab-dot.on { display: block; }
+@keyframes tabDotPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.28); opacity: .72; }
 }
 
 /* ---------- 布局 ---------- */
@@ -795,6 +814,16 @@ input.tpsl-input {
     color: var(--accent-2);
     font-weight: 700;
     box-shadow: none;
+  }
+  /* 聊天未读红点：底部标签栏里每个 tab 是「图标 + 文字」竖排，
+     红点要贴在图标的右上角（桌面那套 right:7px 会跑到整个格子的最右边） */
+  .tab-dot {
+    top: 3px;
+    right: auto;
+    left: 50%;
+    margin-left: 6px;
+    width: 7px; height: 7px;
+    box-shadow: 0 0 0 2px var(--glass, #fff);
   }
 
   /* ---------- 内容区 ---------- */

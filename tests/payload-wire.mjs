@@ -11,6 +11,7 @@ import {
   WIRE_CONFIG_KEYS
 } from '../src/wire.js';
 import { ensureAchvState } from '../src/achievements.js';
+import { ensureChat, pushChat, chatMarkRead } from '../src/chat.js';
 
 let fails = 0;
 let passes = 0;
@@ -366,6 +367,30 @@ log('=== 9 尺寸：不再带模型参数 ===');
     JSON.stringify(traitWire({ trait: { id: 'fx' } })) === '{"id":"fx"}'
     && JSON.stringify(traitWire({ trait: { id: 'gold' } })) === '{}'
     && JSON.stringify(traitWire(null)) === '{}');
+}
+
+// ================================================================ 9
+log('');
+log('=== 10 聊天未读红点：me.chatUnread 由服务端已读游标算 ===');
+{
+  const db = mkDb();
+  ensureChat(db);
+  const me = mkPlayer(db, 'chatme');
+  me.chatReadSeq = 0;
+
+  check('大厅是空的：没有未读', marketPayload(db, me).me.chatUnread === false);
+  const other = mkPlayer(db, 'chatother');
+  pushChat(db, other, { type: 'text', text: '有人在吗' });
+  check('别人说话后 me.chatUnread = true（导航亮红点）',
+    marketPayload(db, me).me.chatUnread === true);
+  me.chatReadSeq = chatMarkRead(db, me);
+  check('标已读后 me.chatUnread = false（红点灭）',
+    marketPayload(db, me).me.chatUnread === false);
+  check('已读游标只增不减', chatMarkRead(db, me, 0) === db.chat.seq);
+  check('只下发布尔值 chatUnread，内部游标不下发',
+    typeof marketPayload(db, me).me.chatUnread === 'boolean'
+    && marketPayload(db, me).me.chatReadSeq === undefined
+    && marketPayload(db, me).me.chatSeq === undefined);
 }
 
 console.log = realLog;

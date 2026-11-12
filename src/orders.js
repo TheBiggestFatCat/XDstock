@@ -176,7 +176,7 @@ export function placeLimitOrder(db, player, body) {
   if (simple && !(pxNow > 0)) return { ok: false, error: '这只票还没有行情，等下一轮再试' };
 
   if (!Array.isArray(player.orders)) player.orders = [];
-  const maxPending = Math.max(1, num(cfg.maxPendingOrders, 5));
+  const maxPending = Math.max(1, num(cfg.maxPendingOrders, 10));
   // 止盈止损单和自动定投单不占名额（它们是系统单，不是玩家手动挂的）
   const manualCount = player.orders.filter((o) => !o.auto && !o.autoDca).length;
   // 系统单（自动定投）不受「同时挂几笔」的限制，否则玩家挂满手动单后定投就哑了

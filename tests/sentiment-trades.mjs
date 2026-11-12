@@ -29,7 +29,7 @@ function calmDb(over = {}) {
     baseVolatility: 0, meanReversion: 0, eventChance: 0, localEventChance: 0,
     hotMoneyEnabled: 0, playerImpactEnabled: 0, marketImpactEnabled: 1,
     sentimentEnabled: 0, goldVol: 0, goldRev: 0, reportIntervalTicks: 1e9,
-    dividendRate: 0, maxPremium: 1e9, morningRallyEnabled: 0,
+    dividendRate: 0, morningRallyEnabled: 0,
     marketTradesEnabled: 1, marketTradesRate: 40,
     ...over
   });

@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { ensureChat } from './chat.js';
+import { ensureChat, chatSeqOf } from './chat.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_CONFIG } from './config.js';
@@ -536,6 +536,9 @@ export function migrate(d) {
       const oldTick = Number(p.themeChangedTick);
       p.skillChangedTick = Number.isFinite(oldTick) && oldTick > 0 ? oldTick : -1;
     }
+    // 聊天未读红点（2026-11）：老存档没有已读游标，按「这次启动时大厅最新 seq」当基线。
+    // 不补历史红点，否则所有老玩家一上线就全是红点；之后的新消息才亮。
+    if (!Number.isFinite(Number(p.chatReadSeq))) p.chatReadSeq = chatSeqOf(merged);
     // 主题成就 / 进化字段（老存档补 0，新存档原样保留）
     ensureAchvState(p);
     // 全局成就规则改过：以前「任一子任务完成」就发，现在要求两个都完成。
@@ -555,6 +558,9 @@ export function migrate(d) {
   for (const k of Object.keys(merged.config)) {
     if (k.toLowerCase().includes('loan')) delete merged.config[k];
   }
+  // 2026-11 股价上限（fair × maxPremium）已整体移除：老存档里的配置键一并清掉，
+  // 否则面板/白名单里都没有它了，存档里还留着一个永远不会生效的旧值。
+  delete merged.config.maxPremium;
   merged.newsPool = d.newsPool || [];
   merged.localNewsPool = d.localNewsPool || [];
   if (!d.startedAt) {

@@ -146,7 +146,7 @@ log('=== 5 引擎集成：价格推力用真值，面板才用假读数 ===');
       baseVolatility: 0, meanReversion: 0, eventChance: 0, localEventChance: 0,
       marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0,
       sentimentEnabled: 1, sentimentStrength: 0.01, sentimentTicks: 1, sentimentDrift: 1,
-      sentimentEdge: 3, mindAccurateChanceEvolved: accurateEvolved, maxPremium: 1e9
+      sentimentEdge: 3, mindAccurateChanceEvolved: accurateEvolved
     });
     const st = db.stocks.TGW;
     st.price = 100;
@@ -190,7 +190,7 @@ log('=== 6 重掷周期：假读数一次重掷内保持不变 ===');
     baseVolatility: 0, meanReversion: 0, eventChance: 0, localEventChance: 0,
     marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0,
     sentimentEnabled: 1, sentimentStrength: 0.001, sentimentTicks: 12, sentimentDrift: 0.6,
-    sentimentRollMin: 200, sentimentRollMax: 200, mindAccurateChanceEvolved: 0, maxPremium: 1e9
+    sentimentRollMin: 200, sentimentRollMax: 200, mindAccurateChanceEvolved: 0
   });
   const st = db.stocks.TGW;
   st.price = 100;

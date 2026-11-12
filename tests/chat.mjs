@@ -3,7 +3,8 @@
 
 import {
   ensureChat, pushChat, chatRows, splitPacket, createPacket, grabPacket, packetView,
-  packetTtlMs, PACKET_TTL_HOURS_DEFAULT, CHAT_MAX, CHAT_TEXT_MAX
+  packetTtlMs, PACKET_TTL_HOURS_DEFAULT, CHAT_MAX, CHAT_TEXT_MAX,
+  chatSeqOf, chatReadSeqOf, chatUnreadFor, chatMarkRead
 } from '../src/chat.js';
 
 let fails = 0;
@@ -158,6 +159,49 @@ log('=== 6 表情消息 / 文字长度 ===');
   const msg = pushChat(db, p, { type: 'text', text: long });
   check('服务端不强裁（api 层裁 200）', msg.text.length === CHAT_TEXT_MAX + 50);
   check('CHAT_TEXT_MAX = 200', CHAT_TEXT_MAX === 200, String(CHAT_TEXT_MAX));
+}
+
+// ---------------------------------------------------------------- 7
+log('');
+log('=== 7 未读红点的已读游标（服务端存，手机/电脑同步） ===');
+{
+  const db = db0();
+  const p = mkPlayer('reader', '读的人');
+  check('空大厅 seq = 0', chatSeqOf(db) === 0, String(chatSeqOf(db)));
+  check('空大厅没有未读', chatUnreadFor(db, p) === false);
+  check('空 db / 空玩家不炸', chatSeqOf(null) === 0 && chatUnreadFor(null, null) === false);
+
+  pushChat(db, mkPlayer('other1'), { type: 'text', text: 'hi' });
+  check('有人说话后 seq = 1', chatSeqOf(db) === 1, String(chatSeqOf(db)));
+  check('没读过 → 有未读（红点亮）', chatUnreadFor(db, p) === true);
+
+  check('读到最新 → 游标 = 1', chatMarkRead(db, p) === 1, String(p.chatReadSeq));
+  check('读完后没有未读（红点灭）', chatUnreadFor(db, p) === false);
+
+  pushChat(db, mkPlayer('other2'), { type: 'text', text: 'yo' });
+  check('又来一条 → 又有未读', chatUnreadFor(db, p) === true);
+  check('upto=1 只推到第 1 条', chatMarkRead(db, p, 1) === 1, String(p.chatReadSeq));
+  check('推到第 1 条后还剩未读（当前 seq=2）', chatUnreadFor(db, p) === true);
+  check('upto 超过最新会被夹到最新', chatMarkRead(db, p, 999) === 2, String(p.chatReadSeq));
+  check('再标已读不会倒退（传 0）', chatMarkRead(db, p, 0) === 2, String(p.chatReadSeq));
+  check('全部读完后没有未读', chatUnreadFor(db, p) === false);
+
+  // 脏数据：游标是负数 / 字符串 / 字段缺失，一律当 0（老存档由 migrate 补基线）
+  check('负数游标当 0', chatReadSeqOf({ chatReadSeq: -5 }) === 0);
+  check('字符串游标当 0', chatReadSeqOf({ chatReadSeq: 'x' }) === 0);
+  check('没有游标当 0', chatReadSeqOf({}) === 0);
+  check('没有游标的老玩家按「全都未读」算', chatUnreadFor(db, {}) === true);
+  check('chatMarkRead 不往未来推（空大厅）', chatMarkRead({ chat: {} }, { chatReadSeq: 0 }) === 0);
+
+  // 两个设备共用服务端那一份 player.chatReadSeq：A 读了之后，B 下一轮拉到的也没有红点
+  const p2 = mkPlayer('reader2');
+  p2.chatReadSeq = 0;
+  pushChat(db, mkPlayer('other3'), { type: 'text', text: 'z' });
+  check('第二台设备初始有未读', chatUnreadFor(db, { ...p2 }) === true);
+  chatMarkRead(db, p2);                        // 设备 A 读了（写服务端同一份 player）
+  check('设备 A 读完，服务端游标 = 最新', chatReadSeqOf(p2) === chatSeqOf(db));
+  check('设备 B 再拉 payload 时没有红点（游标在服务端共享）',
+    chatUnreadFor(db, { ...p2 }) === false);
 }
 
 console.log(out.join('\n'));

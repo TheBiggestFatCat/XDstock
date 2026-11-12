@@ -59,7 +59,7 @@ function calmDb(patch = {}) {
     marketTradesEnabled: 0, hotMoneyEnabled: 0,
     sentimentEnabled: 0, playerImpactEnabled: 0,
     fxEnabled: 0, goldVol: 0, goldRev: 0,
-    maxPremium: 1e9, reportIntervalTicks: 1e12
+    reportIntervalTicks: 1e12
   }, patch);
   db.tick = 10000;
   db.events = [];
@@ -383,7 +383,7 @@ log('=== 6 引擎集成：跑一段，价格不炸、流水里有游资 ===');
   Object.assign(db.config, {
     baseVolatility: 0.01, meanReversion: 0.002, eventChance: 0,
     marketTradesEnabled: 1, marketTradesRate: 3, hotMoneyEnabled: 1,
-    marketImpactEnabled: 1, sentimentEnabled: 1, maxPremium: 2.5
+    marketImpactEnabled: 1, sentimentEnabled: 1
   });
   try {
     quiet(() => { for (let i = 0; i < 1500; i++) stepMarket(db); });
@@ -392,7 +392,6 @@ log('=== 6 引擎集成：跑一段，价格不炸、流水里有游资 ===');
   }
   const prices = Object.values(db.stocks).filter((s) => !s.isIndex);
   check('所有价格都还是正数', prices.every((s) => Number.isFinite(s.price) && s.price > 0));
-  check('没有票突破 fair × maxPremium', prices.every((s) => s.price <= s.fair * 2.5 + 1e-6));
   check('1500 轮后溢价没有离谱（中位数 < 60%）', (() => {
     const devs = prices.map((s) => Math.abs(Math.log(s.price / s.fair))).sort((a, b) => a - b);
     return Math.exp(devs[Math.floor(devs.length / 2)]) - 1 < 0.6;

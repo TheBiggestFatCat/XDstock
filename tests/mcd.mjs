@@ -147,7 +147,7 @@ log('=== 5 真的会拉升：幅度落在 5%~20%，而且不会连拉 ===');
   Object.assign(db.config, {
     baseVolatility: 0, meanReversion: 0, eventChance: 0, localEventChance: 0,
     marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0, sentimentEnabled: 0,
-    maxPremium: 1e9, rallyMin: 0.05, rallyMax: 0.2
+    rallyMin: 0.05, rallyMax: 0.2
   });
   const st = db.stocks.MCD;
   st.shares = 600000000;
@@ -207,7 +207,7 @@ log('=== 6 引擎仍然支持 capCeiling（只是 MCD 不再设），且现在�
     const db = createDb();
     Object.assign(db.config, {
       baseVolatility: 0, meanReversion: 0, eventChance: 0, localEventChance: 0,
-      marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0, sentimentEnabled: 0, maxPremium: 1e9
+      marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0, sentimentEnabled: 0
     });
     const st = db.stocks.MCD;
     st.shares = 600000000;
@@ -233,7 +233,7 @@ log('=== 6 引擎仍然支持 capCeiling（只是 MCD 不再设），且现在�
     const db = createDb();
     Object.assign(db.config, {
       baseVolatility: 0, meanReversion: 0, eventChance: 0, localEventChance: 0,
-      marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0, sentimentEnabled: 0, maxPremium: 1e9
+      marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0, sentimentEnabled: 0
     });
     const st = db.stocks.MCD;
     st.shares = 600000000;

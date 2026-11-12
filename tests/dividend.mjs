@@ -227,8 +227,11 @@ log('=== 7 倍率 0 = 停发（不改股价）===');
   runOneTick(db);
   const shock = Math.max(-0.06, Math.min(0.06, Number(st.lastSurprise || 0) * 0.8));
   check('不发钱', db.players.p1.cash === 0 && (db.dividendEvents || []).length === 0);
-  check('也不除权（只有财报冲击）', near(st.price, Number((before * (1 + shock)).toFixed(4)), 1e-4),
-    `${before.toFixed(2)} → ${st.price.toFixed(2)}`);
+  // ⚠️ 引擎只在 |shock| > 0.0005 时才改价（太小就不动），期望值要跟这个门槛一致，
+  // 否则随机 EPS 偶尔落在死区里、测试就会偶发失败（2026-11 修）
+  const expectPrice = Math.abs(shock) > 0.0005 ? Number((before * (1 + shock)).toFixed(4)) : before;
+  check('也不除权（只有财报冲击）', near(st.price, expectPrice, 1e-4),
+    `${before.toFixed(2)} → ${st.price.toFixed(2)}（预期 ${expectPrice.toFixed(2)}）`);
 }
 
 // ---------------------------------------------------------------- 8

@@ -27,7 +27,7 @@ function calmDb(patch = {}) {
     baseVolatility: 0, meanReversion: 0, eventChance: 0, localEventChance: 0,
     hotMoneyEnabled: 0, sentimentEnabled: 0, playerImpactEnabled: 0,
     fxEnabled: 0, goldVol: 0, goldRev: 0,
-    maxPremium: 1e9, reportIntervalTicks: 1e12,
+    reportIntervalTicks: 1e12,
     marketTradesEnabled: 1
   }, patch);
   db.tick = 10000;

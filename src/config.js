@@ -60,7 +60,7 @@ export const DEFAULT_CONFIG = {
   // ---- 挂单 ----
   limitOrderEnabled: 1,     // 1=允许限价挂单
   orderTtlTicks: 2000,      // 挂单多久没成交自动撤（2000 轮 ≈ 2.8 小时）
-  maxPendingOrders: 5,      // 每人最多同时挂几笔
+  maxPendingOrders: 10,     // 每人最多同时挂几笔
 
   // ---- ST 与退市 ----
   stPrice: 3,          // 股价跌破这个值进入 ST
@@ -69,9 +69,10 @@ export const DEFAULT_CONFIG = {
   dividendRate: 1,     // 派息倍率：1 = 按行业标准（金融40% 消费45% 传媒30% 外汇35% 科技12%），0 = 停发
   dividendCap: 0.015,  // 单期股息率封顶（0.015 = 最多发现价的 1.5%；0 = 不封顶）
 
-  // ---- 公司成长 / 估值上限 ----
+  // ---- 公司成长 ----
   growthCeiling: 8,    // 营收天花板：最多长到基准营收的多少倍（无限接近，不超过）
-  maxPremium: 2.5,     // 估值上限：股价最多是 fair 的多少倍（超过会被压回这条线）
+  // 2026-11 起**不再有股价上限**（原 maxPremium = fair × 2.5 的防泡沫夹子已移除）：
+  // 价格可以长期站在价值线上方，靠均值回归自然回落，不再被硬压回线内。
   // 整点拉升（麦当劳专属）：每天 12:00 / 18:00 各一次，幅度在这个区间里随机
   rallyMin: 0.05,
   rallyMax: 0.2,

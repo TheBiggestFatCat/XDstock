@@ -7,6 +7,7 @@ import { bars15Candles, bars5Candles } from './bars15.js';
 import { unlockedEmojis, pushEmote, visibleEmotes, isEmojiUnlocked } from './emoji.js';
 import {
   ensureChat, pushChat, chatRows, createPacket, grabPacket, packetView,
+  chatSeqOf, chatUnreadFor, chatMarkRead,
   CHAT_TEXT_MAX, CHAT_GAP_MS, PACKET_MIN_AMOUNT, PACKET_MAX_COUNT, PACKET_COOLDOWN_MS
 } from './chat.js';
 import { pushVersionPost, latestVersionPost, listVersionPosts, deleteVersionPost, updateVersionPost } from './version.js';
@@ -211,6 +212,9 @@ function publicPlayer(p, db) {
     notices: notifyList(p, 20),
     // 表情互动：这个等级解锁了哪些贴纸
     emojis: unlockedEmojis(p.level),
+    // 聊天大厅：有没有未读消息（导航「聊天」标签的红点）。
+    // 已读游标 chatReadSeq 存在服务端，所以手机和电脑共享「读到哪」的状态
+    chatUnread: chatUnreadFor(db, p),
     createdAt: p.createdAt
   };
 }
@@ -665,6 +669,8 @@ export async function handleApi(ctx) {
         themes: [],
         orders: [],
         eq: [],
+        // 聊天未读红点的已读游标：新号从当前大厅最新一条算起（不补历史红点）
+        chatReadSeq: chatSeqOf(db),
         createdAt: now()
       };
       db.players[id] = player;
@@ -1250,7 +1256,7 @@ export async function handleApi(ctx) {
       'tickMs', 'baseVolatility', 'meanReversion', 'eventImpactScale',
       'feeRate', 'stampDuty', 'minLeverage', 'maxLeverage',
       'dividendRate', 'dividendCap',
-      'growthCeiling', 'maxPremium', 'indexRebalanceTicks', 'rallyMin', 'rallyMax',
+      'growthCeiling', 'indexRebalanceTicks', 'rallyMin', 'rallyMax',
       'eventChance', 'globalEventScale', 'reportIntervalTicks', 'shopThemeCooldown', 'sentimentRollTicks', 'impactRefFreeCap', 'historyTicks',
       'workRatePerTick', 'workOnlineMultiplier', 'workBankTicks', 'stealMin', 'stealMax', 'stealCapRatio', 'stealCooldownTicks',
       'equitySampleTicks', 'equityMaxPoints',
@@ -1555,6 +1561,8 @@ export async function handleApi(ctx) {
     if (!text) return json(res, 400, { error: '不能发空消息' });
     me.chatAt = nowMs;
     const msg = pushChat(db, me, { type: 'text', text });
+    // 自己发的消息当然算已读（否则发完自己头上会亮红点）
+    chatMarkRead(db, me, msg.seq);
     return json(res, 200, { ok: true, msg, ...chatRows(db, { afterSeq: msg.seq - 1, limit: 10 }) });
   }
 
@@ -1571,6 +1579,7 @@ export async function handleApi(ctx) {
     }
     me.chatAt = nowMs;
     const msg = pushChat(db, me, { type: 'emoji', emo: file });
+    chatMarkRead(db, me, msg.seq);
     return json(res, 200, { ok: true, msg, ...chatRows(db, { afterSeq: msg.seq - 1, limit: 10 }) });
   }
 
@@ -1592,6 +1601,7 @@ export async function handleApi(ctx) {
     me.packetAt = nowMs;
     const pk = createPacket(db, me, amount, count);
     const msg = pushChat(db, me, { type: 'packet', packetId: pk.id });
+    chatMarkRead(db, me, msg.seq);
     return json(res, 200, { ok: true, msg, packet: packetView(pk), ...chatRows(db, { afterSeq: msg.seq - 1, limit: 10 }) });
   }
 
@@ -1604,6 +1614,20 @@ export async function handleApi(ctx) {
     me.cash = (Number(me.cash) || 0) + r.amount;
     me.chatGrabbed = (Number(me.chatGrabbed) || 0) + r.amount;
     return json(res, 200, { ok: true, amount: r.amount, left: r.left, packet: packetView(pk), cash: me.cash });
+  }
+
+  // 聊天已读：进聊天页 / 聊天页收到新消息时调，把已读游标推到最新（导航红点消失）。
+  // 游标存在服务端（player.chatReadSeq），所以电脑上读了，手机上也不会有红点。
+  // body.seq 可选：指定「读到第几条」，不传 = 读到最新；只增不减，会被夹在当前 seq 内。
+  if (pathname === '/api/chat/read' && method === 'POST') {
+    ensureChat(db);
+    const readSeq = chatMarkRead(db, me, body.seq);
+    return json(res, 200, {
+      ok: true,
+      readSeq,
+      seq: chatSeqOf(db),
+      unread: chatUnreadFor(db, me)
+    });
   }
 
   // 我的成交记录：默认最近 48 小时，支持按标的筛选 + 翻页。

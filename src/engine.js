@@ -505,14 +505,9 @@ function stepStock(st, cfg, events, brokerDrift, fxData, db) {
   if (!Number.isFinite(p) || p <= 0) p = st.price;
   p = Math.max(0.01, p);
 
-  // 估值上限：价格可以炒，但永远不超过 fair × maxPremium（无限接近这条线）
-  // 只压上限、不管下限——跌深了交给均值回归和护盘
-  const fairNow = Number(st.fair) || 0;
-  const maxPrem = Math.max(1.05, Number(cfg.maxPremium ?? 2.5));
-  if (fairNow > 0) {
-    const ceilP = fairNow * maxPrem;
-    if (p > ceilP) p = ceilP;
-  }
+  // 2026-11 按需求**去掉股价上限**：原来这里会把价格硬夹到 fair × maxPremium（默认 2.5 倍），
+  // 现在价格可以长期站在价值线上方，偏离只由均值回归慢慢拉回、不再有硬顶。
+  // （跌深的下限也不在这里设——交给均值回归 / 护盘 / ST 退市）
 
   // 整点拉升（麦当劳专属）：每天 12:00 / 18:00 各来一次，一次 +5%~+20%
   // 只推价格，不发公告（2026-11 按需求去掉公告，玩家从盘面自己看）

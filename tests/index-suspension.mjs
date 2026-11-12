@@ -27,7 +27,7 @@ function calmDb() {
     baseVolatility: 0, meanReversion: 0, eventChance: 0, localEventChance: 0,
     marketTradesEnabled: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0,
     sentimentEnabled: 0, goldVol: 0, goldRev: 0, reportIntervalTicks: 1e9,
-    dividendRate: 0, maxPremium: 1e9,
+    dividendRate: 0,
     // 早市冲量是「按服务器本地时间 6~10 点」生效的，跑测试时正好在窗口内
     // LU 会一路顶着涨，把指数带偏 → 和停牌无关，必须关掉
     morningRallyEnabled: 0

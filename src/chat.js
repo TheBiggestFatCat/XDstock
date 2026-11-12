@@ -8,6 +8,12 @@
  *   - 不能抢自己的；同一个红包每人只能抢一次；10 分钟没抢完就过期回收（钱不退，已发出的份就是发出去了）
  *
  * 数据都在 db 里：`db.chat = { seq, messages: [] }`、`db.redPackets = { id: 红包 }`
+ *
+ * 未读红点（2026-11）：
+ * - 每个玩家记 `player.chatReadSeq` = 他「读到第几条」，存在**服务端**，
+ *   所以手机和电脑看到的是同一个已读状态（清浏览器缓存 / 换设备都不会重新亮红点）
+ * - 未读 = `db.chat.seq > player.chatReadSeq`；接口在 me payload 里下发 `chatUnread`
+ * - 判定/推游标都走下面的 chatSeqOf / chatUnreadFor / chatMarkRead，别在别处另写一份
  */
 
 export const CHAT_MAX = 500;              // 保留最近多少条
@@ -37,6 +43,47 @@ export function ensureChat(db) {
   }
   if (!db.redPackets || typeof db.redPackets !== 'object') db.redPackets = {};
   return c;
+}
+
+// ---------------- 未读红点（已读游标） ----------------
+
+/** 大厅最新 seq（脏数据一律当 0） */
+export function chatSeqOf(db) {
+  const n = Number(db && db.chat && db.chat.seq);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** 玩家的已读游标（脏数据一律当 0 = 一条都没读过） */
+export function chatReadSeqOf(player) {
+  const n = Number(player && player.chatReadSeq);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/**
+ * 有没有未读消息。
+ * ⚠️ 老存档的玩家没有 chatReadSeq，这里会按 0 算成「全都未读」——
+ * 所以 `store.js#migrate` 必须给老玩家补基线（= 当时的 seq），否则一上线全是红点。
+ */
+export function chatUnreadFor(db, player) {
+  return chatSeqOf(db) > chatReadSeqOf(player);
+}
+
+/**
+ * 把已读游标往前推（不给 upto = 推到最新）。
+ * - **只增不减**：传更小的值不会让已经读过的消息重新变成未读
+ * - upto 会被夹在 [0, 当前 seq]，防止前端瞎传把游标推到未来
+ * @returns {number} 更新后的已读游标
+ */
+export function chatMarkRead(db, player, upto) {
+  const seq = chatSeqOf(db);
+  const cur = chatReadSeqOf(player);
+  if (!player || typeof player !== 'object') return cur;
+  const want = upto === undefined
+    ? seq
+    : Math.min(seq, Math.max(0, Math.floor(Number(upto) || 0)));
+  const next = Math.max(cur, want);
+  if (next > cur) player.chatReadSeq = next;
+  return next;
 }
 
 /**

@@ -368,6 +368,8 @@ async function refreshMarket() {
   const d = await api('/api/market');
   state.market = d;
   state.me = d.me;
+  // 聊天未读红点：首屏 payload 里就带 me.chatUnread（服务端已读游标算出来的）
+  renderChatDot();
   maybeAchvToasts(d.me?.achv);
   syncThemeFromServer();
   syncBackgroundFromServer();
@@ -4460,6 +4462,8 @@ function onTick(d) {
   updateOrderBtnLabel();
   // 聊天大厅跟着行情一轮一刷（只在聊天页开着时拉，省流量）
   if (state.chat?.open) loadChat(state.chat.seq || 0);
+  // 聊天未读红点：状态以服务端 me.chatUnread 为准（手机 / 电脑同一个已读游标）
+  renderChatDot();
   updatePriceLines();
   renderPositions();
   renderMyOrders();
@@ -6697,11 +6701,10 @@ const STOCK_CFG_GROUPS = [
     ]
   },
   {
-    title: '成长 / 估值上限',
-    desc: '给每家公司一条「无限接近但不超过」的线',
+    title: '成长上限 / 整点拉升',
+    desc: '营收天花板 + 麦当劳的整点拉升（股价上限 2026-11 已移除）',
     fields: [
       ['growthCeiling', '营收天花板(基准的几倍)', '营收最多涨到基准营收的几倍，8 = 8 倍'],
-      ['maxPremium', '股价上限(合理价的几倍)', '价格最多是价值线的几倍，2.5 = 250%，防泡沫的最后一道夹子'],
       ['rallyMin', '整点拉升下限(0.05=5%)', '整点拉升（每小时一次）最小幅度'],
       ['rallyMax', '整点拉升上限(0.2=20%)', '整点拉升最大幅度，实际在 min~max 之间随机']
     ]
@@ -7089,7 +7092,41 @@ function chatTimeOf(ts) {
   return `${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-state.chat = { rows: [], seq: 0, open: false, packets: {}, loading: false };
+state.chat = {
+  rows: [], seq: 0, open: false, packets: {}, loading: false,
+  // 已读游标同步（2026-11 未读红点）：markedSeq = 本地已经向服务端确认「读到哪」
+  // 只在 seq 往后走了才发 POST /api/chat/read，避免聊天页开着时每轮都写一次库
+  markedSeq: 0,
+  marking: false
+};
+
+/** 聊天未读红点：服务端下发的 me.chatUnread 决定亮不亮；聊天页开着时一律不亮 */
+function renderChatDot() {
+  const on = !!state.market?.me?.chatUnread && !state.chat?.open;
+  const el = $('#chatDot');
+  if (!el) return;
+  el.classList.toggle('on', on);
+  el.title = on ? '有未读消息' : '';
+}
+
+/**
+ * 标记聊天已读：把服务端的已读游标推到最新（进聊天页 / 聊天页收到新消息时调）。
+ * 失败不弹提示、不阻塞界面 —— 下一轮 tick 还会再试。
+ */
+async function markChatRead() {
+  if (!state.market?.me || state.chat?.marking) return;
+  state.chat.marking = true;
+  try {
+    const d = await api('/api/chat/read', { method: 'POST', body: {} });
+    if (state.market?.me) state.market.me.chatUnread = !!d.unread;
+    state.chat.markedSeq = Math.max(state.chat.markedSeq || 0, Number(d.seq) || 0);
+    renderChatDot();
+  } catch (e) {
+    // 忽略：红点晚一轮消失无所谓
+  } finally {
+    state.chat.marking = false;
+  }
+}
 
 /** 弹一条小提示（发送失败 / 抢到多少） */
 function chatTip(text, cls = '') {
@@ -7240,6 +7277,8 @@ async function loadChat(afterSeq = 0) {
       chatScrollBottom();
     }
     state.chat.seq = Math.max(state.chat.seq || 0, Number(d.seq) || 0);
+    // 聊天页开着时看到的都算已读：把服务端游标推到最新（只在真的往后走了才发请求）
+    if (state.chat.open && state.chat.seq > (state.chat.markedSeq || 0)) markChatRead();
   } catch (e) {
     chatTip('聊天加载失败：' + e.message, 'is-bad');
   } finally {
@@ -7288,8 +7327,17 @@ function refreshPacketBubbles() {
 
 async function openChat() {
   state.chat.open = true;
-  if (!state.chat.rows.length) await loadChat(0);
-  else { renderChat(true); chatScrollBottom(); }
+  // 进聊天页先把红点收起来（真正标已读在拉到消息之后）
+  renderChatDot();
+  if (!state.chat.rows.length) {
+    await loadChat(0);
+  } else {
+    renderChat(true);
+    chatScrollBottom();
+    // 已经有历史数据、但服务端说还有未读（比如新消息刚到）→ 补一次已读
+    if (state.market?.me?.chatUnread) markChatRead();
+  }
+  renderChatDot();
 }
 
 async function sendChatText() {
@@ -7330,6 +7378,8 @@ function mergeChatPayload(d) {
     chatScrollBottom();
   }
   state.chat.seq = Math.max(state.chat.seq || 0, Number(d.seq) || 0);
+  // 自己发完消息也顺手标已读（否则下一轮 me.chatUnread 会闪一下红点）
+  if (state.chat.open && state.chat.seq > (state.chat.markedSeq || 0)) markChatRead();
 }
 
 async function grabChatPacket(id) {
@@ -7440,6 +7490,8 @@ function switchView(name) {
   if (name === 'achv') renderAchvPage();
   if (name === 'chat') openChat();
   else state.chat.open = false;
+  // 切页时立刻刷一次红点：进聊天页马上收起来，离开聊天页时按服务端状态补上
+  renderChatDot();
   // 切回行情时图表容器可能刚从 display:none 恢复，补一次尺寸校正
   const onAdmin = name === 'portfolio' && (state.pfPane || 'overview') === 'admin';
   if (!onAdmin) stopConsole();

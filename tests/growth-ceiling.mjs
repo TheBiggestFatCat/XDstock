@@ -1,4 +1,4 @@
-// 成长天花板 + 估值上限（给每家公司一条「无限接近但不超过」的线）
+// 成长天花板（营收）+ 股价上限移除（2026-11）
 //
 //   node tests/growth-ceiling.mjs
 
@@ -106,46 +106,51 @@ log('=== 3 负增长不受天花板影响（该萎缩照样萎缩）===');
 
 // ---------------------------------------------------------------- 4
 log('');
-log('=== 4 估值上限：股价不会超过 fair × maxPremium ===');
+log('=== 4 股价上限已移除（2026-11）：价格可以长期站在 fair 上方 ===');
 {
   const db = createDb();
   Object.assign(db.config, {
-    baseVolatility: 0.02, meanReversion: 0, eventChance: 0, localEventChance: 0,
-    marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0, sentimentEnabled: 0, maxPremium: 2.5
+    baseVolatility: 0, meanReversion: 0, eventChance: 0, localEventChance: 0,
+    majorNewsEnabled: 0, marketTradesEnabled: 0, marketTradesRate: 0,
+    hotMoneyEnabled: 0, playerImpactEnabled: 0, sentimentEnabled: 0
   });
   const st = db.stocks.MAMA;
   st.fair = 500;
-  st.price = 1400;           // 2.8× fair，已经越线
+  st.price = 1400;           // 2.8× fair —— 旧代码会在下一轮把它夹回 2.5×
   st.nextReportTick = 1e12;
   const realLog = console.log;
   console.log = () => {};
-  let worst = 0;
+  let min = Infinity;
   try {
     for (let i = 0; i < 200; i++) {
       stepMarket(db);
-      const prem = st.price / st.fair;
-      if (prem > worst) worst = prem;
+      if (st.price < min) min = st.price;
     }
   } finally {
     console.log = realLog;
   }
-  check('200 轮里最高溢价不超过 2.5 倍', worst <= 2.5 + 1e-6, `最高 ${worst.toFixed(4)}×`);
-  check('价格被压回线内', st.price <= st.fair * 2.5 + 1e-6,
-    `现价 ${st.price.toFixed(1)} vs 上限 ${(st.fair * 2.5).toFixed(1)}`);
+  check('200 轮都不再被压回 2.5 倍', min > st.fair * 2.5, `最低 ${(min / st.fair).toFixed(3)}×`);
+  check('价格一直待在 fair 上方', st.price > st.fair, `现价 ${st.price.toFixed(1)} / fair ${st.fair}`);
+
+  check('DEFAULT_CONFIG 里已经没有 maxPremium', createDb().config.maxPremium === undefined);
+  // 老存档里遗留的 maxPremium 键会被 migrate 清掉（否则面板/白名单都没它了，存档还留着）
+  const stale = createDb();
+  stale.config.maxPremium = 2.5;
+  check('migrate 清掉老存档的 maxPremium', migrate(stale).config.maxPremium === undefined);
 }
 
 // ---------------------------------------------------------------- 5
 log('');
-log('=== 5 线内的股票完全不受影响 ===');
+log('=== 5 普通股票照常自由波动（没被压平） ===');
 {
   const db = createDb();
   Object.assign(db.config, {
     baseVolatility: 0.01, meanReversion: 0.0004, eventChance: 0, localEventChance: 0,
-    marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0, sentimentEnabled: 0, maxPremium: 2.5
+    marketTradesRate: 0, hotMoneyEnabled: 0, playerImpactEnabled: 0, sentimentEnabled: 0
   });
   const st = db.stocks.TGW;
   st.fair = 500;
-  st.price = 400;             // 0.8×，远在线内
+  st.price = 400;             // 0.8× fair
   st.nextReportTick = 1e12;
   const realLog = console.log;
   console.log = () => {};
@@ -163,9 +168,9 @@ log('=== 5 线内的股票完全不受影响 ===');
   } finally {
     console.log = realLog;
   }
-  // 线内的票应该照常自由波动：300 轮里上下至少晃出 5% 的区间
+  // 普通票照常自由波动：300 轮里上下至少晃出 5% 的区间
   // （别用「最高溢价 > 0.81」判，随机游走往下走的时候会误报）
-  check('线内股票自由波动（没被压平）',
+  check('股票自由波动（没被压平）',
     hi / lo > 1.05 && st.price !== 400,
     `300 轮区间 ${lo.toFixed(1)} ~ ${hi.toFixed(1)}（最高溢价 ${maxPrem.toFixed(3)}×）`);
 }

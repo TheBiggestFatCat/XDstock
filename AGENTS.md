@@ -1,6 +1,7 @@
 # AGENTS.md · XDstock 维护须知
 
 > 完整文档见 [`docs/开发者文档.md`](docs/开发者文档.md)。本文件是速查版，**动手前至少读完「铁律」一节**。
+> 2026-11 已按当前实现同步（聊天未读红点 / 赛区 1 秒循环 + 止盈止损 / 65 套 2527 条测试）。
 
 ## 项目是什么
 
@@ -16,38 +17,21 @@ QQ 群风格的模拟炒股网页游戏。Node.js 零依赖、单文件 `data/db
 node server.js                       # 本地起服务
 node --check src/api.js              # 语法检查（改完必跑）
 node --check public/app.js
-node tests/order-audit.mjs           # 下单/撮合/押金回归（改下单必跑，64 条断言）
-node tests/order-conflict.mjs        # 同票开平冲突（改挂单必跑，21 条断言）
-node tests/order-simple.mjs          # 简单模式（市价单）无条件成交（改下单必跑，46 条断言）
-node tests/theme-split.mjs           # 主题=外观+技能（改商城必跑，28 条断言）
-node tests/shop-gate.mjs             # 商城等级门槛（改商城必跑，30 条断言）
-node tests/theme-evolution.mjs       # 主题成就 + 主题进化（改成就/技能必跑，72 条断言）
-node tests/theme-achv-own.mjs        # 主题成就只看「拥有」不看装备（改成就判定必跑，36 条）
-node tests/fair-history.mjs          # 价值线=最近 8 期 EPS 趋势拟合（改估值/财报必跑，32 条）
-node tests/imports.mjs               # 静态体检：跨模块「用了但没 import」（改 server/api 必跑，17 条）
-node tests/global-achievements.mjs   # 全局成就 价值投资/短线擒龙（改成就必跑，53 条）
-node tests/gold-stock.mjs            # 矿工银行 MB 金价驱动 + 退市清理（改新股必跑，58 条）
-node tests/kfc-stock.mjs             # 肯德基 反向跟随 + 疯狂星期四（改新股必跑，48 条）
-node tests/tpsl.mjs                  # 止盈止损全流程（改平仓/委托必跑，75 条）
-node tests/market-money.mjs          # 虚假成交推动股价 + 游资轮动（改行情/流水必跑，73 条）
-node tests/payload-wire.mjs          # 前端数据包白名单（加字段/改 payload 必跑，120 条）
-node tests/shop-perks.mjs            # 咸鱼代下单（免手续费）/ 游资情报（改商城必跑，57 条）
-node tests/index-suspension.mjs      # 成分股停牌不影响指数（改指数/停牌必跑，23 条）
-node tests/tycoon-broker.mjs         # 券商营收/大鳄预览（改财报/券商必跑，26 条）
-node tests/report-trend-expectation.mjs  # 市场预期=最近5期走势拟合（改财报预期必跑，25 条）
-node tests/skill-text.mjs            # 主题技能文案跟着配置走（改技能/文案必跑，47 条）
-node tests/admin-panel.mjs           # 参数面板一致性：幽灵键/重复键/漏白名单（改设置面板必跑，18 条）
-node tests/admin-cash.mjs            # 管理端「打钱」打到现金（改打钱/资金接口必跑，28 条）
-node tests/tour.mjs                  # 锦标赛：开赛/价格/成交/爆仓/打工/夺冠冻结（改 src/tour.js 必跑，80 条）
-node tests/market-schedule.mjs       # 定时休市 / 循环作息（改开市规则必跑，48 条断言）
-node tests/index-volume.mjs          # 指数成交量按权重拆到个股（改成交量/指数必跑，23 条断言）
-node tests/index-trades.mjs          # 指数的虚假成交 + 按权重推动成分股（改指数成交必跑，25 条断言）
-node tests/candles5.mjs              # 5 分钟 K 线单独打包（改 K 线接口/存储必跑，24 条断言）
-node tests/trade-history.mjs          # 我的·交易记录 48 小时/翻页/筛选（改流水必跑，21 条断言）
-node tests/chat.mjs                 # 聊天大厅：消息上限/拼手气拆分/抢红包规则（改聊天必跑，35 条断言）
-node tests/major-news.mjs          # 重大利好/利空：概率/幅度/零和/3 小时公告（改新闻必跑，43 条断言）
-node tests/notice-link.mjs           # 公告跳转链接：站内路径白名单/外链清洗/下发（改公告必跑，25 条断言）
-node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占比/天花板（不是断言套，看表格）
+
+# 改到哪块跑哪套：完整清单（65 套 / 2527 条断言，含每套条数）见 docs/开发者文档.md §13
+node tests/imports.mjs               # 跨模块「用了但没 import」（17 条，改 server/api 必跑）
+node tests/payload-wire.mjs          # 前端数据包白名单（125 条，加字段/改 payload 必跑）
+node tests/admin-panel.mjs           # 参数面板一致性（18 条，改设置面板必跑）
+node tests/order-audit.mjs           # 下单/撮合/押金（80 条，改下单必跑）
+node tests/tpsl.mjs                  # 止盈止损全流程（75 条，改平仓/委托必跑）
+node tests/order-conflict.mjs        # 同票开平冲突（21 条）
+node tests/order-simple.mjs          # 简单模式市价单（53 条）
+node tests/market-money.mjs          # 虚假成交推动股价 / 游资 / 市场资金（112 条）
+node tests/gold-stock.mjs            # 金价驱动 + 退市清理（82 条）
+node tests/chat.mjs                  # 聊天大厅 / 拼手气 / 未读红点（64 条，改聊天必跑）
+node tests/tour.mjs                  # 锦标赛全套（193 条，改 src/tour.js 必跑）
+node tests/market-schedule.mjs       # 定时休市 / 循环作息（48 条）
+node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占比（看表格，不算一套）
 ```
 
 ## 铁律
@@ -72,7 +56,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 6. **发布流程**：改代码 → `node --check` → 本地跑通 → SFTP 上传 → 改线上数据（先备份）→
    `systemctl restart xdstock` → curl 验证 → `git commit` → `git push`（需代理 `127.0.0.1:4780`）。
 
-## 最容易踩的 25 个坑
+## 最容易踩的坑（持续追加）
 
 | 坑 | 症状 | 正解 |
 |---|---|---|
@@ -101,6 +85,8 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 | 交易记录只靠全局 `db.trades` | 全局日志里 95% 是虚假成交，4000 条几十分钟就把玩家的单挤掉，「我的」里看不到几小时前的成交 | 每个玩家单独存 `player.tradeLog`（48 小时 / 300 条，`logTrade` 写入、`migrate` 回填），`/api/trades` 从那里取 |
 | 指数没有虚假成交 | 指数没有 shares → `marketTradeWeight` 算出来 1e-8，永远抽不到，指数页成交记录/量能全是空的 | 指数单独算权重：`indexTradeWeight()` = 成分股流通市值之和 × `indexTradeScale`（默认 0.08）；下单后 `addMarketFlow` / `addVolume` 会按权重拆给成分股，所以能间接推动股价 |
 | payload 把引擎参数抖出去 | F12 里能看到 `trait.lotteryChance` / `volMult` / `fair` / `sentimentStrength`，等于把价格模型交给玩家 | 所有下发字段必须过 `src/wire.js` 白名单；跑 `node tests/payload-wire.mjs` |
+| 聊天未读游标没给老玩家补基线 | 一上线所有老号全是红点（`chatReadSeq` 缺失按 0 算） | `store.js#migrate` 补基线 = 启动时 `db.chat.seq`；新号在 `/api/login` 建号处用 `chatSeqOf(db)` 初始化；跑 `tests/chat.mjs` |
+| 赛区跟着主站 tick 走 | 主站休市时赛区也停，1 秒面板刷新是白刷 | 赛区独立 1 秒循环 `startTourLoop` + 汇率 1 秒抓（`TOUR_TICK_MS`）；改赛区跑 `tests/tour.mjs` |
 
 ## 新增配置参数（四处都要改）
 
@@ -121,30 +107,42 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 ## 代码地图
 
 ```
-server.js          HTTP 入口、静态文件、SSE、tickPayload
-src/engine.js      stepMarket 主循环（顺序敏感：噪声→新闻→漂移→特质→回归→情绪→冲击）
-src/trading.js     开平仓、保证金、爆仓、资金冲击、止盈止损触发
-src/orders.js      限价单、撮合队列（风控单优先 → 价格优先；每玩家每票每方向限额）
-src/theme.js       夜行者时间窗 / 偷钱冷却（技能判定一律读 player.skill）
-src/achievements.js 主题成就 16 条 + 全局成就 2 条 + 结晶/进化（阈值全走 config）
-src/emoji.js       表情互动（按等级解锁、每轮只留最后一个、按票隔离）
-src/bars15.js      中长周期 K 线单独打包：5 分钟 300 根(25h) / 15 分钟 192 根(48h)
-src/schedule.js   定时休市 / 循环作息（marketPhase 唯一入口）
-src/notify.js      站内通知（止盈止损/强平/被偷）
-src/steal.js       偷钱金额（上限按对方现金）
+server.js          HTTP 入口、静态文件、SSE、tickPayload、主 tick / 赛区 1 秒 / 汇率 / 历史 K 线四个定时循环
+src/config.js      全部可调参数默认值 + K 线周期定义（TIMEFRAMES）
+src/store.js       db 加载/保存/migrate/自动备份
+src/stocks.js      股票种子（10 只 + DENG / DENGS）
+src/engine.js      stepMarket 主循环（顺序敏感：噪声→新闻→漂移→特质→回归→情绪→冲击）+ 指数/新闻/财报调度
+src/trading.js     开平仓、保证金、爆仓、冲击、成交量、止盈止损触发
+src/orders.js      限价/简单模式挂单、撮合队列（风控单优先 → 价格优先；每玩家每票每方向限额）
 src/api.js         全部 REST + payload 组装 + 管理接口
 src/wire.js        前端数据包白名单（什么能发给浏览器只在这里定义；防作弊）+ positionWire
-src/fundamentals.js 财报生成、估值 fair、预览
-src/gold.js        金价（MB 的财报驱动源）
-src/kfc.js         肯德基：反向跟随麦当劳 + 疯狂星期四
+src/fundamentals.js 财报生成、估值 fair（8 期回归）、市场预期、预告
+src/news.js        普通新闻池 + 重大利好/利空池
 src/marketTrades.js 虚假成交（三档金额，**会推动股价**：写 st.mflow）
 src/hotmoney.js    游资（板块轮动，成交记录混在虚假成交里、看不出区别）
-src/perks.js       道具规则：咸鱼代下单（免手续费）/ 游资情报（读 hotMoney.nextIndustry）
+src/gold.js        金价（MB 的财报驱动源）
+src/kfc.js         肯德基：反向跟随麦当劳 + 疯狂星期四
+src/fx.js          实时 AUD/JPY 抓取 + 东财历史 K 线（锦标赛用）
+src/theme.js       夜行者时间窗 / 偷钱冷却（技能判定一律读 player.skill）
+src/mind.js        情绪读心的真假读数（按玩家稳定哈希）
+src/achievements.js 主题成就 16 条 + 全局成就 2 条 + 结晶/进化（阈值全走 config）
 src/skillText.js   主题技能文案（按 config 生成一级/二级描述，前端不写死）
-src/store.js       db 加载/保存/migrate
-public/app.js      前端全部逻辑（~3500 行单文件）
-public/index.html  单页结构（视图 div）
-public/styles.css  全部样式（主题变量 + 移动端媒体查询）
+src/chat.js        聊天大厅（消息 / 红包 / 未读已读游标 chatReadSeq）
+src/bank.js        丰川银行（升级存款 / 取钱救急）
+src/autoDca.js     自动定投（系统单，离线生效）
+src/perks.js       道具规则：咸鱼代下单（免手续费）/ 游资情报（读 hotMoney.nextIndustry）
+src/schedule.js    定时休市 / 循环作息（marketPhase 唯一入口）
+src/version.js     版本公告
+src/bars15.js      中长周期 K 线单独打包：5 分钟 300 根(25h) / 15 分钟 192 根(48h)
+src/emoji.js       表情互动（按等级解锁、每轮只留最后一个、按票隔离）
+src/delist.js      ST / 退市判定
+src/tour.js        锦标赛赛区（独立账本 / LMFX 价格 / 止盈止损 / 打工 / 夺冠冻结）
+src/build.js       构建号（前端靠它检测版本更新）
+public/app.js      主站前端全部逻辑（~7800 行单文件）
+public/index.html  主站单页结构（7 个导航标签 + 视图 div）
+public/styles.css  主站全部样式（主题变量 + 移动端媒体查询）
+public/tournament.html / tour.js / tour.css  赛区独立页面（不注入主站 app.js）
+public/vendor/     lightweight-charts v5（本地化）
 ```
 
 ## 已验证的关键数值（线上）
@@ -153,11 +151,22 @@ public/styles.css  全部样式（主题变量 + 移动端媒体查询）
 - `tickMs = 5000`，1 轮 5 秒；**开市 5 分钟 / 休市 2 分钟循环**（`marketCycleOpenMin/CloseMin`，5 分 K 线 = 一个交易日）；顶栏指数右侧有「距休市 / 距开市」倒计时，每秒本地刷新
 - `playerImpactRef = 1000000`、`impactRefFreeCap = 100亿`
 - `levelBaseAsset = 1000万`、`levelGrowth = 2`、`levelUpRatio = 0.6`
+- 挂单：每人同时挂单上限 `maxPendingOrders = 10`（2026-11 从 5 提升；止盈止损单 / 自动定投单不占名额，
+  老存档缺字段时 `orders.js` 也按 10 兜底）；挂单有效期 `orderTtlTicks = 2000` 轮
+- 股价上限：**已移除**（2026-11）。原「价格 ≤ `fair × maxPremium`（2.5 倍）」的硬顶和作用它的
+  `maxPremium` 配置键一起删掉（默认值 / 管理白名单 / 面板 / `migrate` 全清），价格可以长期站在价值线上方，
+  只靠均值回归慢慢拉回。`capCeiling`（单票市值上限）作为可选机制保留，但目前没有票在用
 - `marketTradesRate = 6`（每轮 6~12 笔虚假成交；笔数按流通市值分配 + 散户情绪定方向/放量）、`marketTradesWindow = 12`（追涨杀跌看 1 分钟动量）、`sentimentRollTicks = 720`
 - 市场资金（虚假成交 + 游资，2026-11）：虚假成交三档 1万~10万 / 10万~100万 / 100万~1000万（权重 70/24/6）；
   游资每笔 1000万~3000万、每 20~300 轮换一次板块；推动力 = 压力 × 0.002 × impactFactor，单轮封顶 0.8%
   → 实测一笔 1000 万 ≈ +0.3%~1%，一笔 3000 万 ≈ +1%~3%（大盘股取低值）
-- 指数：DENG（9 成分）、DENGS（市值最小的 7 只）
+- 指数：DENG（10 成分）、DENGS（市值最小的 7 只）
+- 聊天（2026-11）：已读游标存服务端 `player.chatReadSeq`，未读 = `db.chat.seq > chatReadSeq`；
+  payload 只下发布尔值 `me.chatUnread`（`publicPlayer` + `tickPayload` 两处）；进聊天页/拉到新消息会
+  `POST /api/chat/read`。手机端底部标签栏与桌面同一套 DOM（`.tab-dot`）
+- 锦标赛（2026-11）：赛区**独立 1 秒循环**（`TOUR_TICK_MS = 1000`，主站休市照跑），汇率 1 秒抓
+  （`fxBusy` 防重入，实际约 1.2~1.5 秒一报价）；杠杆 **20~1000**（10 的倍数）、零手续费、
+  保证金剩 5% 强平、每笔持仓最多 8 条止盈止损、夺冠线 2000 万、打工 <30 万才补到 30 万
 - 金价：基准 2400，每轮波动 0.12%；MB 财报 = 目标增速 + 金价涨跌 ×2.2 ±3%
 - MB 市值：1000 亿起步（10 亿股 × 100），目标是 3000 亿（capTargetRate 0.08/期）
 - KFC 市值：800 亿起步（8 亿股 × 100），目标是 1000 亿；每轮反向跟随 MCD 上一轮涨跌幅；周四 11~13 点随机一轮 +50%
