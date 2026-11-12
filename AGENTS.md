@@ -1,7 +1,7 @@
 # AGENTS.md · XDstock 维护须知
 
 > 完整文档见 [`docs/开发者文档.md`](docs/开发者文档.md)。本文件是速查版，**动手前至少读完「铁律」一节**。
-> 2026-11 已按当前实现同步（聊天未读红点 / 赛区 1 秒循环 + 止盈止损 / 海洋之泪 HYZL 物价驱动财报 / 66 套 2595 条测试）。
+> 2026-11 已按当前实现同步（聊天未读红点 / 赛区 1 秒循环 + 止盈止损 / 海洋之泪 HYZL 物价驱动财报 / 66 套 2596 条测试）。
 
 ## 项目是什么
 
@@ -18,7 +18,7 @@ node server.js                       # 本地起服务
 node --check src/api.js              # 语法检查（改完必跑）
 node --check public/app.js
 
-# 改到哪块跑哪套：完整清单（66 套 / 2595 条断言，含每套条数）见 docs/开发者文档.md §13
+# 改到哪块跑哪套：完整清单（66 套 / 2596 条断言，含每套条数）见 docs/开发者文档.md §13
 node tests/imports.mjs               # 跨模块「用了但没 import」（17 条，改 server/api 必跑）
 node tests/payload-wire.mjs          # 前端数据包白名单（125 条，加字段/改 payload 必跑）
 node tests/admin-panel.mjs           # 参数面板一致性（18 条，改设置面板必跑）
@@ -29,7 +29,7 @@ node tests/order-simple.mjs          # 简单模式市价单（53 条）
 node tests/market-money.mjs          # 虚假成交推动股价 / 游资 / 市场资金（112 条）
 node tests/gold-stock.mjs            # 金价驱动 + 退市清理（82 条）
 node tests/chat.mjs                  # 聊天大厅 / 拼手气 / 未读红点（64 条，改聊天必跑）
-node tests/dfitem-stock.mjs          # 海洋之泪 HYZL：物价驱动财报 / 平衡价锚定（64 条，改 HYZL 必跑）
+node tests/dfitem-stock.mjs          # 海洋之泪 HYZL：物价驱动财报 / 平衡价锚定（65 条，改 HYZL 必跑）
 node tests/tour.mjs                  # 锦标赛全套（193 条，改 src/tour.js 必跑）
 node tests/market-schedule.mjs       # 定时休市 / 循环作息（48 条）
 node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占比（看表格，不算一套）
@@ -174,7 +174,7 @@ public/vendor/     lightweight-charts v5（本地化）
 - KFC 市值：800 亿起步（8 亿股 × 100），目标是 1000 亿；每轮反向跟随 MCD 上一轮涨跌幅；周四 11~13 点随机一轮 +50%
 - **海洋之泪 HYZL（2026-11 上线）**：财报**完全**由三角洲物品「海洋之泪」的官方 `avgPrice` 决定，无随机项。
   上线价 100、平衡价锚定 **200**；`EPS = (200/18) × (avgPrice/dfRefPrice)^1`；`fair = 200 × (avgPrice/dfRefPrice)^1`；
-  `dfRefPrice = 31974562`；trait `volMult 0.5 / revMult 1.8 / sentStrength 0.001`；股本 1 亿股（市值 200 亿，进 DENGS）。
+  `dfRefPrice = 31974562`；trait `volMult 0.5 / revMult 1.8 / sentStrength 0.001`；股本 **20 亿股**（上市价 100 → 初始市值 2000 亿，自由流通市值仍列前七小、留在 DENGS）。
   数据源：官方 AMS `dfm/object.list`（免费无登录，约每小时刷新），`server.js` 每 10 分钟抓一次 → `db.dfItem`。
   模拟结论：财报单期 std ≈ 7.25%；价格中位 9 期收敛到 200±10%，30 期中位 ≈ 199，最大回撤中位 15.7%。
   改它必跑 `node tests/dfitem-stock.mjs`

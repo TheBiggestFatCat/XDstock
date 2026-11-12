@@ -39,7 +39,9 @@ log('=== 1 股票种子：HYZL 海洋之泪 ===');
   check('平衡价锚定 200', seed.dfAnchorFair === 200, String(seed.dfAnchorFair));
   check('参考物价 = 2026-11 官方均值', seed.dfRefPrice === 31974562, String(seed.dfRefPrice));
   check('物价弹性 power = 1', seed.dfPower === 1, String(seed.dfPower));
-  check('股本 1 亿股', seed.shares === 100000000, String(seed.shares));
+  check('股本 20 亿股（初始市值 2000 亿，股价不上调）', seed.shares === 2000000000, String(seed.shares));
+  check('100 元上市 → 初始市值 2000 亿', seed.shares * seed.initialPrice === 2e11,
+    String(seed.shares * seed.initialPrice));
   check('trait = dfitem', seed.trait.id === 'dfitem');
   check('trait 波动参数 0.5/1.8', seed.trait.volMult === 0.5 && seed.trait.revMult === 1.8);
   check('弱情绪 0.001（防价格飘离 200）', seed.trait.sentStrength === 0.001,

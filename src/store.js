@@ -308,6 +308,8 @@ export function migrate(d) {
       st.dfRefPrice = Number(seed.dfRefPrice) || 0;
       st.dfPower = Number.isFinite(Number(seed.dfPower)) ? Number(seed.dfPower) : 1;
       st.dfAnchorFair = Number(seed.dfAnchorFair) || 0;
+      // 股本也跟种子对齐（2026-11 重新上市：20 亿股 / 市值 2000 亿）
+      if (seed.trait?.id === 'dfitem' && Number(seed.shares) > 0) st.shares = Number(seed.shares);
     }
     if (!st.fundamentals) {
       st.fundamentals = st.trait?.id === 'dfitem'
