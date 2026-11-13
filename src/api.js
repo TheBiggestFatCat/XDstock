@@ -12,7 +12,7 @@ import {
 } from './chat.js';
 import { pushVersionPost, latestVersionPost, listVersionPosts, deleteVersionPost, updateVersionPost } from './version.js';
 import { nightInfoFor } from './theme.js';
-import { TIMEFRAMES, timeframeTicks } from './config.js';
+import { TIMEFRAMES, timeframeTicks, SERIES_1M_BARS } from './config.js';
 import { getBuild } from './build.js';
 import { marketPhase, phaseText, normalizeSchedule, ensureSchedules, scheduleWindow, cyclePhase, fmtMinute, parseMinute, MINUTE_MS } from './schedule.js';
 import { playerEquity, positionPnl } from './trading.js';
@@ -706,9 +706,12 @@ export async function handleApi(ctx) {
     if (!src) return json(res, 404, { error: '标的不存在' });
     // 时间轴：真实时间，但把停机空洞压掉（否则 K 线会出现大段空白）
     const axis = tickTimeAxis(db);
+    // 1m 固定 300 根（和 5m 图上限对齐）：series 保留量就是这个数，但首桶可能只走了一半，
+    // 这里统一裁掉最早那根「半个桶」，保证根数稳定是 300
+    const maxCandles = tf === '1m' ? SERIES_1M_BARS : 1200;
     const candles = candlesFromSeries(
       src.series, group, db.config.tickMs ?? 5000,
-      Math.max(0, db.tick - src.series.length), 1200, db.startedAt || 0,
+      Math.max(0, db.tick - src.series.length), maxCandles, db.startedAt || 0,
       (absTick) => timeFromAxis(axis, absTick, db),
       src.volSeries || null
     );
