@@ -1,8 +1,9 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
-import { getDb, saveDb, now, backupDb } from './src/store.js';
+import { getDb, saveDb, saveDbAuto, now, backupDb } from './src/store.js';
 import { getBuild } from './src/build.js';
 import { stepMarket, seedHistory, changesFor, noticeAlive, noticeLink, liveIndexWeights } from './src/engine.js';
 import { stockWire, positionWire } from './src/wire.js';
@@ -55,14 +56,39 @@ if (db.tick === 0 && Object.values(db.stocks).every((s) => s.series.length <= 1)
 const clients = new Set();
 let onlineIds = new Set();   // 本轮有 SSE 连接的玩家
 
+/** 发一条 SSE 数据（自动处理 gzip 流 + 刷新，保证事件及时到达） */
+function sseSend(c, text) {
+  if (c.gz) {
+    c.gz.write(text);
+    c.gz.flush(zlib.constants.Z_SYNC_FLUSH);
+  } else {
+    c.res.write(text);
+  }
+}
+/** 客户端发送队列积压字节数（慢客户端会越堆越大） */
+function sseBacklog(c) {
+  return Number(c.res.writableLength) || 0;
+}
+/** 彻底断开一个 SSE 客户端 */
+function sseDrop(c) {
+  try { if (c.gz) c.gz.end(); } catch { /* ignore */ }
+  try { c.res.end(); } catch { /* ignore */ }
+  clients.delete(c);
+}
+
 function broadcast(payload, targetPlayerId = null) {
   const data = `data: ${JSON.stringify(payload)}\n\n`;
   for (const c of clients) {
     if (targetPlayerId && c.playerId !== targetPlayerId) continue;
+    // 慢客户端：积压太多就跳过本轮（不然 Send-Q 会堆到几 MB，内存和带宽都被拖死）
+    if (sseBacklog(c) > SSE_SKIP_BYTES) {
+      if (sseBacklog(c) > SSE_DROP_BYTES) sseDrop(c);
+      continue;
+    }
     try {
-      c.res.write(data);
+      sseSend(c, data);
     } catch {
-      clients.delete(c);
+      sseDrop(c);
     }
   }
 }
@@ -81,7 +107,29 @@ const MIME = {
   '.webmanifest': 'application/manifest+json; charset=utf-8'
 };
 
-function serveStatic(res, filePath) {
+// ---------------- 传输压缩（2026-11：线上带宽只有 ~1Mbps，未压缩静态资源是卡顿主因） ----------------
+const COMPRESSIBLE_EXT = new Set(['.html', '.js', '.css', '.json', '.txt', '.svg', '.webmanifest', '.map']);
+const GZIP_MIN_JSON = 1024;
+const gzipStaticCache = new Map();   // filePath -> { tag, buf }
+const SSE_SKIP_BYTES = 512 * 1024;   // 慢客户端：积压超过 512KB 本轮跳过（防止 Send-Q 无限增长）
+const SSE_DROP_BYTES = 4 * 1024 * 1024; // 积压超过 4MB 直接断开重连
+
+/** 请求是否接受 gzip */
+function acceptsGzip(req) {
+  return /\bgzip\b/.test(String((req && req.headers && req.headers['accept-encoding']) || ''));
+}
+
+/** 静态文件 gzip（按 mtime+size 缓存，文件改了自动失效） */
+function gzipBuf(buf, key, tag) {
+  const hit = gzipStaticCache.get(key);
+  if (hit && hit.tag === tag) return hit.buf;
+  const z = zlib.gzipSync(buf, { level: 6 });
+  gzipStaticCache.set(key, { tag, buf: z });
+  if (gzipStaticCache.size > 80) gzipStaticCache.delete(gzipStaticCache.keys().next().value);
+  return z;
+}
+
+function serveStatic(req, res, filePath) {
   fs.stat(filePath, (err, st) => {
     if (err || !st.isFile()) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -90,10 +138,35 @@ function serveStatic(res, filePath) {
     }
     const ext = path.extname(filePath).toLowerCase();
     const noCache = ['.html', '.js', '.css', '.webmanifest'].includes(ext);
-    res.writeHead(200, {
+    const etag = `"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}"`;
+    const headers = {
       'Content-Type': MIME[ext] || 'application/octet-stream',
-      'Cache-Control': noCache ? 'no-cache, must-revalidate' : 'public, max-age=3600'
-    });
+      'Cache-Control': noCache ? 'no-cache, must-revalidate' : 'public, max-age=3600',
+      ETag: etag,
+      Vary: 'Accept-Encoding'
+    };
+    if (req && req.headers['if-none-match'] === etag) {
+      res.writeHead(304, headers);
+      res.end();
+      return;
+    }
+    if (COMPRESSIBLE_EXT.has(ext) && st.size >= GZIP_MIN_JSON && acceptsGzip(req)) {
+      fs.readFile(filePath, (e2, buf) => {
+        if (e2) {
+          res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+          res.end('500');
+          return;
+        }
+        const gz = gzipBuf(buf, filePath, etag);
+        headers['Content-Encoding'] = 'gzip';
+        headers['Content-Length'] = gz.length;
+        res.writeHead(200, headers);
+        res.end(gz);
+      });
+      return;
+    }
+    headers['Content-Length'] = st.size;
+    res.writeHead(200, headers);
     fs.createReadStream(filePath).pipe(res);
   });
 }
@@ -136,27 +209,44 @@ const server = http.createServer(async (req, res) => {
     const token = url.searchParams.get('token') || '';
     const d = getDb();
     const s = token ? d.sessions[token] : null;
-    res.writeHead(200, {
+    const useGzip = acceptsGzip(req);
+    const headers = {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no'
-    });
-    res.write(': connected\n\n');
-    const client = { res, playerId: s ? s.playerId : null, token };
+      'X-Accel-Buffering': 'no',
+      Vary: 'Accept-Encoding'
+    };
+    let gz = null;
+    if (useGzip) {
+      gz = zlib.createGzip({ level: 5 });
+      headers['Content-Encoding'] = 'gzip';
+      res.writeHead(200, headers);
+      gz.on('error', () => { try { res.end(); } catch { /* ignore */ } });
+      gz.pipe(res);
+    } else {
+      res.writeHead(200, headers);
+    }
+    const client = { res, playerId: s ? s.playerId : null, token, gz };
     clients.add(client);
+    sseSend(client, ': connected\n\n');
     // 心跳，防止代理断开
     const hb = setInterval(() => {
+      if (!clients.has(client)) {
+        clearInterval(hb);
+        return;
+      }
       try {
-        res.write(': hb\n\n');
+        sseSend(client, ': hb\n\n');
       } catch {
         clearInterval(hb);
-        clients.delete(client);
+        sseDrop(client);
       }
     }, 15000);
     req.on('close', () => {
       clearInterval(hb);
       clients.delete(client);
+      try { if (gz) gz.end(); } catch { /* ignore */ }
     });
     return;
   }
@@ -164,7 +254,7 @@ const server = http.createServer(async (req, res) => {
   // 头像
   if (pathname.startsWith('/avatars/')) {
     const name = path.basename(pathname);
-    return serveStatic(res, path.join(DATA_DIR, 'avatars', name));
+    return serveStatic(req, res, path.join(DATA_DIR, 'avatars', name));
   }
 
   // API
@@ -203,7 +293,7 @@ const server = http.createServer(async (req, res) => {
     res.end('403');
     return;
   }
-  return serveStatic(res, full);
+  return serveStatic(req, res, full);
 });
 
 // ---------------- 游戏主循环 ----------------
@@ -383,6 +473,11 @@ function loop() {
     d.marketWasClosed = true;
     const frozen = tickPayload(null);
     for (const c of clients) {
+      // 慢客户端：积压太多本轮不推，超过上限直接断开
+      if (sseBacklog(c) > SSE_SKIP_BYTES) {
+        if (sseBacklog(c) > SSE_DROP_BYTES) sseDrop(c);
+        continue;
+      }
       const personal = tickPayload(c.playerId);
       const payload = {
         ...frozen,
@@ -395,12 +490,12 @@ function loop() {
         closedUntil: phase.nextOpenAt
       };
       try {
-        c.res.write(`data: ${JSON.stringify(payload)}\n\n`);
+        sseSend(c, `data: ${JSON.stringify(payload)}\n\n`);
       } catch {
-        clients.delete(c);
+        sseDrop(c);
       }
     }
-    saveDb();
+    saveDbAuto();
     lastTickAt = now();
     return;
   }
@@ -666,11 +761,18 @@ function loop() {
   }
   const base = tickPayload(null);
   for (const c of clients) {
+    // 慢客户端（手机切后台 / 弱网）：不排队，跳过本轮；积压太多直接断开让它重连
+    const backlog = sseBacklog(c);
+    if (backlog > SSE_DROP_BYTES) {
+      sseDrop(c);
+      continue;
+    }
+    if (backlog > SSE_SKIP_BYTES) continue;
     // 被封禁的立即断开
     const cp = d.players[c.playerId];
     if (cp && cp.banned) {
       try {
-        c.res.write(`data: ${JSON.stringify({ banned: true, reason: cp.banReason || '' })}\n\n`);
+        sseSend(c, `data: ${JSON.stringify({ banned: true, reason: cp.banReason || '' })}\n\n`);
         c.res.end();
       } catch { /* ignore */ }
       clients.delete(c);
@@ -702,14 +804,14 @@ function loop() {
     const myOrders = orderEvents.filter((e) => e.playerId === c.playerId);
     if (myOrders.length) payload.orderEvents = myOrders;
     try {
-      c.res.write(`data: ${JSON.stringify(payload)}\n\n`);
+      sseSend(c, `data: ${JSON.stringify(payload)}\n\n`);
     } catch {
-      clients.delete(c);
+      sseDrop(c);
     }
   }
   // 没有 SSE 客户端时也保持 tick 推进（上面已 stepMarket）
 
-  saveDb();
+  saveDbAuto();
   lastTickAt = now();
 }
 
@@ -836,7 +938,8 @@ function startTourLoop() {
     const nowMs = Date.now();
     if (nowMs - tourSaveAt >= 5000) {
       tourSaveAt = nowMs;
-      saveDb();
+      // 和主行情共用自动存档节流（最多 ~8 秒落盘一次），避免每 5 秒同步写 5.9MB
+      saveDbAuto();
     }
   };
   tick();   // 启动先走一拍，别让页面空等 1 秒

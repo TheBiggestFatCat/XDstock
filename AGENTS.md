@@ -90,6 +90,7 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 | payload 把引擎参数抖出去 | F12 里能看到 `trait.lotteryChance` / `volMult` / `fair` / `sentimentStrength`，等于把价格模型交给玩家 | 所有下发字段必须过 `src/wire.js` 白名单；跑 `node tests/payload-wire.mjs` |
 | 聊天未读游标没给老玩家补基线 | 一上线所有老号全是红点（`chatReadSeq` 缺失按 0 算） | `store.js#migrate` 补基线 = 启动时 `db.chat.seq`；新号在 `/api/login` 建号处用 `chatSeqOf(db)` 初始化；跑 `tests/chat.mjs` |
 | 赛区跟着主站 tick 走 | 主站休市时赛区也停，1 秒面板刷新是白刷 | 赛区独立 1 秒循环 `startTourLoop` + 汇率 1 秒抓（`TOUR_TICK_MS`）；改赛区跑 `tests/tour.mjs` |
+| 线上「卡」但其实 CPU/内存都闲 | 公网带宽只有 ~0.1~0.6Mbps，静态资源/JSON/SSE 全未压缩；每轮还同步写 5.9MB db（~40ms 卡顿） | 静态+JSON+SSE 全 gzip（`server.js` / `src/api.js`），静态带 ETag/304；主循环用 `saveDbAuto()`（≥8s），SSE 慢客户端跳过；见 docs §6.16 |
 
 ## 新增配置参数（四处都要改）
 
@@ -110,9 +111,9 @@ node tests/sim-market-flow.mjs       # 仿真：市场资金推动力/方差占�
 ## 代码地图
 
 ```
-server.js          HTTP 入口、静态文件、SSE、tickPayload、主 tick / 赛区 1 秒 / 汇率 / 历史 K 线四个定时循环
+server.js          HTTP 入口、静态文件（gzip/ETag）、SSE（gzip/背压）、tickPayload、主 tick / 赛区 1 秒 / 汇率 / 历史 K 线四个定时循环
 src/config.js      全部可调参数默认值 + K 线周期定义（TIMEFRAMES）
-src/store.js       db 加载/保存/migrate/自动备份
+src/store.js       db 加载/保存/migrate/自动备份（saveDb 0.8s 防抖 + saveDbAuto 行情节流）
 src/stocks.js      股票种子（11 只 + DENG / DENGS）
 src/engine.js      stepMarket 主循环（顺序敏感：噪声→新闻→漂移→特质→回归→情绪→冲击）+ 指数/新闻/财报调度
 src/trading.js     开平仓、保证金、爆仓、冲击、成交量、止盈止损触发
@@ -189,6 +190,10 @@ public/vendor/     lightweight-charts v5（本地化）
   `series` 保留量 = `max(historyTicks, 300 × 当前 1m tick 数)`（`seriesRetentionTicks()`）：
   **1m 固定 300 根、和 5m 一样多**，覆盖 5 小时（5000ms→3600 tick，2000ms→9000 tick）。
   改它必跑 `node tests/candles-tickms.mjs`
+- **线上性能（2026-11）**：公网带宽实测 ~0.1~0.6Mbps；静态/JSON/SSE 全 gzip
+  （`server.js#serveStatic` + ETag/304、`src/api.js#json`、`/api/stream` 流式 gzip，浏览器自动解压）；
+  主循环/锦标赛只用 `src/store.js#saveDbAuto`（≥8s 落盘），玩家操作仍 `saveDb()`（0.8s）；
+  SSE 背压 >512KB 跳过本轮、>4MB 断开。改传输/存档必跑 full suite。
 - 财报基线：零期望随机偏移（对数空间零均值），σ = 5% × √(1000亿 / 市值)，夹在 1%~10%
 
 ## 提交信息

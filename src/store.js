@@ -672,6 +672,12 @@ export function getDb() {
 }
 
 let saveTimer = null;
+let autoTimer = null;
+let lastFlushAt = 0;
+
+/**
+ * 普通存档（玩家操作 / 管理操作）：800ms 防抖，最多丢 0.8 秒。
+ */
 export function saveDb(immediate = false) {
   dirty = true;
   if (immediate) {
@@ -685,13 +691,37 @@ export function saveDb(immediate = false) {
   }, 800);
 }
 
+/**
+ * 行情自动存档（主循环每轮调用）：最多 ~8 秒落盘一次。
+ * 每 2~3 秒把 5.9MB 的 db 序列化 + 同步写盘会稳定卡 40ms，
+ * 这里只降低「纯行情变化」的落盘频率；玩家操作仍走 saveDb()（0.8 秒）。
+ */
+export function saveDbAuto(minGapMs = 8000) {
+  dirty = true;
+  if (saveTimer || autoTimer) return;
+  const wait = Math.max(1000, Number(minGapMs) - (Date.now() - lastFlushAt));
+  autoTimer = setTimeout(() => {
+    autoTimer = null;
+    flush();
+  }, wait);
+}
+
 function flush() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  if (autoTimer) {
+    clearTimeout(autoTimer);
+    autoTimer = null;
+  }
   if (!dirty || !db) return;
   dirty = false;
   try {
     const tmp = DB_FILE + '.tmp';
     fs.writeFileSync(tmp, JSON.stringify(db));
     fs.renameSync(tmp, DB_FILE);
+    lastFlushAt = Date.now();
   } catch (e) {
     console.error('[store] 保存失败:', e.message);
   }

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { getDb, saveDb, uid, now, AVATAR_DIR } from './store.js';
 import { candlesFromSeries, changesFor, timeFromAxis, tickTimeAxis, pushNotice, noticeAlive, noticeLink, liveIndexWeights } from './engine.js';
 import { stockFullWire, configWire, positionWire } from './wire.js';
@@ -126,12 +127,27 @@ function clientIp(ctx) {
   return (ctx.req?.socket?.remoteAddress || 'unknown').replace(/^::ffff:/, '');
 }
 
+// JSON 响应统一走这里：线上带宽小，超过 1KB 的响应自动 gzip（浏览器 fetch 会自动解压）
 function json(res, code, obj) {
-  const body = JSON.stringify(obj);
-  res.writeHead(code, {
+  const raw = JSON.stringify(obj);
+  const headers = {
     'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store'
-  });
+    'Cache-Control': 'no-store',
+    Vary: 'Accept-Encoding'
+  };
+  let body = raw;
+  const req = res.req;
+  const ae = String((req && req.headers && req.headers['accept-encoding']) || '');
+  if (raw.length >= 1024 && /\bgzip\b/.test(ae)) {
+    try {
+      body = zlib.gzipSync(raw, { level: 4 });
+      headers['Content-Encoding'] = 'gzip';
+    } catch {
+      body = raw;
+    }
+  }
+  headers['Content-Length'] = Buffer.byteLength(body);
+  res.writeHead(code, headers);
   res.end(body);
 }
 
