@@ -408,6 +408,19 @@ export function timeframeTicks(tickMs) {
   return out;
 }
 
+/** 1 分钟 K 线至少要保留多少根：和 5 分钟图的上限（300 根）对齐 */
+export const SERIES_1M_BARS = 300;
+
+/**
+ * series 至少保留多少个 tick，才能凑出 300 根 1 分钟 K 线。
+ * tickMs=5000 → 300×12 = 3600；tickMs=2000 → 300×30 = 9000。
+ * 引擎的 series / volSeries / tickTimes 上限和 migrate 的补齐量都用它，
+ * 保证任何 tickMs 下 1m 图和 5m 图根数一样多。
+ */
+export function seriesRetentionTicks(tickMs) {
+  return SERIES_1M_BARS * (timeframeTicks(tickMs)['1m'] || 12);
+}
+
 /**
  * 「全市场波动倍率」的规范化读取（总开关，2026-11）。
  * 缺省 / 脏值按 1；合法区间 0.01~3（0.01 近似静音，3 = 三倍波动）。

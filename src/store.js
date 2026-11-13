@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { ensureChat, chatSeqOf } from './chat.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_CONFIG } from './config.js';
+import { DEFAULT_CONFIG, seriesRetentionTicks } from './config.js';
 import { STOCK_SEED, STOCK_CODES, INDEX_BASE, INDEX_STOCK, SMALL_INDEX_STOCK } from './stocks.js';
 import { ensureGold } from './gold.js';
 import { createTour, ensureTour } from './tour.js';
@@ -157,6 +157,9 @@ export function migrate(d) {
   const merged = { ...base, ...d };
   merged.config = { ...base.config, ...(d.config || {}) };
   merged.stocks = { ...base.stocks, ...(d.stocks || {}) };
+  // series 保留量：至少够画 300 根 1 分钟 K 线（和 5m 图上限一致）
+  const klineRetention = Math.max(600, Number(merged.config.historyTicks) || 3600,
+    seriesRetentionTicks(merged.config.tickMs));
   // 补齐指数标的
   if (!merged.stocks[INDEX_STOCK.code]) {
     merged.stocks[INDEX_STOCK.code] = {
@@ -171,7 +174,7 @@ export function migrate(d) {
       fair: merged.index?.value || INDEX_BASE,
       status: 'normal',
       statusUntil: 0,
-      series: (merged.index?.series || [INDEX_BASE]).slice(-3600),
+      series: (merged.index?.series || [INDEX_BASE]).slice(-klineRetention),
       streak: 0,
       brokerMid: DEFAULT_CONFIG.brokerMidpoint,
       isIndex: true
@@ -195,7 +198,7 @@ export function migrate(d) {
       fair: merged.smallIndex?.value || INDEX_BASE,
       status: 'normal',
       statusUntil: 0,
-      series: (merged.smallIndex?.series || [INDEX_BASE]).slice(-3600),
+      series: (merged.smallIndex?.series || [INDEX_BASE]).slice(-klineRetention),
       streak: 0,
       isIndex: true
     };
@@ -267,14 +270,17 @@ export function migrate(d) {
   // tickMs 一变，老存档的 series / bars 是按旧节奏攒的：时间轴会混两种 cadence，
   // 5m/15m 会画成「2 分钟 / 6 分钟」一根。这里统一重置成同一节奏的合成历史，
   // 只影响 K 线外观（不动持仓、资金、财报、订单）。
+  // 另外 series 太短（画不出 300 根 1 分钟 K 线）时也补齐，保证 1m 和 5m 根数一样多。
   const tickMsNow = Math.max(1000, Number(merged.config.tickMs) || 5000);
   const b5Ticks = bar5TicksFor(tickMsNow);
   const b15Ticks = bar15TicksFor(tickMsNow);
   const prevTickMs = Math.max(0, Number(merged.tickMsSeen) || 0);
   const tickMsChanged = prevTickMs !== tickMsNow;
   merged.tickMsSeen = tickMsNow;
-  if (tickMsChanged) {
-    const n = Math.max(60, Math.min(3600, Math.floor(Number(merged.config.historyTicks) || 3600)));
+  const seriesShort = Object.values(merged.stocks).some(
+    (st) => !Array.isArray(st.series) || st.series.length < klineRetention);
+  if (tickMsChanged || seriesShort) {
+    const n = Math.max(60, Math.min(30000, Math.floor(klineRetention)));
     const sig = Math.max(0.0005, Number(merged.config.baseVolatility) || 0.0022);
     // 从现价往回随机走一段，尾巴接回现价（和 seedBars 同一套观感）
     const synth = (price) => {
@@ -305,7 +311,7 @@ export function migrate(d) {
     merged.tickTimes = Array.from({ length: n }, (_, i) => nowMs - (n - 1 - i) * tickMsNow);
     merged.tickTimesStart = Math.max(0, (Number(merged.tick) || 0) - n + 1);
     merged.startedAt = nowMs - (Number(merged.tick) || 0) * tickMsNow;
-    console.log(`  tickMs ${prevTickMs || '?'} → ${tickMsNow}ms：K 线历史按新节奏重新铺 ${n} 根`);
+    console.log(`  ${tickMsChanged ? 'tickMs 变化' : '1 分钟 K 线不足 300 根'}：K 线历史按新节奏重铺 ${n} 根（1m = 300 根，5m = 300 根）`);
   }
   for (const st of Object.values(merged.stocks)) {
     st.bars5Ticks = b5Ticks;
@@ -473,7 +479,7 @@ export function migrate(d) {
   const idxStock = merged.stocks[INDEX_STOCK.code];
   const idxSeries = merged.index?.series || [];
   if (idxSeries.length > (idxStock.series?.length || 0)) {
-    idxStock.series = idxSeries.slice(-(merged.config?.historyTicks || 3600));
+    idxStock.series = idxSeries.slice(-klineRetention);
   }
   idxStock.price = merged.index?.value ?? idxStock.price;
 
@@ -648,7 +654,7 @@ export function migrate(d) {
   // 老存档没有逐轮时间表：按现在的时间回填一段，保证坐标轴末端就是「现在」
   if (!Array.isArray(merged.tickTimes) || !merged.tickTimes.length) {
     const tms = merged.config.tickMs || 5000;
-    const cap = Math.max(600, Number(merged.config.historyTicks ?? 3600) + 600);
+    const cap = Math.max(600, klineRetention + 600);
     const n = Math.max(1, Math.min(cap, merged.tick + 1));
     const nowMs = Date.now();
     merged.tickTimes = Array.from({ length: n }, (_, i) => nowMs - (n - 1 - i) * tms);

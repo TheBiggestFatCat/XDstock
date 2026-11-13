@@ -6265,7 +6265,7 @@ async function loadAdmin() {
           ['baseVolatility', '基础波动率', '每轮基础随机波动，0.0022 ≈ ±0.22%'],
           ['meanReversion', '均值回归强度', '价格偏离价值线时每轮拉回多少，0.00017 = 极慢'],
           ['indexRebalanceTicks', '指数调仓间隔(轮)', '指数多久重算一次成分股权重，2160 轮 = 3 小时'],
-          ['historyTicks', 'K 线历史长度(轮)', '首屏给前端的 K 线根数，3600 = 5 小时']
+          ['historyTicks', 'K 线历史下限(tick)', 'series 自动保留至少 300 根 1 分钟 K 线所需的 tick（tickMs=2000 时 9000）；填更大只会保留更久历史']
         ]
       },
       {

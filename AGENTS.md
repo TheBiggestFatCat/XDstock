@@ -1,7 +1,7 @@
 # AGENTS.md · XDstock 维护须知
 
 > 完整文档见 [`docs/开发者文档.md`](docs/开发者文档.md)。本文件是速查版，**动手前至少读完「铁律」一节**。
-> 2026-11 已按当前实现同步（聊天未读红点 / 赛区 1 秒循环 + 止盈止损 / 海洋之泪 HYZL 物价驱动财报 / 全市场波动总开关 / K 线粒度跟随 tickMs / 68 套 2649 条测试）。
+> 2026-11 已按当前实现同步（聊天未读红点 / 赛区 1 秒循环 + 止盈止损 / 海洋之泪 HYZL 物价驱动财报 / 全市场波动总开关 / K 线粒度跟随 tickMs / 68 套 2657 条测试）。
 
 ## 项目是什么
 
@@ -18,7 +18,7 @@ node server.js                       # 本地起服务
 node --check src/api.js              # 语法检查（改完必跑）
 node --check public/app.js
 
-# 改到哪块跑哪套：完整清单（68 套 / 2649 条断言，含每套条数）见 docs/开发者文档.md §13
+# 改到哪块跑哪套：完整清单（68 套 / 2657 条断言，含每套条数）见 docs/开发者文档.md §13
 node tests/imports.mjs               # 跨模块「用了但没 import」（17 条，改 server/api 必跑）
 node tests/payload-wire.mjs          # 前端数据包白名单（125 条，加字段/改 payload 必跑）
 node tests/admin-panel.mjs           # 参数面板一致性（18 条，改设置面板必跑）
@@ -29,7 +29,7 @@ node tests/order-simple.mjs          # 简单模式市价单（53 条）
 node tests/market-money.mjs          # 虚假成交推动股价 / 游资 / 市场资金（112 条）
 node tests/gold-stock.mjs            # 金价驱动 + 退市清理（82 条）
 node tests/volatility-scale.mjs      # 全市场波动总开关：各通道按倍率缩放（16 条，改波动/情绪/冲击必跑）
-node tests/candles-tickms.mjs        # K 线粒度跟随 tickMs：1m/5m/15m 时间间隔 + 重分桶（37 条，改 K 线/tickMs 必跑）
+node tests/candles-tickms.mjs        # K 线粒度跟随 tickMs：1m/5m/15m 时间间隔 + 1m 固定 300 根 + 重分桶（45 条，改 K 线/tickMs 必跑）
 node tests/chat.mjs                  # 聊天大厅 / 拼手气 / 未读红点（64 条，改聊天必跑）
 node tests/dfitem-stock.mjs          # 海洋之泪 HYZL：物价驱动财报 / 平衡价锚定（65 条，改 HYZL 必跑）
 node tests/tour.mjs                  # 锦标赛全套（193 条，改 src/tour.js 必跑）
@@ -186,6 +186,8 @@ public/vendor/     lightweight-charts v5（本地化）
 - **K 线粒度跟随 tickMs（2026-11 修）**：1m/5m/15m 的实际聚合数走
   `timeframeTicks(tickMs)`（2000ms → 30/150/450）/ `bar5TicksFor` / `bar15TicksFor` / 前端 `tfTicks(tf)`；
   改 tickMs 后 `migrate` 会按新节奏重铺 K 线历史（运行中改则由 `stepMarket` 先重分桶兜底），图表时间轴仍是真实分钟。
+  `series` 保留量 = `max(historyTicks, 300 × 当前 1m tick 数)`（`seriesRetentionTicks()`）：
+  **1m 固定 300 根、和 5m 一样多**，覆盖 5 小时（5000ms→3600 tick，2000ms→9000 tick）。
   改它必跑 `node tests/candles-tickms.mjs`
 - 财报基线：零期望随机偏移（对数空间零均值），σ = 5% × √(1000亿 / 市值)，夹在 1%~10%
 

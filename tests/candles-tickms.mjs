@@ -1,6 +1,6 @@
 // K 线粒度跟随 tickMs：改 tickMs 后 1m / 5m / 15m 都必须仍是真实分钟
 //   node tests/candles-tickms.mjs
-import { TIMEFRAMES, timeframeTicks } from '../src/config.js';
+import { TIMEFRAMES, timeframeTicks, SERIES_1M_BARS, seriesRetentionTicks } from '../src/config.js';
 import {
   BAR5_TICKS, BAR15_TICKS, bar5TicksFor, bar15TicksFor, rebucketBars,
   bars5Candles, bars15Candles, seedBars5
@@ -39,6 +39,10 @@ log('=== 1 周期换算：tickMs 变了，每个周期要的 tick 数跟着变 =
     timeframeTicks(0)['1m'] === 12 && timeframeTicks(NaN)['1m'] === 12);
   check('TIMEFRAMES 仍是基准值（不直接被改）',
     TIMEFRAMES['1m'] === 12 && TIMEFRAMES['5m'] === 60 && TIMEFRAMES['15m'] === 180);
+  check('SERIES_1M_BARS = 300（和 5m 根数一致）', SERIES_1M_BARS === 300, String(SERIES_1M_BARS));
+  check('series 保留量：5000ms → 3600 tick', seriesRetentionTicks(5000) === 3600, String(seriesRetentionTicks(5000)));
+  check('series 保留量：2000ms → 9000 tick', seriesRetentionTicks(2000) === 9000, String(seriesRetentionTicks(2000)));
+  check('series 保留量：3000ms → 6000 tick', seriesRetentionTicks(3000) === 6000, String(seriesRetentionTicks(3000)));
 }
 
 // ---------------------------------------------------------------- 2
@@ -65,6 +69,10 @@ log('=== 3 1m 聚合：group=30 + tickMs=2000 时一根正好 60 秒 ===');
   const c5 = candlesFromSeries(series5, timeframeTicks(2000)['5m'], 2000, 0);
   check('300 tick → 2 根 5m', c5.length === 2, String(c5.length));
   check('5m 每根间隔 300 秒', c5[1].time - c5[0].time === 300, String(c5[1].time - c5[0].time));
+  const big = Array.from({ length: seriesRetentionTicks(2000) }, (_, i) => 100 + i * 0.001);
+  const c1m300 = candlesFromSeries(big, timeframeTicks(2000)['1m'], 2000, 0);
+  check('9000 tick → 300 根 1m（和 5m 一样多）', c1m300.length === 300, String(c1m300.length));
+  check('1m 仍是 60 秒一根', c1m300[1].time - c1m300[0].time === 60, String(c1m300[1].time - c1m300[0].time));
 }
 
 // ---------------------------------------------------------------- 4
@@ -124,7 +132,8 @@ log('=== 6 migrate：tickMs 变了会按新节奏重铺 K 线历史 ===');
   check('bars5Ticks = 150（2000ms）', Number(st2.bars5Ticks) === 150, String(st2.bars5Ticks));
   check('bars15Ticks = 450（2000ms）', Number(st2.bars15Ticks) === 450, String(st2.bars15Ticks));
   check('bars5 按新节奏重铺满 300 根', st2.bars5.length === 300, String(st2.bars5.length));
-  check('series 按新节奏重铺（historyTicks=3600）', st2.series.length === 3600, String(st2.series.length));
+  check('series 重铺到 9000 tick（300 根 1m）', st2.series.length === 9000, String(st2.series.length));
+  check('tickTimes 也补齐到 9000', db.tickTimes.length === 9000, String(db.tickTimes.length));
   check('tickTimes 相邻间隔 = tickMs（2000）',
     db.tickTimes.length > 10 && db.tickTimes[db.tickTimes.length - 1] - db.tickTimes[db.tickTimes.length - 2] === 2000,
     String(db.tickTimes[db.tickTimes.length - 1] - db.tickTimes[db.tickTimes.length - 2]));
@@ -139,13 +148,15 @@ log('=== 6 migrate：tickMs 变了会按新节奏重铺 K 线历史 ===');
 log('');
 log('=== 7 引擎：tickMs=2000 时 push 的桶号按 150 / 450 tick ===');
 {
-  const db = quiet(() => migrate(createDb()));
+  let db = quiet(() => migrate(createDb()));
   Object.assign(db.config, {
     tickMs: 2000, baseVolatility: 0, meanReversion: 0, eventChance: 0,
     sentimentEnabled: 0, marketTradesEnabled: 0, hotMoneyEnabled: 0,
     playerImpactEnabled: 0, marketImpactEnabled: 0, majorNewsEnabled: 0,
     morningRallyEnabled: 0, marketCycleEnabled: 0
   });
+  // 模拟「改 tickMs 后重启」：migrate 按新节奏重铺 9000 tick
+  db = quiet(() => migrate(db));
   db.events = [];
   for (const s of Object.values(db.stocks)) {
     s.nextReportTick = 1e12;
@@ -162,8 +173,9 @@ log('=== 7 引擎：tickMs=2000 时 push 的桶号按 150 / 450 tick ===');
   const last15 = st.bars15[st.bars15.length - 1][0];
   check('bars15 最后一根桶号 = floor((tick-1)/450)',
     last15 === Math.floor((db.tick - 1) / 450), `${last15} vs ${Math.floor((db.tick - 1) / 450)}`);
-  check('bars5 数量按 60→150 合并（300 根种子 → 约 120 根）',
-    st.bars5.length >= 100 && st.bars5.length <= 140, String(st.bars5.length));
+  check('引擎运行后 1m series 保持 9000（300 根）', st.series.length === 9000, String(st.series.length));
+  check('bars5 保持 300 根种子 + 新桶',
+    st.bars5.length >= 300 && st.bars5.length <= 305, String(st.bars5.length));
 }
 
 // ---------------------------------------------------------------- 8

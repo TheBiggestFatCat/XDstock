@@ -10,7 +10,7 @@ import { kfcRallyStep, kfcRallyInfo } from './kfc.js';
 
 import { stepGold, goldReturnSinceReport, ensureGold } from './gold.js';
 import { dfItemFair } from './dfItem.js';
-import { volatilityScaleOf } from './config.js';
+import { volatilityScaleOf, seriesRetentionTicks } from './config.js';
 import { now } from './store.js';
 
 /** 公告最多留几条（超出就丢最老的） */
@@ -801,6 +801,8 @@ export function stepMarket(db) {
   // K 线分桶必须跟着 tickMs 走（tickMs 改了以后 5m/15m 一根的 tick 数要同步变）
   const b5Ticks = bar5TicksFor(cfg.tickMs);
   const b15Ticks = bar15TicksFor(cfg.tickMs);
+  // series / volSeries / tickTimes 的保留量：至少够画 300 根 1 分钟 K 线（和 5m 图一样多）
+  const seriesCap = Math.max(600, Number(cfg.historyTicks) || 3600, seriesRetentionTicks(cfg.tickMs));
 
   // 0. 重大利好 / 重大利空（概率只有普通的 1/100，先掷）
   spawnMajorNews(db);
@@ -890,7 +892,7 @@ export function stepMarket(db) {
     stepStock(st, cfg, db.events, st.trait?.id === 'broker' ? brokerDrift : 0, db.fx, db);
 
     st.series.push(Number(st.price.toFixed(4)));
-    const cap = cfg.historyTicks ?? 3600;
+    const cap = seriesCap;
     if (st.series.length > cap) st.series.splice(0, st.series.length - cap);
     // 15 分钟 K 线单独攒一份（48 小时）
     pushBar15(st.bars15, Math.floor(db.tick / b15Ticks), st.price);
@@ -913,7 +915,7 @@ export function stepMarket(db) {
     tickVol.set(st.code, vol);
     if (!Array.isArray(st.volSeries)) st.volSeries = [];
     st.volSeries.push(vol);
-    const vcap = cfg.historyTicks ?? 3600;
+    const vcap = seriesCap;
     if (st.volSeries.length > vcap) st.volSeries.splice(0, st.volSeries.length - vcap);
     // 15 分钟 / 5 分钟那根：价格在上面已经 push 过，这里只补成交量
     pushBar15(st.bars15, Math.floor(db.tick / b15Ticks), st.price, vol);
@@ -925,7 +927,7 @@ export function stepMarket(db) {
     const vol = indexTickVolume(db, key, tickVol);
     if (!Array.isArray(st.volSeries)) st.volSeries = [];
     st.volSeries.push(vol);
-    const vcap = cfg.historyTicks ?? 3600;
+    const vcap = seriesCap;
     if (st.volSeries.length > vcap) st.volSeries.splice(0, st.volSeries.length - vcap);
     pushBar15(st.bars15, Math.floor(db.tick / b15Ticks), st.price, vol);
     pushBar5(st.bars5, Math.floor(db.tick / b5Ticks), st.price, vol);
@@ -1006,8 +1008,8 @@ export function stepMarket(db) {
         idxStock.price = db.index.value;
         if (!Array.isArray(idxStock.series)) idxStock.series = [];
         idxStock.series.push(db.index.value);
-        if (idxStock.series.length > 3600) {
-          idxStock.series.splice(0, idxStock.series.length - 3600);
+        if (idxStock.series.length > seriesCap) {
+          idxStock.series.splice(0, idxStock.series.length - seriesCap);
         }
         pushBar15(idxStock.bars15, Math.floor(db.tick / b15Ticks), db.index.value);
   pushBar5(idxStock.bars5, Math.floor(db.tick / b5Ticks), db.index.value);
@@ -1065,18 +1067,18 @@ export function stepMarket(db) {
       sidxStock.price = sidx.value;
       if (!Array.isArray(sidxStock.series)) sidxStock.series = [];
       sidxStock.series.push(sidx.value);
-      if (sidxStock.series.length > 3600) {
-        sidxStock.series.splice(0, sidxStock.series.length - 3600);
+      if (sidxStock.series.length > seriesCap) {
+        sidxStock.series.splice(0, sidxStock.series.length - seriesCap);
       }
       pushBar15(sidxStock.bars15, Math.floor(db.tick / b15Ticks), sidx.value);
   pushBar5(sidxStock.bars5, Math.floor(db.tick / b5Ticks), sidx.value);
     }
     sidx.series.push(sidx.value);
-    if (sidx.series.length > 3600) sidx.series.splice(0, sidx.series.length - 3600);
+    if (sidx.series.length > seriesCap) sidx.series.splice(0, sidx.series.length - seriesCap);
 
   }
   db.index.series.push(db.index.value);
-  const cap = cfg.historyTicks ?? 3600;
+  const cap = seriesCap;
   if (db.index.series.length > cap) {
     db.index.series.splice(0, db.index.series.length - cap);
   }
@@ -1102,7 +1104,7 @@ export function stepMarket(db) {
     db.tickTimesStart = db.tick;
   }
   db.tickTimes.push(db._simNow ?? Date.now());
-  const timeCap = Math.max(600, Number(cfg.historyTicks ?? 3600) + 600);
+  const timeCap = Math.max(600, seriesCap + 600);
   if (db.tickTimes.length > timeCap) {
     const drop = db.tickTimes.length - timeCap;
     db.tickTimes.splice(0, drop);
