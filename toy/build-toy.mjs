@@ -105,6 +105,7 @@ css += `
 .theme-card[data-theme-code="probe"] { display: none !important; }
 .steal-btn, .spy-btn { display: none !important; }
 #rankTable th:last-child, #rankTable td:last-child { display: none !important; }
+#rankTable th:nth-last-child(2), #rankTable td:nth-last-child(2) { display: none !important; }
 #toyRankNote { color: var(--ink-3); font-size: 12px; }
 `;
 fs.writeFileSync(path.join(OUT, 'styles.css'), css);
