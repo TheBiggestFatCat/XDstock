@@ -68,9 +68,21 @@ const MAP = JSON.stringify({
 });
 let html = fs.readFileSync(path.join(OUT, 'index.html'), 'utf8');
 html = html.replace(/href="\//g, 'href="./').replace(/src="\//g, 'src="./');
+// 单机版：去掉聊天入口（排行榜是唯一保留的联机功能）
+const CHAT_TAB = '<button class="tab" data-view="chat">聊天<span class="tab-dot" id="chatDot" aria-hidden="true"></span></button>';
+if (!html.includes(CHAT_TAB)) throw new Error('index.html 里没找到聊天标签');
+html = html.replace(CHAT_TAB, '');
+// Toy JS SDK（排行榜）：由 Toy 容器注入 window.toy
 html = html.replace(/<script type="module" src="\.\/app\.js"><\/script>/,
-  `<script type="importmap">${MAP}</script>\n  <script type="module" src="./toy-demo.js"></script>`);
+  `<script src="//s1.hdslb.com/bfs/seed/toy/app/sdk/toy-sdk.js"></script>\n  <script type="importmap">${MAP}</script>\n  <script type="module" src="./toy-demo.js"></script>`);
 if (!html.includes('toy-demo.js')) throw new Error('index.html 注入入口失败');
+// 排行榜数据源说明（Toy 全服榜 / 本地兜底）
+html = html.replace('<div id="rankTable" class="table-wrap"></div>',
+  '<div id="rankTable" class="table-wrap"></div>\n    <div id="toyRankNote" class="field-hint" style="padding:8px 14px 2px">Toy 排行榜</div>');
+// 单机版标题 + 登录页说明
+html = html.replace('<title>小灯证券 · 模拟炒股</title>', '<title>小灯证券 · 模拟炒股（单机版）</title>');
+html = html.replace('<p class="login-hint">',
+  '<p class="login-hint">单机试玩版：存档只保存在本机浏览器，排行榜为 Toy 全服榜</p>\n        <p class="login-hint">');
 fs.writeFileSync(path.join(OUT, 'index.html'), html);
 
 // 试玩版开户资金和 glue.js#DEMO_CFG.startingCash 保持一致
@@ -84,6 +96,17 @@ fs.writeFileSync(path.join(OUT, 'index.html'), html);
 // ---------- 5. 补丁：styles.css / manifest ----------
 let css = fs.readFileSync(path.join(OUT, 'styles.css'), 'utf8');
 css = css.replace(/url\(\s*['"]?\//g, 'url(./').replace(/url\(\s*['"]?\.\/\//g, 'url(./');
+// 纯单机版 UI：聊天 / 偷钱 / 调查 / 假新闻 / 保镖 / 表情互动全部隐藏
+css += `
+/* ===== Toy 单机版：联机功能只保留排行榜 ===== */
+#view-chat, #emoBtn { display: none !important; }
+.shop-card[data-shop-item="fakeNews"],
+.shop-card[data-shop-item="bodyguard"],
+.theme-card[data-theme-code="probe"] { display: none !important; }
+.steal-btn, .spy-btn { display: none !important; }
+#rankTable th:last-child, #rankTable td:last-child { display: none !important; }
+#toyRankNote { color: var(--ink-3); font-size: 12px; }
+`;
 fs.writeFileSync(path.join(OUT, 'styles.css'), css);
 
 let manifest = fs.readFileSync(path.join(OUT, 'manifest.webmanifest'), 'utf8');

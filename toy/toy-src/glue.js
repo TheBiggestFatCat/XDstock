@@ -80,39 +80,6 @@ function applyDemoConfig(db) {
   return changed;
 }
 
-function addBots(db) {
-  if (db.__toyBots) return false;
-  const bots = [
-    ['量化小狗', 3800000], ['韭菜盒子', 1250000], ['长线选手', 860000],
-    ['抄底大师', 2100000], ['追涨杀跌', 430000], ['稳如老狗', 5300000]
-  ];
-  let i = 0;
-  for (const [nickname, cash] of bots) {
-    const id = 'toybot' + (++i);
-    if (!db.players[id]) {
-      db.players[id] = {
-        id,
-        nickname,
-        cash,
-        workBank: 0,
-        workEarned: 0,
-        bank: 0,
-        bankDeposited: 0,
-        level: 1 + (i % 5),
-        theme: 'default',
-        skill: 'default',
-        theme: 'default',
-        positions: {},
-        orders: [],
-        achv: {},
-        createdAt: Date.now() - i * 86400000
-      };
-    }
-  }
-  db.__toyBots = 1;
-  return true;
-}
-
 const db = getDb();
 db.newsPool = NEWS_POOL;
 db.majorPool = MAJOR_NEWS_POOL;
@@ -122,7 +89,6 @@ if (!db.dfItem || !(Number(db.dfItem.price) > 0)) {
   db.dfItem = { price: 31974562, chg: 0, at: Date.now(), stale: false };
 }
 let bootChanged = applyDemoConfig(db);
-bootChanged = addBots(db) || bootChanged;
 const coldStart = db.tick === 0 && Object.values(db.stocks).every(
   (st) => !Array.isArray(st.series) || st.series.length <= 1);
 if (coldStart) {
@@ -131,7 +97,143 @@ if (coldStart) {
   bootChanged = true;
 }
 if (db.__toyDemo !== DEMO_VERSION) { db.__toyDemo = DEMO_VERSION; bootChanged = true; }
+// 老试玩存档里可能有上一版塞进去的本地 bot，纯单机版清掉
+for (const id of Object.keys(db.players || {})) {
+  if (/^toybot/.test(id)) { delete db.players[id]; bootChanged = true; }
+}
 if (bootChanged) saveDb(true);
+
+// ---------- Toy 容器：全服排行榜（唯一保留的联机能力） ----------
+// Toy JS SDK 由 index.html 里的 //s1.hdslb.com/.../toy-sdk.js 注入，暴露 window.toy。
+// 注意：/toy/preview/ 预览页禁止写操作，submitScore 会 reject，这里静默忽略。
+const TOY_BOARD = 1;               // Toy 排行榜板位 1~5，默认 1
+const TOY_SCORE_MAX = 16777215;    // SDK 限制 score ∈ [-2^24, 2^24-1]
+let toySdkState = null;            // null=未探测，false=不可用，object=SDK
+let toyRankCache = { at: 0, rows: [] };
+let toyScoreLastAt = 0;
+
+function inToyPreview() {
+  return /\/toy\/preview\//.test(location.pathname);
+}
+function inToyContainerPath() {
+  return /\/toy\//.test(location.pathname);
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function withTimeout(promise, ms, fallback) {
+  return Promise.race([
+    Promise.resolve(promise).catch(() => fallback),
+    sleep(ms).then(() => fallback)
+  ]);
+}
+function setRankNote(text) {
+  const el = document.querySelector('#toyRankNote');
+  if (el) el.textContent = text;
+}
+async function getToySdk() {
+  if (toySdkState !== null) return toySdkState || null;
+  // 本地预览（非 Toy 路径）不去等 SDK，直接走本地兜底
+  if (!inToyContainerPath()) { toySdkState = false; return null; }
+  for (let i = 0; i < 40 && !window.toy; i++) {
+    await sleep(100);
+  }
+  if (!window.toy) { toySdkState = false; return null; }
+  try {
+    // isSupport 不依赖登录态，用来判断是否真的跑在 Toy 容器里
+    const ok = await withTimeout(window.toy.isSupport('getRankList'), 1500, false);
+    if (!ok) { toySdkState = false; return null; }
+    toySdkState = window.toy;
+    return toySdkState;
+  } catch {
+    toySdkState = false;
+    return null;
+  }
+}
+
+/** Toy 排行榜返回结构做兼容：items / list / data.items 都认 */
+function pickRankItems(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (!raw || typeof raw !== 'object') return [];
+  for (const key of ['items', 'list', 'rows', 'rankList', 'data']) {
+    const v = raw[key];
+    if (Array.isArray(v)) return v;
+    if (v && typeof v === 'object') {
+      const inner = pickRankItems(v);
+      if (inner.length) return inner;
+    }
+  }
+  return [];
+}
+function normalizeToyRows(raw) {
+  return pickRankItems(raw).map((it, i) => {
+    const row = it && typeof it === 'object' ? it : {};
+    const u = row.user || row.player || row.account || row.member || row;
+    const score = Number(row.score ?? row.value ?? row.total ?? row.equity
+      ?? u.score ?? u.total ?? 0) || 0;
+    const uid = u.mid ?? u.uid ?? u.id ?? u.toyOpenId ?? u.toy_open_id
+      ?? row.mid ?? row.uid ?? ('toy-' + (i + 1));
+    let avatar = u.avatar || u.face || row.avatar || null;
+    if (typeof avatar === 'string' && avatar.startsWith('//')) avatar = 'https:' + avatar;
+    return {
+      id: 'toy_' + uid,
+      nickname: String(u.nickname || u.uname || u.name || row.nickname || ('玩家' + (i + 1))),
+      avatar,
+      level: Math.max(1, Number(row.level) || 1),
+      cash: 0,
+      equity: score,
+      bank: 0,
+      total: score,
+      achvEmojis: []
+    };
+  }).filter((r) => r.nickname && Number.isFinite(r.total));
+}
+async function fetchToyRank() {
+  if (Date.now() - toyRankCache.at < 15000) return toyRankCache.rows;
+  const toy = await getToySdk();
+  if (!toy) return [];
+  const raw = await withTimeout(
+    toy.getRankList({ board: TOY_BOARD, period: 'all', limit: 50 }),
+    2500,
+    null
+  );
+  if (!raw) return [];
+  const rows = normalizeToyRows(raw)
+    .sort((a, b) => b.total - a.total)
+    .map((r, i) => ({ ...r, rank: i + 1 }));
+  toyRankCache = { at: Date.now(), rows };
+  return rows;
+}
+function currentLocalPlayer() {
+  try {
+    const token = localStorage.getItem(TOKEN_KEY) || '';
+    const s = token ? getDb().sessions[token] : null;
+    return s ? getDb().players[s.playerId] : null;
+  } catch {
+    return null;
+  }
+}
+function localTotalAssets(p) {
+  return playerEquity(getDb(), p) + Math.max(0, Number(p.bank) || 0);
+}
+/** 提交总资产到 Toy 排行榜；预览页 / 限流 / 未登录都静默失败 */
+async function submitToyScore(force = false) {
+  const toy = await getToySdk();
+  if (!toy || inToyPreview()) return;
+  const t = Date.now();
+  if (!force && t - toyScoreLastAt < 60000) return;
+  toyScoreLastAt = t;
+  const p = currentLocalPlayer();
+  if (!p) return;
+  const score = Math.max(1, Math.min(TOY_SCORE_MAX, Math.floor(localTotalAssets(p))));
+  try {
+    await toy.submitScore({ board: TOY_BOARD, score });
+  } catch {
+    // 307044 限流 / 预览环境 / 未登录：单机玩法不受影响
+  }
+}
+window.addEventListener('pagehide', () => { submitToyScore(true); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') submitToyScore(true);
+});
 
 // ---------- tickPayload（从 server.js 复制，去掉 Node 相关部分） ----------
 function phaseNow(d) {
@@ -413,6 +515,20 @@ async function mockApiRequest(url, init) {
 }
 
 const realFetch = window.fetch.bind(window);
+
+// 纯单机版：除了排行榜，所有涉及其他玩家的联机接口一律关闭
+const BLOCKED_APIS = new Set([
+  '/api/steal', '/api/investigate', '/api/emote',
+  '/api/chat', '/api/chat/read', '/api/chat/emoji', '/api/chat/grab', '/api/chat/packet',
+  '/api/shop/fakeNews', '/api/shop/bodyguard'
+]);
+function jsonReply(obj, status = 200) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'content-type': 'application/json; charset=utf-8' }
+  });
+}
+
 window.fetch = async (input, init = {}) => {
   let url;
   try {
@@ -423,6 +539,30 @@ window.fetch = async (input, init = {}) => {
   if (url.origin !== location.origin) return realFetch(input, init);
   if (url.pathname.startsWith('/avatars/')) return new Response('', { status: 404 });
   if (!url.pathname.startsWith('/api/') || url.pathname === '/api/stream') return realFetch(input, init);
+
+  if (BLOCKED_APIS.has(url.pathname)) {
+    return jsonReply({ error: '单机版不提供该联机功能' }, 403);
+  }
+
+  // 排行榜是唯一保留的联机功能：优先读 Toy 全服榜，读不到再退回本地
+  if (url.pathname === '/api/leaderboard' && String(init.method || 'GET').toUpperCase() === 'GET') {
+    submitToyScore();   // 打开排行榜时顺手同步一次成绩（受 60 秒节流，预览页会跳过）
+    try {
+      const rows = await fetchToyRank();
+      if (rows.length) {
+        setRankNote(inToyPreview()
+          ? `Toy 全服排行榜（预览环境，成绩需正式发布后才写入）`
+          : `Toy 全服排行榜 · 第 ${TOY_BOARD} 榜`);
+        return jsonReply({ rows, source: 'toy' });
+      }
+    } catch {
+      // 未登录 / 排行榜未开通 / 网络问题：退回本地
+    }
+    setRankNote(inToyPreview()
+      ? '预览环境：Toy 排行榜暂无数据，显示本地排行'
+      : '未连接 Toy 容器（或排行榜为空），显示本地排行');
+  }
+
   const r = await mockApiRequest(url, init);
   return new Response(r.body, { status: r.status, headers: r.headers });
 };
@@ -466,6 +606,8 @@ function gameTick() {
   }
   saveDbAuto();
   broadcastTick();
+  // 每隔约 1 分钟把总资产同步到 Toy 排行榜（预览页/限流会静默失败）
+  if (Number(d.tick) % 12 === 0) submitToyScore();
 }
 
 const tickMs = Math.max(1000, Number(db.config.tickMs) || 5000);
