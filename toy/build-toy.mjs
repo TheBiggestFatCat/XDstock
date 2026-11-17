@@ -82,7 +82,7 @@ html = html.replace('<div id="rankTable" class="table-wrap"></div>',
 // 单机版标题 + 登录页说明
 html = html.replace('<title>小灯证券 · 模拟炒股</title>', '<title>小灯证券 · 模拟炒股（单机版）</title>');
 html = html.replace('<p class="login-hint">',
-  '<p class="login-hint">单机试玩版：存档只保存在本机浏览器，排行榜为 Toy 全服榜</p>\n        <p class="login-hint">');
+  '<p class="login-hint">单机试玩版：Toy 内自动使用 B站账号昵称/头像登录；存档只保存在本机浏览器，排行榜为 Toy 全服榜</p>\n        <p class="login-hint">');
 fs.writeFileSync(path.join(OUT, 'index.html'), html);
 
 // 试玩版开户资金和 glue.js#DEMO_CFG.startingCash 保持一致

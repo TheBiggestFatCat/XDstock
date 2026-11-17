@@ -7,6 +7,8 @@
 
 - **纯单机**：行情、财报、K 线、下单、持仓、打工、银行、商城、成就全部在浏览器内运行；
   `db.json` 存在 `localStorage`（`toy-shims/fs.js` 虚拟文件系统），不连任何线上服务器
+- **Toy 容器内 B站自动登录**：通过 Toy JS SDK `toy.getUserProfile()` 拿 B站昵称/头像/`toyOpenId`，
+  在本地存档里自动建号并登录（按 `toyOpenId` 记住账号）；非 Toy 容器 / 未登录时回退手动昵称+PIN 登录
 - **唯一保留的联机功能是排行榜**：通过 Toy JS SDK（`window.toy`）读写 Toy 全服排行榜
   - 榜位 `board = 1`、周期 `all`（总榜）
   - 打开排行榜时 / 每约 60 秒 / 页面隐藏时，把「总资产」取整后 `submitScore`

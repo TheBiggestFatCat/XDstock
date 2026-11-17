@@ -149,6 +149,85 @@ async function getToySdk() {
   }
 }
 
+/** 等 Toy SDK 对象（不检查榜单能力，用于 B站用户资料自动登录） */
+async function getToyObject() {
+  if (!inToyContainerPath()) return null;
+  for (let i = 0; i < 40 && !window.toy; i++) await sleep(100);
+  return window.toy || null;
+}
+
+function httpsUrl(u) {
+  if (!u || typeof u !== 'string') return null;
+  if (u.startsWith('//')) return 'https:' + u;
+  if (u.startsWith('http://')) return 'https://' + u.slice(7);
+  return u;
+}
+
+/**
+ * Toy 容器内用 B站账号自动登录（单机版）：
+ * - getUserProfile 拿到 B站昵称 / 头像 / toyOpenId
+ * - 在本地存档里按 toyOpenId 建/找账号，自建 session 并写 localStorage token
+ * - 非 Toy 容器 / 未登录 / 外部浏览器：静默跳过，回退手动昵称+PIN
+ * 排行榜本身由 Toy 平台按 B站账号归属，不需要这里再登录一次。
+ */
+async function tryToyAutoLogin() {
+  const toy = await getToyObject();
+  if (!toy) return false;
+  let profile = null;
+  try {
+    profile = await withTimeout(toy.getUserProfile(), 4000, null);
+  } catch {
+    return false;
+  }
+  if (!profile || !profile.nickname) return false;
+  profile.avatar = httpsUrl(profile.avatar);
+
+  const db = getDb();
+  const token0 = localStorage.getItem(TOKEN_KEY) || '';
+  const oldSession = token0 ? db.sessions[token0] : null;
+  const oldPlayer = oldSession ? db.players[oldSession.playerId] : null;
+  if (oldPlayer) {
+    // 已登录：只同步 B站头像（昵称以本地为准，避免排行榜身份与本地名字对不上时来回改）
+    if (profile.avatar && oldPlayer.avatar !== profile.avatar) {
+      oldPlayer.avatar = profile.avatar;
+      saveDb(true);
+    }
+    return true;
+  }
+
+  const MAP_KEY = 'xd_toy_account';
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(MAP_KEY) || '{}') || {}; } catch { saved = {}; }
+  const stable = String(profile.toyOpenId || profile.nickname || '');
+  let pin = /^\d{6}$/.test(String(saved.pin || '')) ? String(saved.pin) : '';
+  const baseName = String(profile.nickname).replace(/[<>&"'`\\]/g, '').trim().slice(0, 14) || 'B站玩家';
+  if (!pin) pin = String(Math.floor(100000 + Math.random() * 900000));
+
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const nickname = (attempt === 0 ? baseName : baseName.slice(0, 13) + (attempt + 1)).slice(0, 16);
+    try {
+      const r = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nickname, pin })
+      });
+      const j = await r.json();
+      if (!j || !j.token) continue;
+      localStorage.setItem(TOKEN_KEY, j.token);
+      localStorage.setItem(MAP_KEY, JSON.stringify({ pin, stable, nickname }));
+      const s = getDb().sessions[j.token];
+      const p = s ? getDb().players[s.playerId] : null;
+      if (p && profile.avatar && p.avatar !== profile.avatar) p.avatar = profile.avatar;
+      saveDb(true);
+      persistFs();
+      return true;
+    } catch {
+      // 尝试下一个昵称
+    }
+  }
+  return false;
+}
+
 /** Toy 排行榜返回结构做兼容：items / list / data.items 都认 */
 function pickRankItems(raw) {
   if (Array.isArray(raw)) return raw;
@@ -615,4 +694,6 @@ setInterval(gameTick, tickMs);
 
 // ---------- 启动前端 ----------
 window.__XD_TOY_DEMO__ = { version: DEMO_VERSION, getDb };
+// Toy 容器内优先用 B站账号自动登录（失败则保留手动昵称+PIN 登录）
+try { await tryToyAutoLogin(); } catch (e) { console.warn('[toy] B站自动登录失败', e); }
 await import('./app.js');
